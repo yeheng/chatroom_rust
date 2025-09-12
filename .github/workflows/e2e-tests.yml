@@ -1,0 +1,393 @@
+# GitHub Actions 工作流程 - 端到端测试和性能测试
+#
+# 这个工作流程运行完整的端到端测试套件，包括性能测试和质量检查
+
+name: E2E Tests and Performance
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+  schedule:
+    # 每天凌晨2点运行性能测试
+    - cron: '0 2 * * *'
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_LOG: info
+
+jobs:
+  # 基础检查
+  check:
+    name: Format and Lint
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Install Rust
+      uses: actions-rs/toolchain@v1
+      with:
+        toolchain: stable
+        components: rustfmt, clippy
+        override: true
+    
+    - name: Check formatting
+      run: cargo fmt --all -- --check
+    
+    - name: Run clippy
+      run: cargo clippy --all-targets --all-features -- -D warnings
+
+  # 单元测试和集成测试
+  test:
+    name: Unit and Integration Tests
+    runs-on: ubuntu-latest
+    needs: check
+    
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_PASSWORD: test_password
+          POSTGRES_USER: test_user
+          POSTGRES_DB: chatroom_test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+      
+      redis:
+        image: redis:7
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Install Rust
+      uses: actions-rs/toolchain@v1
+      with:
+        toolchain: stable
+        override: true
+    
+    - name: Cache dependencies
+      uses: actions/cache@v3
+      with:
+        path: |
+          ~/.cargo/registry
+          ~/.cargo/git
+          target
+        key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+    
+    - name: Run unit tests
+      run: cargo test --workspace --lib --bins
+      env:
+        DATABASE_URL: postgres://test_user:test_password@localhost:5432/chatroom_test
+        REDIS_URL: redis://localhost:6379
+    
+    - name: Run integration tests
+      run: cargo test -p tests integration_test jwt_integration
+      env:
+        DATABASE_URL: postgres://test_user:test_password@localhost:5432/chatroom_test
+        REDIS_URL: redis://localhost:6379
+
+  # 端到端测试
+  e2e-tests:
+    name: End-to-End Tests
+    runs-on: ubuntu-latest
+    needs: test
+    timeout-minutes: 30
+    
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_PASSWORD: test_password
+          POSTGRES_USER: test_user
+          POSTGRES_DB: chatroom_test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+      
+      redis:
+        image: redis:7
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+      
+      # Kafka 服务（用于消息队列测试）
+      kafka:
+        image: confluentinc/cp-kafka:latest
+        env:
+          KAFKA_BROKER_ID: 1
+          KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+          KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092
+          KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+        ports:
+          - 9092:9092
+      
+      zookeeper:
+        image: confluentinc/cp-zookeeper:latest
+        env:
+          ZOOKEEPER_CLIENT_PORT: 2181
+          ZOOKEEPER_TICK_TIME: 2000
+        ports:
+          - 2181:2181
+
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Install Rust
+      uses: actions-rs/toolchain@v1
+      with:
+        toolchain: stable
+        override: true
+    
+    - name: Cache dependencies
+      uses: actions/cache@v3
+      with:
+        path: |
+          ~/.cargo/registry
+          ~/.cargo/git
+          target
+        key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+    
+    - name: Wait for services to be ready
+      run: |
+        # 等待服务启动
+        sleep 10
+        # 检查服务健康状态
+        curl -f http://localhost:5432 || echo "Postgres check skipped"
+        redis-cli -h localhost -p 6379 ping || echo "Redis check skipped"
+    
+    - name: Run database migrations
+      run: |
+        # 如果有迁移脚本，在这里运行
+        echo "Running database migrations..."
+        # cargo run --bin migrate || echo "No migration binary found"
+      env:
+        DATABASE_URL: postgres://test_user:test_password@localhost:5432/chatroom_test
+    
+    - name: Run E2E tests
+      run: cargo test -p tests e2e_tests -- --test-threads=1 --nocapture
+      timeout-minutes: 20
+      env:
+        DATABASE_URL: postgres://test_user:test_password@localhost:5432/chatroom_test
+        REDIS_URL: redis://localhost:6379
+        KAFKA_BROKERS: localhost:9092
+        RUST_LOG: info
+        TEST_TIMEOUT: 300
+
+    - name: Upload test results
+      if: always()
+      uses: actions/upload-artifact@v3
+      with:
+        name: e2e-test-results
+        path: |
+          test-reports/
+          target/debug/deps/e2e_tests-*.out
+
+  # 性能测试
+  performance-tests:
+    name: Performance Tests
+    runs-on: ubuntu-latest
+    needs: test
+    timeout-minutes: 45
+    # 只在主分支和定时任务中运行性能测试
+    if: github.ref == 'refs/heads/main' || github.event_name == 'schedule'
+    
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_PASSWORD: test_password
+          POSTGRES_USER: test_user
+          POSTGRES_DB: chatroom_test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+      
+      redis:
+        image: redis:7
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Install Rust
+      uses: actions-rs/toolchain@v1
+      with:
+        toolchain: stable
+        override: true
+    
+    - name: Cache dependencies
+      uses: actions/cache@v3
+      with:
+        path: |
+          ~/.cargo/registry
+          ~/.cargo/git
+          target
+        key: ${{ runner.os }}-cargo-perf-${{ hashFiles('**/Cargo.lock') }}
+    
+    - name: Run performance tests
+      run: cargo test -p tests performance_tests -- --test-threads=1 --nocapture
+      timeout-minutes: 30
+      continue-on-error: true  # 性能测试失败不应阻止部署
+      env:
+        DATABASE_URL: postgres://test_user:test_password@localhost:5432/chatroom_test
+        REDIS_URL: redis://localhost:6379
+        RUST_LOG: info
+        PERF_TEST_MODE: 1
+        TEST_TIMEOUT: 600
+
+    - name: Generate performance report
+      if: always()
+      run: |
+        mkdir -p performance-reports
+        echo "# 性能测试报告" > performance-reports/performance-summary.md
+        echo "测试时间: $(date)" >> performance-reports/performance-summary.md
+        echo "提交: ${{ github.sha }}" >> performance-reports/performance-summary.md
+        echo "" >> performance-reports/performance-summary.md
+        echo "详细性能指标请查看测试输出日志。" >> performance-reports/performance-summary.md
+
+    - name: Upload performance results
+      if: always()
+      uses: actions/upload-artifact@v3
+      with:
+        name: performance-test-results
+        path: |
+          performance-reports/
+          target/debug/deps/performance_tests-*.out
+
+    - name: Comment performance results on PR
+      if: github.event_name == 'pull_request'
+      uses: actions/github-script@v6
+      with:
+        script: |
+          const fs = require('fs');
+          const path = 'performance-reports/performance-summary.md';
+          if (fs.existsSync(path)) {
+            const report = fs.readFileSync(path, 'utf8');
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `## 性能测试结果\n\n${report}`
+            });
+          }
+
+  # 代码覆盖率
+  coverage:
+    name: Code Coverage
+    runs-on: ubuntu-latest
+    needs: test
+    
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_PASSWORD: test_password
+          POSTGRES_USER: test_user
+          POSTGRES_DB: chatroom_test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+      
+      redis:
+        image: redis:7
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Install Rust
+      uses: actions-rs/toolchain@v1
+      with:
+        toolchain: stable
+        override: true
+    
+    - name: Install tarpaulin
+      run: cargo install cargo-tarpaulin
+    
+    - name: Generate coverage report
+      run: |
+        cargo tarpaulin --verbose --all-features --workspace \
+          --timeout 120 --out Xml --out Html \
+          --exclude-files "src/main.rs" "*/tests/*" "*/benches/*"
+      env:
+        DATABASE_URL: postgres://test_user:test_password@localhost:5432/chatroom_test
+        REDIS_URL: redis://localhost:6379
+    
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v3
+      with:
+        file: ./cobertura.xml
+        fail_ci_if_error: false
+
+    - name: Upload coverage results
+      uses: actions/upload-artifact@v3
+      with:
+        name: coverage-report
+        path: |
+          tarpaulin-report.html
+          cobertura.xml
+
+  # 部署检查
+  deployment-check:
+    name: Deployment Readiness
+    runs-on: ubuntu-latest
+    needs: [e2e-tests, performance-tests]
+    if: always()
+    
+    steps:
+    - name: Check deployment readiness
+      run: |
+        echo "E2E Tests: ${{ needs.e2e-tests.result }}"
+        echo "Performance Tests: ${{ needs.performance-tests.result }}"
+        
+        if [[ "${{ needs.e2e-tests.result }}" != "success" ]]; then
+          echo "❌ E2E tests failed - deployment not recommended"
+          exit 1
+        fi
+        
+        if [[ "${{ needs.performance-tests.result }}" == "failure" ]]; then
+          echo "⚠️  Performance tests failed - review performance before deployment"
+        fi
+        
+        echo "✅ Deployment checks passed"

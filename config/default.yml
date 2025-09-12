@@ -1,0 +1,17 @@
+server:
+  host: "127.0.0.1"
+  port: 3000
+  cors_origins:
+    - "*"
+
+database:
+  url: "postgresql://chatroom:chatroom@localhost:5432/chatroom"
+  max_connections: 20
+  min_connections: 5
+  acquire_timeout_seconds: 30
+  idle_timeout_seconds: 600
+  max_lifetime_seconds: 1800
+
+logging:
+  level: "info"
+  format: "json"

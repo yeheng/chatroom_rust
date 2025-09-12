@@ -1,0 +1,60 @@
+[package]
+name = "tests"
+version.workspace = true
+edition.workspace = true
+publish = false
+
+[dependencies]
+# 依赖工作空间中的 crate
+domain = { path = "../domain" }
+infrastructure = { path = "../infrastructure" }
+application = { path = "../application" }
+web-api = { path = "../web-api" }
+
+# 使用工作空间的依赖
+tokio = { workspace = true }
+uuid = { workspace = true }
+chrono = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+async-trait = { workspace = true }
+reqwest = { workspace = true }
+axum = { workspace = true }
+tower = { workspace = true }
+tower-http = { workspace = true }
+futures = { workspace = true }
+futures-util = { workspace = true }
+tokio-tungstenite = { workspace = true }
+
+# 数据库和缓存
+sqlx = { workspace = true }
+redis = { workspace = true }
+bcrypt = { workspace = true }
+
+# 配置
+figment = { workspace = true }
+
+# 测试专用依赖
+testcontainers = { workspace = true }
+testcontainers-modules = { workspace = true }
+wiremock = { workspace = true }
+
+[[test]]
+name = "integration_test"
+path = "src/integration_test.rs"
+
+[[test]]
+name = "jwt_integration"
+path = "src/jwt_integration.rs"
+
+[[test]]
+name = "e2e_tests"
+path = "src/e2e_tests.rs"
+
+[[test]]
+name = "performance_tests"  
+path = "src/performance_tests.rs"

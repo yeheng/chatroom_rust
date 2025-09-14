@@ -304,11 +304,9 @@ impl RedisRoomMessage {
 
     /// 从聊天事件创建房间消息
     pub fn from_chat_event(event: ChatEvent) -> Option<Self> {
-        if let Some(room_id) = event.room_id() {
-            Some(Self::new(room_id, RedisMessageType::ChatEvent(event)))
-        } else {
-            None
-        }
+        event
+            .room_id()
+            .map(|room_id| Self::new(room_id, RedisMessageType::ChatEvent(event)))
     }
 }
 
@@ -319,7 +317,7 @@ mod tests {
     #[test]
     fn test_chat_event_serialization() {
         let message =
-            Message::new_text(Uuid::new_v4(), Uuid::new_v4(), "Hello World", None).unwrap();
+            Message::new_text(Uuid::new_v4(), Uuid::new_v4(), "Hello World".to_string()).unwrap();
 
         let event = ChatEvent::MessageSent {
             message: message.clone(),
@@ -342,7 +340,7 @@ mod tests {
         let user_id = Uuid::new_v4();
 
         let message_event = ChatEvent::MessageSent {
-            message: Message::new_text(room_id, user_id, "Test", None).unwrap(),
+            message: Message::new_text(room_id, user_id, "Test".to_string()).unwrap(),
             room_id,
             timestamp: Utc::now(),
         };
@@ -374,7 +372,7 @@ mod tests {
         assert!(typing_event.should_broadcast());
 
         let message_event = ChatEvent::MessageSent {
-            message: Message::new_text(room_id, user_id, "Test", None).unwrap(),
+            message: Message::new_text(room_id, user_id, "Test".to_string()).unwrap(),
             room_id,
             timestamp: Utc::now(),
         };

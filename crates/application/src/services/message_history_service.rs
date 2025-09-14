@@ -3,6 +3,7 @@
 //! 提供基于游标分页的历史消息查询、基础权限校验以及热点房间的内存 LRU 缓存（TTL）。
 
 use crate::errors::{ApplicationError, ApplicationResult, ChatRoomError};
+use chrono::DateTime;
 use domain::chatroom::*;
 use domain::message::{Message, MessageType};
 use domain::user::{User, UserStatus};
@@ -210,6 +211,12 @@ pub struct MessageHistoryServiceImpl {
     cache: Arc<Mutex<LruCache>>,
 }
 
+impl Default for MessageHistoryServiceImpl {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl MessageHistoryServiceImpl {
     pub fn new() -> Self {
         Self {
@@ -234,7 +241,7 @@ impl MessageHistoryServiceImpl {
     /// 测试辅助：创建私密房间
     pub async fn create_private_room(&self, name: &str, owner_id: Uuid, password: &str) -> Uuid {
         let hash = bcrypt::hash(password, bcrypt::DEFAULT_COST).unwrap();
-        let room = ChatRoom::new_private(name.to_string(), owner_id, hash, None, None)
+        let room = ChatRoom::new_private(name.to_string(), None, owner_id, hash.as_str())
             .map_err(ApplicationError::from)
             .unwrap();
         let id = room.id;
@@ -359,8 +366,8 @@ impl MessageHistoryServiceImpl {
             n: u32,
             id: String,
         }
-        let ts = message.sent_at.timestamp();
-        let ns = message.sent_at.timestamp_subsec_nanos();
+        let ts = message.created_at.timestamp();
+        let ns = message.created_at.timestamp_subsec_nanos();
         let c = C {
             t: ts,
             n: ns,
@@ -378,7 +385,8 @@ impl MessageHistoryServiceImpl {
         }
         let data = data_encoding::BASE64.decode(cursor.as_bytes()).ok()?;
         let c: C = serde_json::from_slice(&data).ok()?;
-        let dt = chrono::NaiveDateTime::from_timestamp_opt(c.t, c.n)?;
+        
+        let dt = DateTime::from_timestamp(c.t, c.n)?.naive_utc();
         let dt = chrono::DateTime::<chrono::Utc>::from_naive_utc_and_offset(dt, chrono::Utc);
         let id = Uuid::parse_str(&c.id).ok()?;
         Some((dt, id))
@@ -395,7 +403,11 @@ impl MessageHistoryServiceImpl {
         if let Some(t) = message_type {
             list.retain(|m| &m.message_type == t);
         }
-        list.sort_by(|a, b| b.sent_at.cmp(&a.sent_at).then_with(|| b.id.cmp(&a.id)));
+        list.sort_by(|a, b| {
+            b.created_at
+                .cmp(&a.created_at)
+                .then_with(|| b.id.cmp(&a.id))
+        });
         list
     }
 }
@@ -439,7 +451,7 @@ impl MessageHistoryService for MessageHistoryServiceImpl {
         let start_index = if let Some(ref c) = query.cursor {
             if let Some((dt, id)) = Self::decode_cursor(c) {
                 list.iter()
-                    .position(|m| m.sent_at == dt && m.id == id)
+                    .position(|m| m.created_at == dt && m.id == id)
                     .map(|i| i + 1)
                     .unwrap_or(0)
             } else {
@@ -509,13 +521,17 @@ impl MessageHistoryService for MessageHistoryServiceImpl {
         }
         let kw_lower = query.keyword.to_lowercase();
         list.retain(|m| m.content.to_lowercase().contains(&kw_lower));
-        list.sort_by(|a, b| b.sent_at.cmp(&a.sent_at).then_with(|| b.id.cmp(&a.id)));
+        list.sort_by(|a, b| {
+            b.created_at
+                .cmp(&a.created_at)
+                .then_with(|| b.id.cmp(&a.id))
+        });
 
         // 游标
         let start_index = if let Some(ref c) = query.cursor {
             if let Some((dt, id)) = Self::decode_cursor(c) {
                 list.iter()
-                    .position(|m| m.sent_at == dt && m.id == id)
+                    .position(|m| m.created_at == dt && m.id == id)
                     .map(|i| i + 1)
                     .unwrap_or(0)
             } else {
@@ -555,6 +571,6 @@ mod tests_helpers {
     }
 
     pub async fn create_test_message(room_id: Uuid, user_id: Uuid, content: String) -> Message {
-        Message::new_text(room_id, user_id, content, None).unwrap()
+        Message::new_text(room_id, user_id, content).unwrap()
     }
 }

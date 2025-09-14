@@ -157,7 +157,7 @@ pub enum FeatureFlagError {
 macro_rules! require_feature {
     ($flags:expr, $flag:expr) => {
         if !$flags.is_enabled(&$flag) {
-            return Err(crate::feature_flags::FeatureFlagError::FeatureDisabled {
+            return Err($crate::feature_flags::FeatureFlagError::FeatureDisabled {
                 feature_name: $flag.as_str().to_string(),
             });
         }

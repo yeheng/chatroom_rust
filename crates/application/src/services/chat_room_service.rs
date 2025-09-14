@@ -139,6 +139,12 @@ pub struct InMemoryRoomMemberStore {
         Arc<RwLock<std::collections::HashMap<Uuid, std::collections::HashMap<Uuid, RoomMember>>>>,
 }
 
+impl Default for InMemoryRoomMemberStore {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl InMemoryRoomMemberStore {
     pub fn new() -> Self {
         Self {
@@ -220,6 +226,12 @@ pub struct ChatRoomServiceImpl {
     redis_client: Option<Arc<Client>>,
     /// 事务锁（确保房间操作的原子性）
     transaction_locks: Arc<Mutex<HashMap<Uuid, Arc<Mutex<()>>>>>,
+}
+
+impl Default for ChatRoomServiceImpl {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl ChatRoomServiceImpl {
@@ -483,10 +495,9 @@ impl ChatRoomService for ChatRoomServiceImpl {
 
             ChatRoom::new_private(
                 request.name,
-                request.owner_id,
-                password_hash,
                 request.description,
-                None, // 最大成员数暂时不限制
+                request.owner_id,
+                password_hash.as_str(),
             )
             .map_err(ApplicationError::from)?
         } else {

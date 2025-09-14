@@ -112,7 +112,7 @@ impl BotStatus {
 }
 
 /// 机器人配置
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub struct BotConfig {
     /// 头像URL
     pub avatar_url: Option<String>,
@@ -129,7 +129,7 @@ pub struct BotConfig {
 }
 
 /// 自动回复配置
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub struct AutoReplyConfig {
     /// 是否启用自动回复
     pub enabled: bool,
@@ -457,30 +457,6 @@ pub enum BotActivityResult {
     PartialSuccess,
     /// 跳过
     Skipped,
-}
-
-impl Default for BotConfig {
-    fn default() -> Self {
-        Self {
-            avatar_url: None,
-            auto_reply: AutoReplyConfig::default(),
-            triggers: Vec::new(),
-            rate_limit: RateLimitConfig::default(),
-            permissions: BotPermissions::default(),
-            extensions: HashMap::new(),
-        }
-    }
-}
-
-impl Default for AutoReplyConfig {
-    fn default() -> Self {
-        Self {
-            enabled: false,
-            default_reply: None,
-            keyword_replies: HashMap::new(),
-            delay_seconds: 0,
-        }
-    }
 }
 
 impl Default for RateLimitConfig {

@@ -167,6 +167,12 @@ pub struct InMemoryUserStore {
     user_extensions: Arc<RwLock<HashMap<Uuid, JsonValue>>>,
 }
 
+impl Default for InMemoryUserStore {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl InMemoryUserStore {
     pub fn new() -> Self {
         Self {
@@ -314,6 +320,12 @@ pub struct UserServiceImpl {
     status_cache: Arc<RwLock<HashMap<Uuid, (UserStatus, Instant)>>>,
     /// 搜索缓存（缓存搜索结果）
     search_cache: Arc<RwLock<HashMap<String, (Vec<User>, Instant)>>>,
+}
+
+impl Default for UserServiceImpl {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl UserServiceImpl {
@@ -791,8 +803,7 @@ impl UserService for UserServiceImpl {
                 if timestamp.elapsed() < Duration::from_secs(300) {
                     // 5分钟缓存
                     let total = cached_results.len() as u64;
-                    let total_pages =
-                        (total + request.page_size as u64 - 1) / request.page_size as u64;
+                    let total_pages = total.div_ceil(request.page_size as u64);
                     let start = ((request.page - 1) * request.page_size) as usize;
                     let end =
                         std::cmp::min(start + request.page_size as usize, cached_results.len());
@@ -831,7 +842,7 @@ impl UserService for UserServiceImpl {
 
         // 分页处理
         let total = all_results.len() as u64;
-        let total_pages = (total + request.page_size as u64 - 1) / request.page_size as u64;
+        let total_pages = total.div_ceil(request.page_size as u64);
         let start = ((request.page - 1) * request.page_size) as usize;
         let end = std::cmp::min(start + request.page_size as usize, all_results.len());
 
@@ -936,11 +947,11 @@ impl UserService for UserServiceImpl {
                         active_users += 1;
                         online_users += 1;
                     }
-                    UserStatus::Busy => {
+                    UserStatus::Deleted => {
                         active_users += 1;
                         busy_users += 1;
                     }
-                    UserStatus::Away => {
+                    UserStatus::Suspended => {
                         away_users += 1;
                     }
                     _ => {}
@@ -977,7 +988,7 @@ impl UserService for UserServiceImpl {
                 .await
         };
 
-        let user = user.ok_or_else(|| UserError::InvalidCredentials)?;
+        let user = user.ok_or(UserError::InvalidCredentials)?;
 
         // 检查用户状态
         if user.status == UserStatus::Inactive {
@@ -990,7 +1001,7 @@ impl UserService for UserServiceImpl {
             password_cache.get(&user.id).cloned()
         };
 
-        let password_hash = password_hash.ok_or_else(|| UserError::InvalidCredentials)?;
+        let password_hash = password_hash.ok_or(UserError::InvalidCredentials)?;
 
         // 验证密码
         let is_valid = self.verify_password(password, &password_hash).await?;

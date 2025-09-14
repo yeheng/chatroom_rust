@@ -367,7 +367,7 @@ impl RedisSubscriber {
 
         debug!("通道模式接收到频道 {} 的消息", channel);
 
-        if let Err(_) = sender.send((channel.to_string(), room_message)) {
+        if sender.send((channel.to_string(), room_message)).is_err() {
             warn!("发送消息到通道失败，接收端可能已关闭");
         }
 

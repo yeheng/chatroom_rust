@@ -112,7 +112,7 @@ impl JwtEncoder {
     pub fn generate_access_token(&self, claims: &Claims) -> Result<String, AuthError> {
         // 首先尝试使用 RS256（RSA DER/PEM）
         let header_rs = jsonwebtoken::Header::new(jsonwebtoken::Algorithm::RS256);
-        let try_rs = (|| jsonwebtoken::encode(&header_rs, claims, &self.encoding_key()))();
+        let try_rs = jsonwebtoken::encode(&header_rs, claims, &self.encoding_key());
         if let Ok(tok) = try_rs {
             return Ok(tok);
         }
@@ -141,14 +141,14 @@ impl JwtEncoder {
     /// 解码令牌
     pub fn decode_token(&self, token: &str) -> Result<Claims, AuthError> {
         // 先尝试 RS256
-        let try_rs = (|| {
+        let try_rs = {
             let mut validation = jsonwebtoken::Validation::new(jsonwebtoken::Algorithm::RS256);
             validation.set_issuer(&[&self.issuer]);
             validation.set_audience(&[&self.audience]);
             validation.validate_exp = true;
             validation.validate_nbf = true;
             jsonwebtoken::decode::<Claims>(token, &self.decoding_key(), &validation)
-        })();
+        };
         if let Ok(data) = try_rs {
             return Ok(data.claims);
         }

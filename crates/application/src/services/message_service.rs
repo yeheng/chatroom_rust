@@ -151,6 +151,12 @@ pub struct InMemoryMessageStore {
     user_messages: Arc<RwLock<std::collections::HashMap<Uuid, Vec<Uuid>>>>,
 }
 
+impl Default for InMemoryMessageStore {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl InMemoryMessageStore {
     pub fn new() -> Self {
         Self {
@@ -281,6 +287,12 @@ pub struct MessageServiceImpl {
     message_buffer: Arc<Mutex<Vec<Message>>>,
     /// 消息处理信号量（控制并发）
     processing_semaphore: Arc<Semaphore>,
+}
+
+impl Default for MessageServiceImpl {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl MessageServiceImpl {
@@ -454,9 +466,10 @@ impl MessageServiceImpl {
         }
 
         let max_length = match message_type {
-            MessageType::Text | MessageType::Emoji => 5000,
-            MessageType::System => 1000,
-            _ => 1000,
+            MessageType::Text => 5000,
+            MessageType::Emoji { .. } => 5000,
+            MessageType::Image { .. } => 1000,
+            MessageType::File { .. } => 1000,
         };
 
         if content.len() > max_length {
@@ -561,7 +574,7 @@ impl MessageServiceImpl {
         // 检查编辑时间限制（5分钟内可以编辑）
         let edit_time_limit = chrono::Duration::minutes(5);
         let now = chrono::Utc::now();
-        if now.signed_duration_since(message.sent_at) > edit_time_limit {
+        if now.signed_duration_since(message.created_at) > edit_time_limit {
             return Err(MessageError::Unauthorized("消息编辑时间已过".to_string()).into());
         }
 
@@ -625,13 +638,8 @@ impl MessageService for MessageServiceImpl {
         self.check_message_duplication(&command).await?;
 
         // 创建消息
-        let message = Message::new_text(
-            command.room_id,
-            command.user_id,
-            command.content,
-            None, // 暂不支持回复
-        )
-        .map_err(ApplicationError::from)?;
+        let message = Message::new_text(command.room_id, command.user_id, command.content)
+            .map_err(ApplicationError::from)?;
 
         // 存储消息
         self.message_store.store_message(message.clone()).await?;
@@ -699,10 +707,10 @@ impl MessageService for MessageServiceImpl {
             return Err(MessageError::Unauthorized("只能删除自己的消息".to_string()).into());
         }
 
-        // 验证消息是否可删除
-        if message.message_type == MessageType::System {
-            return Err(MessageError::Unauthorized("系统消息不能删除".to_string()).into());
-        }
+        // 验证消息是否可删除（暂时移除系统消息检查，因为当前MessageType中没有System变体）
+        // if message.message_type == MessageType::System {
+        //     return Err(MessageError::Unauthorized("系统消息不能删除".to_string()).into());
+        // }
 
         // 删除消息
         self.message_store.delete_message(message_id).await?;
@@ -738,7 +746,7 @@ impl MessageService for MessageServiceImpl {
         // 验证撤回时间限制（2分钟内可以撤回）
         let recall_time_limit = chrono::Duration::minutes(2);
         let now = chrono::Utc::now();
-        if now.signed_duration_since(message.sent_at) > recall_time_limit {
+        if now.signed_duration_since(message.created_at) > recall_time_limit {
             return Err(MessageError::Unauthorized("消息撤回时间已过".to_string()).into());
         }
 
@@ -793,13 +801,13 @@ impl MessageService for MessageServiceImpl {
         }
 
         // 按时间倒序排序
-        all_messages.sort_by(|a, b| b.sent_at.cmp(&a.sent_at));
+        all_messages.sort_by(|a, b| b.created_at.cmp(&a.created_at));
 
         // 分页处理
         let page = params.page.unwrap_or(1);
         let page_size = params.page_size.unwrap_or(20);
         let total = all_messages.len() as u64;
-        let total_pages = (total + page_size as u64 - 1) / page_size as u64;
+        let total_pages = total.div_ceil(page_size as u64);
 
         let start = ((page - 1) * page_size) as usize;
         let end = std::cmp::min(start + page_size as usize, all_messages.len());
@@ -830,7 +838,7 @@ impl MessageService for MessageServiceImpl {
         messages.retain(|msg| msg.is_visible());
 
         // 按时间倒序排序
-        messages.sort_by(|a, b| b.sent_at.cmp(&a.sent_at));
+        messages.sort_by(|a, b| b.created_at.cmp(&a.created_at));
 
         // 限制数量
         messages.truncate(limit);
@@ -874,7 +882,7 @@ impl MessageService for MessageServiceImpl {
         let mut text_messages = 0;
         let mut image_messages = 0;
         let mut file_messages = 0;
-        let mut system_messages = 0;
+        let system_messages = 0;
 
         let mut user_message_counts = std::collections::HashMap::new();
         let now = chrono::Utc::now();
@@ -885,17 +893,16 @@ impl MessageService for MessageServiceImpl {
                 total_messages += 1;
 
                 // 统计今日消息
-                if message.sent_at >= today_start {
+                if message.created_at >= today_start {
                     today_messages += 1;
                 }
 
                 // 统计消息类型
-                match message.message_type {
+                match &message.message_type {
                     MessageType::Text => text_messages += 1,
-                    MessageType::Image => image_messages += 1,
-                    MessageType::File => file_messages += 1,
-                    MessageType::System => system_messages += 1,
-                    MessageType::Emoji => text_messages += 1, // Emoji按文本统计
+                    MessageType::Image { .. } => image_messages += 1,
+                    MessageType::File { .. } => file_messages += 1,
+                    MessageType::Emoji { .. } => text_messages += 1, // Emoji按文本统计
                 }
 
                 // 统计用户消息数

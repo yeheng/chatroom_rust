@@ -307,7 +307,7 @@ impl KafkaMessageConsumer {
             message.offset()
         );
 
-        if let Err(_) = sender.send(event) {
+        if sender.send(event).is_err() {
             warn!("发送事件到通道失败，接收端可能已关闭");
         }
 

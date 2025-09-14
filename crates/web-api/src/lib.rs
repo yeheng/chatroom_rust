@@ -86,6 +86,12 @@ pub struct AppState {
     pub limiter: Arc<RwLock<HashMap<String, (Instant, u32)>>>,
 }
 
+impl Default for AppState {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl AppState {
     pub fn new() -> Self {
         // Init services
@@ -261,7 +267,7 @@ struct RegisterRequest {
 }
 
 async fn register_handler(Json(req): Json<RegisterRequest>) -> Response {
-    let state = APP_STATE.get_or_init(|| AppState::new());
+    let state = APP_STATE.get_or_init(AppState::new);
     // Delegate to application user service (has validation)
     let create_req = CreateUserRequest {
         username: req.username,
@@ -289,7 +295,7 @@ async fn login_handler(Json(creds): Json<LoginCredentials>) -> Response {
             .into_response();
     }
     // Use global state
-    let state = APP_STATE.get_or_init(|| AppState::new());
+    let state = APP_STATE.get_or_init(AppState::new);
     match state.jwt_service.login(creds).await {
         Ok(resp) => {
             // Store refresh token so that future refresh can validate
@@ -323,7 +329,7 @@ async fn refresh_handler(Json(req): Json<RefreshTokenRequest>) -> Response {
         )
             .into_response();
     }
-    let state = APP_STATE.get_or_init(|| AppState::new());
+    let state = APP_STATE.get_or_init(AppState::new);
     match state.jwt_service.refresh_token(&req.refresh_token).await {
         Ok(resp) => {
             // Store newly issued refresh token and revoke old one
@@ -368,7 +374,8 @@ async fn create_room_handler(
         password: body.password,
     };
     let room = state.chat_service.create_room(req).await;
-    let resp = match room {
+
+    match room {
         Ok(r) => (
             StatusCode::CREATED,
             Json(ApiResponse::ok(serde_json::json!({
@@ -389,8 +396,7 @@ async fn create_room_handler(
             )),
         )
             .into_response(),
-    };
-    resp
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -433,7 +439,8 @@ async fn join_room_handler(
         .chat_service
         .join_room(room_id, user_id, body.password)
         .await;
-    let resp = match res {
+
+    match res {
         Ok(_) => (
             StatusCode::OK,
             Json(ApiResponse::ok(serde_json::json!({"joined": true}))),
@@ -448,8 +455,7 @@ async fn join_room_handler(
             )),
         )
             .into_response(),
-    };
-    resp
+    }
 }
 
 async fn get_room_handler(
@@ -477,7 +483,7 @@ fn extract_user_id(headers: &HeaderMap) -> Option<Uuid> {
 static APP_STATE: once_cell::sync::OnceCell<AppState> = once_cell::sync::OnceCell::new();
 
 pub fn build_router() -> Router {
-    let state = APP_STATE.get_or_init(|| AppState::new()).clone();
+    let state = APP_STATE.get_or_init(AppState::new).clone();
     let login_state = state.clone();
     let api_auth = Router::new()
         .route("/login", post(login_handler))
@@ -540,14 +546,14 @@ static START_INSTANT: once_cell::sync::OnceCell<std::time::Instant> =
     once_cell::sync::OnceCell::new();
 
 async fn health_handler() -> impl IntoResponse {
-    let start = START_INSTANT.get_or_init(|| std::time::Instant::now());
+    let start = START_INSTANT.get_or_init(std::time::Instant::now);
     let uptime = start.elapsed().as_secs();
     let body = serde_json::json!({"healthy": true, "uptime": uptime});
     (StatusCode::OK, Json(body))
 }
 
 async fn metrics_handler() -> impl IntoResponse {
-    let start = START_INSTANT.get_or_init(|| std::time::Instant::now());
+    let start = START_INSTANT.get_or_init(std::time::Instant::now);
     let uptime = start.elapsed().as_secs_f64();
     let text = format!("# TYPE app_info gauge\napp_info{{version=\"0.1.0\"}} 1\n# TYPE app_uptime_seconds counter\napp_uptime_seconds {}\n", uptime);
     (StatusCode::OK, text)
@@ -576,7 +582,7 @@ impl ChatRoomApp {
     pub async fn run(self) -> anyhow::Result<()> {
         let addr: SocketAddr =
             format!("{}:{}", self.config.server.host, self.config.server.port).parse()?;
-        START_INSTANT.get_or_init(|| std::time::Instant::now());
+        START_INSTANT.get_or_init(std::time::Instant::now);
         let app = build_router();
         let listener = tokio::net::TcpListener::bind(addr).await?;
         let mut rx = self.shutdown_tx.subscribe();

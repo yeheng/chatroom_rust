@@ -256,7 +256,7 @@ pub struct RoomStats {
 }
 
 /// 连接统计信息
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct ConnectionStats {
     /// 总连接数
     pub total_connections: usize,
@@ -387,19 +387,6 @@ impl RoomInfo {
     pub fn decrement_users(&mut self) {
         if self.current_users > 0 {
             self.current_users -= 1;
-        }
-    }
-}
-
-impl Default for ConnectionStats {
-    fn default() -> Self {
-        Self {
-            total_connections: 0,
-            active_connections: 0,
-            authenticated_connections: 0,
-            room_connections: 0,
-            connections_today: 0,
-            peak_connections: 0,
         }
     }
 }

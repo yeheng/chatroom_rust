@@ -13,19 +13,11 @@ use uuid::Uuid;
 pub enum UserStatus {
     /// 活跃状态
     Active,
-    /// 在线状态
-    Online,
-    /// 忙碌状态
-    Busy,
-    /// 离开状态
-    Away,
-    /// 离线状态
-    Offline,
-    /// 禁用状态
-    Disabled,
-    /// 已删除状态 (软删除)
+    /// 未激活
     Inactive,
-    /// 已删除状态
+    /// 暂停
+    Suspended,
+    /// 已删除
     Deleted,
 }
 
@@ -33,12 +25,8 @@ impl fmt::Display for UserStatus {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             UserStatus::Active => write!(f, "active"),
-            UserStatus::Online => write!(f, "online"),
-            UserStatus::Busy => write!(f, "busy"),
-            UserStatus::Away => write!(f, "away"),
-            UserStatus::Offline => write!(f, "offline"),
-            UserStatus::Disabled => write!(f, "disabled"),
             UserStatus::Inactive => write!(f, "inactive"),
+            UserStatus::Suspended => write!(f, "suspended"),
             UserStatus::Deleted => write!(f, "deleted"),
         }
     }
@@ -201,30 +189,28 @@ impl User {
     /// 记录最后活跃时间
     pub fn mark_active(&mut self) {
         self.last_activity_at = Some(Utc::now());
-        if self.status == UserStatus::Offline {
+        if matches!(self.status, UserStatus::Inactive) {
             self.status = UserStatus::Active;
         }
         self.updated_at = Utc::now();
     }
 
-    /// 设置用户为离线状态
-    pub fn mark_offline(&mut self) {
-        self.status = UserStatus::Offline;
+    /// 设置用户为未激活状态  
+    pub fn mark_inactive(&mut self) {
+        self.status = UserStatus::Inactive;
         self.updated_at = Utc::now();
     }
 
-    /// 禁用用户
-    pub fn disable(&mut self) {
-        self.status = UserStatus::Disabled;
+    /// 暂停用户
+    pub fn suspend(&mut self) {
+        self.status = UserStatus::Suspended;
         self.updated_at = Utc::now();
     }
 
-    /// 启用用户
-    pub fn enable(&mut self) {
-        if self.status == UserStatus::Disabled {
-            self.status = UserStatus::Active;
-            self.updated_at = Utc::now();
-        }
+    /// 激活用户
+    pub fn activate(&mut self) {
+        self.status = UserStatus::Active;
+        self.updated_at = Utc::now();
     }
 
     /// 软删除用户
@@ -235,22 +221,22 @@ impl User {
 
     /// 检查用户是否活跃
     pub fn is_active(&self) -> bool {
-        self.status == UserStatus::Active
-    }
-
-    /// 检查用户是否在线
-    pub fn is_online(&self) -> bool {
         matches!(self.status, UserStatus::Active)
     }
 
-    /// 检查用户是否被禁用
-    pub fn is_disabled(&self) -> bool {
-        self.status == UserStatus::Disabled
+    /// 检查用户是否未激活
+    pub fn is_inactive(&self) -> bool {
+        matches!(self.status, UserStatus::Inactive)
+    }
+
+    /// 检查用户是否被暂停
+    pub fn is_suspended(&self) -> bool {
+        matches!(self.status, UserStatus::Suspended)
     }
 
     /// 检查用户是否被删除
     pub fn is_deleted(&self) -> bool {
-        self.status == UserStatus::Deleted
+        matches!(self.status, UserStatus::Deleted)
     }
 
     /// 验证用户名格式
@@ -360,22 +346,22 @@ mod tests {
     fn test_user_status_operations() {
         let mut user = User::new("testuser", "test@example.com").unwrap();
 
-        // 测试标记离线
-        user.mark_offline();
-        assert_eq!(user.status, UserStatus::Offline);
-        assert!(!user.is_online());
+        // 测试标记未激活
+        user.mark_inactive();
+        assert_eq!(user.status, UserStatus::Inactive);
+        assert!(!user.is_active());
 
         // 测试标记活跃
         user.mark_active();
         assert_eq!(user.status, UserStatus::Active);
         assert!(user.is_active());
 
-        // 测试禁用
-        user.disable();
-        assert!(user.is_disabled());
+        // 测试暂停
+        user.suspend();
+        assert!(user.is_suspended());
 
-        // 测试启用
-        user.enable();
+        // 测试激活
+        user.activate();
         assert!(user.is_active());
 
         // 测试软删除

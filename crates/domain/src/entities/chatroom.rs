@@ -3,6 +3,7 @@
 //! 包含聊天室的核心信息和相关操作。
 
 use crate::errors::{DomainError, DomainResult};
+use bcrypt::{hash, verify, DEFAULT_COST};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -89,18 +90,16 @@ impl ChatRoom {
     /// 创建新的私密聊天室
     pub fn new_private(
         name: impl Into<String>,
-        owner_id: Uuid,
-        password_hash: String,
         description: Option<String>,
-        max_members: Option<u32>,
+        owner_id: Uuid,
+        password: &str,
     ) -> DomainResult<Self> {
         let name = name.into();
         Self::validate_name(&name)?;
-        Self::validate_password_hash(&password_hash)?;
 
-        if let Some(max) = max_members {
-            Self::validate_max_members(max)?;
-        }
+        let password_hash = Some(hash(password, DEFAULT_COST).map_err(|e| {
+            DomainError::validation_error("password", format!("密码哈希失败: {}", e))
+        })?);
 
         let now = Utc::now();
 
@@ -109,9 +108,9 @@ impl ChatRoom {
             name,
             description,
             is_private: true,
-            password_hash: Some(password_hash),
+            password_hash,
             owner_id,
-            max_members,
+            max_members: None,
             member_count: 1, // 创建者自动成为成员
             status: ChatRoomStatus::Active,
             created_at: now,
@@ -204,19 +203,42 @@ impl ChatRoom {
         Ok(())
     }
 
-    /// 更新密码哈希（仅私密房间）
-    pub fn update_password(&mut self, new_password_hash: String) -> DomainResult<()> {
-        if !self.is_private {
-            return Err(DomainError::business_rule_violation(
-                "只能为私密房间设置密码",
-            ));
+    /// 更新密码（仅私密房间）
+    pub fn change_password(&mut self, new_password: Option<&str>) -> DomainResult<()> {
+        match new_password {
+            Some(password) => {
+                let password_hash = hash(password, DEFAULT_COST).map_err(|e| {
+                    DomainError::validation_error("password", format!("密码哈希失败: {}", e))
+                })?;
+                self.password_hash = Some(password_hash);
+                self.is_private = true;
+            }
+            None => {
+                self.password_hash = None;
+                self.is_private = false;
+            }
         }
-
-        Self::validate_password_hash(&new_password_hash)?;
-
-        self.password_hash = Some(new_password_hash);
         self.updated_at = Utc::now();
         Ok(())
+    }
+
+    /// 验证房间密码
+    pub fn verify_password(&self, password: &str) -> DomainResult<bool> {
+        match &self.password_hash {
+            Some(hash_value) => verify(password, hash_value).map_err(|e| {
+                DomainError::validation_error("password", format!("密码验证失败: {}", e))
+            }),
+            None => Ok(true), // 公开房间无需密码
+        }
+    }
+
+    /// 更新房间信息
+    pub fn update_info(&mut self, name: Option<String>, description: Option<String>) {
+        if let Some(name) = name {
+            self.name = name;
+        }
+        self.description = description;
+        self.updated_at = Utc::now();
     }
 
     /// 增加成员数量
@@ -381,6 +403,41 @@ impl ChatRoom {
 
         Ok(())
     }
+
+    /// 验证用户是否可以加入房间（业务规则）
+    pub fn can_user_join(
+        &self,
+        user_status: crate::entities::user::UserStatus,
+        user_org_banned: bool,
+    ) -> DomainResult<()> {
+        use crate::entities::user::UserStatus;
+
+        // 检查用户状态
+        if !matches!(user_status, UserStatus::Active) {
+            return Err(DomainError::business_rule_violation(
+                "用户状态不活跃，无法加入房间",
+            ));
+        }
+
+        // 检查用户是否被组织禁止
+        if user_org_banned {
+            return Err(DomainError::business_rule_violation(
+                "用户所属组织被禁止，无法加入房间",
+            ));
+        }
+
+        // 检查房间是否活跃
+        if !self.is_active() {
+            return Err(DomainError::business_rule_violation("房间不可用"));
+        }
+
+        // 检查房间是否已满
+        if !self.can_add_member() {
+            return Err(DomainError::business_rule_violation("房间已满"));
+        }
+
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -410,21 +467,19 @@ mod tests {
     #[test]
     fn test_private_chatroom_creation() {
         let owner_id = Uuid::new_v4();
-        let password_hash = "$2b$12$hash".to_string();
+        let password = "secret123";
         let room = ChatRoom::new_private(
             "Private Room",
-            owner_id,
-            password_hash.clone(),
             Some("A private room".to_string()),
-            Some(50),
+            owner_id,
+            password,
         )
         .unwrap();
 
         assert_eq!(room.name, "Private Room");
         assert_eq!(room.owner_id, owner_id);
         assert!(room.is_private);
-        assert_eq!(room.password_hash, Some(password_hash));
-        assert_eq!(room.max_members, Some(50));
+        assert!(room.password_hash.is_some());
         assert_eq!(room.member_count, 1);
     }
 
@@ -489,23 +544,23 @@ mod tests {
     }
 
     #[test]
-    fn test_password_validation() {
+    fn test_password_verification() {
         let owner_id = Uuid::new_v4();
+        let password = "secret123";
 
-        // 有效密码哈希
-        assert!(
-            ChatRoom::new_private("Room", owner_id, "$2b$12$hash".to_string(), None, None).is_ok()
-        );
-        assert!(
-            ChatRoom::new_private("Room", owner_id, "$2a$10$hash".to_string(), None, None).is_ok()
-        );
+        let room =
+            ChatRoom::new_private("Room", Some("Private room".to_string()), owner_id, password)
+                .unwrap();
 
-        // 无效密码哈希
-        assert!(ChatRoom::new_private("Room", owner_id, "".to_string(), None, None).is_err());
-        assert!(
-            ChatRoom::new_private("Room", owner_id, "invalid_hash".to_string(), None, None)
-                .is_err()
-        );
+        // 测试正确密码
+        assert!(room.verify_password(password).unwrap());
+
+        // 测试错误密码
+        assert!(!room.verify_password("wrongpassword").unwrap());
+
+        // 测试公开房间（无需密码）
+        let public_room = ChatRoom::new_public("Public Room", owner_id, None, None).unwrap();
+        assert!(public_room.verify_password("anypassword").unwrap());
     }
 
     #[test]

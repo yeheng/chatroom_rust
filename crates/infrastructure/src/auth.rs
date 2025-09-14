@@ -58,7 +58,7 @@ impl TokenBlacklistService for RedisTokenBlacklistService {
         let mut conn = self
             .get_connection()
             .await
-            .map_err(|e| AuthError::InternalError(e))?;
+            .map_err(AuthError::InternalError)?;
 
         let key = self.blacklist_key(jti);
         let ttl = (expires_at - Utc::now()).num_seconds();
@@ -86,7 +86,7 @@ impl TokenBlacklistService for RedisTokenBlacklistService {
         let mut conn = self
             .get_connection()
             .await
-            .map_err(|e| AuthError::InternalError(e))?;
+            .map_err(AuthError::InternalError)?;
 
         let key = self.blacklist_key(jti);
         let exists: bool = redis::cmd("EXISTS")
@@ -102,7 +102,7 @@ impl TokenBlacklistService for RedisTokenBlacklistService {
         let mut conn = self
             .get_connection()
             .await
-            .map_err(|e| AuthError::InternalError(e))?;
+            .map_err(AuthError::InternalError)?;
 
         let key = self.blacklist_key(jti);
         let _: () = redis::cmd("DEL")
@@ -128,6 +128,12 @@ impl TokenBlacklistService for RedisTokenBlacklistService {
 pub struct InMemoryTokenBlacklistService {
     /// 黑名单存储
     blacklist: Arc<RwLock<HashMap<String, DateTime<Utc>>>>,
+}
+
+impl Default for InMemoryTokenBlacklistService {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl InMemoryTokenBlacklistService {

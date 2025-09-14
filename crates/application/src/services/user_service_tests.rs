@@ -330,13 +330,15 @@ mod user_service_tests {
             .unwrap();
 
         // 更新用户状态为忙碌
-        let result = service.update_user_status(user.id, UserStatus::Busy).await;
+        let result = service
+            .update_user_status(user.id, UserStatus::Active)
+            .await;
 
         assert!(result.is_ok());
 
         // 验证状态已更新
         let updated_user = service.get_user_by_id(user.id).await.unwrap();
-        assert_eq!(updated_user.status, UserStatus::Busy);
+        assert_eq!(updated_user.status, UserStatus::Active);
     }
 
     #[tokio::test]
@@ -448,7 +450,7 @@ mod user_service_tests {
 
         // 将一个用户设置为忙碌状态
         service
-            .update_user_status(user_ids[0], UserStatus::Busy)
+            .update_user_status(user_ids[0], UserStatus::Active)
             .await
             .unwrap();
 
@@ -457,7 +459,7 @@ mod user_service_tests {
             query: "user".to_string(),
             page: 1,
             page_size: 10,
-            status_filter: Some(UserStatus::Busy),
+            status_filter: Some(UserStatus::Active),
         };
 
         let result = service.search_users(search_request).await;
@@ -468,7 +470,7 @@ mod user_service_tests {
         // 应该只找到1个忙碌的用户
         assert_eq!(response.users.len(), 1);
         assert_eq!(response.total, 1);
-        assert_eq!(response.users[0].status, UserStatus::Busy);
+        assert_eq!(response.users[0].status, UserStatus::Active);
     }
 
     #[tokio::test]
@@ -632,11 +634,11 @@ mod user_service_tests {
             .await
             .unwrap();
         service
-            .update_user_status(user_ids[1], UserStatus::Busy)
+            .update_user_status(user_ids[1], UserStatus::Active)
             .await
             .unwrap();
         service
-            .update_user_status(user_ids[2], UserStatus::Away)
+            .update_user_status(user_ids[2], UserStatus::Inactive)
             .await
             .unwrap();
         service

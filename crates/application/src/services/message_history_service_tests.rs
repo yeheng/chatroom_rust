@@ -21,7 +21,7 @@ mod message_history_service_tests {
 
         // 插入100条消息
         for i in 0..100 {
-            let m = Message::new_text(room_id, user_id, format!("Message {}", i), None).unwrap();
+            let m = Message::new_text(room_id, user_id, format!("Message {}", i)).unwrap();
             svc.add_message(m).await;
         }
 
@@ -72,7 +72,7 @@ mod message_history_service_tests {
 
         // 填充几条消息
         for i in 0..5 {
-            let m = Message::new_text(room_id, authorized, format!("M {}", i), None).unwrap();
+            let m = Message::new_text(room_id, authorized, format!("M {}", i)).unwrap();
             svc.add_message(m).await;
         }
 
@@ -107,7 +107,7 @@ mod message_history_service_tests {
     async fn test_message_history_caching() {
         let (svc, room_id, user_id) = create_svc_and_room_with_user().await;
         for i in 0..30 {
-            let m = Message::new_text(room_id, user_id, format!("C {}", i), None).unwrap();
+            let m = Message::new_text(room_id, user_id, format!("C {}", i)).unwrap();
             svc.add_message(m).await;
         }
 
@@ -132,7 +132,7 @@ mod message_history_service_tests {
         let (svc, room_id, user_id) = create_svc_and_room_with_user().await;
         let msgs = ["Hello world", "Goodbye world", "Random message"];
         for c in msgs.iter() {
-            let m = Message::new_text(room_id, user_id, c.to_string(), None).unwrap();
+            let m = Message::new_text(room_id, user_id, c.to_string()).unwrap();
             svc.add_message(m).await;
         }
 
@@ -154,7 +154,7 @@ mod message_history_service_tests {
         // 仅做运行性检查，避免严格时间断言
         let (svc, room_id, user_id) = create_svc_and_room_with_user().await;
         for i in 0..10_000 {
-            let m = Message::new_text(room_id, user_id, format!("Message {}", i), None).unwrap();
+            let m = Message::new_text(room_id, user_id, format!("Message {}", i)).unwrap();
             svc.add_message(m).await;
         }
         let q = GetRoomHistoryQuery {

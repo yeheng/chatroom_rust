@@ -317,7 +317,7 @@ mod tests {
     fn create_test_message_event() -> ChatEvent {
         let room_id = Uuid::new_v4();
         let user_id = Uuid::new_v4();
-        let message = Message::new_text(room_id, user_id, "Test message", None).unwrap();
+        let message = Message::new_text(room_id, user_id, "Test message".to_string()).unwrap();
 
         ChatEvent::MessageSent {
             message,

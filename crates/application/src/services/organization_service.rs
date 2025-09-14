@@ -227,14 +227,13 @@ where
 
         // 如果更新名称，验证唯一性
         if let Some(ref new_name) = name {
-            if new_name != &organization.name {
-                if self
+            if new_name != &organization.name
+                && self
                     .repository
                     .exists_organization_name(new_name, organization.parent_id)
                     .await?
-                {
-                    return Err(ApplicationError::Validation("^1".to_string()));
-                }
+            {
+                return Err(ApplicationError::Validation("^1".to_string()));
             }
         }
 

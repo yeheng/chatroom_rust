@@ -24,6 +24,12 @@ pub struct InMemoryConnectionManager {
     stats: Arc<RwLock<ConnectionStats>>,
 }
 
+impl Default for InMemoryConnectionManager {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl InMemoryConnectionManager {
     /// 创建新的内存连接管理器
     pub fn new() -> Self {
@@ -327,6 +333,12 @@ pub struct InMemoryMessageRouter {
     stats: Arc<RwLock<RouterStats>>,
 }
 
+impl Default for InMemoryMessageRouter {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl InMemoryMessageRouter {
     /// 创建新的内存消息路由器
     pub fn new() -> Self {
@@ -494,6 +506,12 @@ pub struct InMemoryRoomManager {
     user_rooms: Arc<RwLock<HashMap<Uuid, Vec<String>>>>,
     /// 房间统计
     room_stats: Arc<RwLock<HashMap<String, RoomStats>>>,
+}
+
+impl Default for InMemoryRoomManager {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl InMemoryRoomManager {

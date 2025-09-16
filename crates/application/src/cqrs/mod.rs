@@ -11,11 +11,17 @@ pub mod handlers;
 pub mod dtos;
 pub mod buses;
 pub mod events;
+pub mod services;
+pub mod container;
+pub mod application;
 
 pub use commands::*;
 pub use queries::*;
 pub use handlers::*;
 pub use dtos::*;
+pub use services::*;
+pub use container::*;
+pub use application::*;
 // pub use buses::*;
 // pub use events::*;
 
@@ -26,13 +32,13 @@ use std::sync::Arc;
 /// 命令特征 - 所有命令必须实现此特征
 pub trait Command: Send + Sync + 'static {
     /// 命令执行的返回类型
-    type Result;
+    type Result: Send;
 }
 
 /// 查询特征 - 所有查询必须实现此特征
 pub trait Query: Send + Sync + 'static {
     /// 查询的返回类型
-    type Result;
+    type Result: Send;
 }
 
 /// 命令处理器接口

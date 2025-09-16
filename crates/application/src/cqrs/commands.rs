@@ -156,6 +156,7 @@ impl Command for DeleteMessageCommand {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UpdateChatRoomCommand {
     pub room_id: Uuid,
+    pub user_id: Uuid, // 执行操作的用户ID，用于权限验证
     pub name: Option<String>,
     pub description: Option<String>,
     pub is_private: Option<bool>,
@@ -249,6 +250,7 @@ impl Command for CreateDepartmentCommand {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UpdateOrganizationCommand {
     pub organization_id: Uuid,
+    pub owner_id: Uuid, // 执行操作的用户ID，用于权限验证
     pub name: Option<String>,
     pub description: Option<String>,
     pub settings: Option<serde_json::Value>,
@@ -256,4 +258,15 @@ pub struct UpdateOrganizationCommand {
 
 impl Command for UpdateOrganizationCommand {
     type Result = domain::organization::Organization;
+}
+
+/// 删除组织命令
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DeleteOrganizationCommand {
+    pub organization_id: Uuid,
+    pub owner_id: Uuid, // 执行操作的用户ID，用于权限验证
+}
+
+impl Command for DeleteOrganizationCommand {
+    type Result = ();
 }

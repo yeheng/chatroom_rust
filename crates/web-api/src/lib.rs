@@ -806,6 +806,21 @@ fn map_app_error(err: &ApplicationError) -> (StatusCode, String, String) {
             "INFRASTRUCTURE_ERROR".to_string(),
             msg.clone(),
         ),
+        ApplicationError::Serialization(msg) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "SERIALIZATION_ERROR".to_string(),
+            msg.clone(),
+        ),
+        ApplicationError::CommandHandlerNotFound(msg) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "COMMAND_HANDLER_NOT_FOUND".to_string(),
+            msg.clone(),
+        ),
+        ApplicationError::QueryHandlerNotFound(msg) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "QUERY_HANDLER_NOT_FOUND".to_string(),
+            msg.clone(),
+        ),
     }
 }
 

@@ -41,6 +41,18 @@ pub enum ApplicationError {
     #[error("验证失败: {0}")]
     Validation(String),
 
+    /// 序列化错误
+    #[error("序列化错误: {0}")]
+    Serialization(String),
+
+    /// 命令处理器未找到
+    #[error("命令处理器未找到: {0}")]
+    CommandHandlerNotFound(String),
+
+    /// 查询处理器未找到
+    #[error("查询处理器未找到: {0}")]
+    QueryHandlerNotFound(String),
+
     /// 并发冲突
     #[error("并发冲突: {0}")]
     Conflict(String),

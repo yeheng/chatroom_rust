@@ -65,6 +65,7 @@ dependencies = [
  "domain",
  "futures-util",
  "infrastructure",
+ "rdkafka",
  "redis",
  "serde",
  "serde_json",

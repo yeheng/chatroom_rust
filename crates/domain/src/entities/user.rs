@@ -47,6 +47,9 @@ pub struct User {
     pub username: String,
     /// 邮箱（唯一）
     pub email: String,
+    /// 密码哈希（敏感信息，不在序列化中包含）
+    #[serde(skip_serializing)]
+    pub password_hash: Option<String>,
     /// 头像URL（可选）
     pub avatar_url: Option<String>,
     /// 显示名称（可选）
@@ -57,8 +60,8 @@ pub struct User {
     pub created_at: DateTime<Utc>,
     /// 更新时间
     pub updated_at: DateTime<Utc>,
-    /// 最后活跃时间
-    pub last_activity_at: Option<DateTime<Utc>>,
+    /// 最后活跃时间（与数据库字段名保持一致）
+    pub last_active_at: Option<DateTime<Utc>>,
 }
 
 impl User {

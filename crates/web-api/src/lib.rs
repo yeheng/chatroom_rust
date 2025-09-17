@@ -7,7 +7,7 @@
 
 use axum::{
     body::Body,
-    extract::{Path, Query, State},
+    extract::{ws::WebSocketUpgrade, Path, Query, State},
     http::{HeaderMap, StatusCode},
     middleware::{from_fn, from_fn_with_state, Next},
     response::{IntoResponse, Response},
@@ -27,16 +27,18 @@ use tracing::{error, info, warn};
 use uuid::Uuid;
 
 use application::{
-    ChatRoomService, ChatRoomServiceImpl, CreateRoomRequest, CreateUserRequest, UserService,
-    UserServiceImpl,
+    ChatRoomService, ChatRoomServiceImpl, CreateRoomRequest, CreateUserRequest, UserSearchRequest,
+    UserService, UserServiceImpl,
 };
 use domain::entities::auth::{LoginCredentials, RefreshTokenRequest, UserRole};
 use domain::services::auth_service::JwtEncoder;
 use domain::AuthService;
 use infrastructure::auth::{InMemoryTokenBlacklistService, JwtAuthServiceImpl, UserAuthService};
 pub mod app_config;
+pub mod websocket;
 use app_config::AppConfig;
 use application::errors::ApplicationError;
+use websocket::WebSocketHandler;
 
 // 统一 API 响应封装
 #[derive(Debug, Serialize, Deserialize)]
@@ -479,6 +481,521 @@ fn extract_user_id(headers: &HeaderMap) -> Option<Uuid> {
         .and_then(|s| Uuid::parse_str(s.trim()).ok())
 }
 
+/// WebSocket连接处理器
+async fn websocket_handler(
+    ws: WebSocketUpgrade,
+    state: State<AppState>,
+    query: Query<websocket::WebSocketQuery>,
+) -> Result<Response, StatusCode> {
+    WebSocketHandler::handle_upgrade(ws, state, query).await
+}
+
+// ===== 用户管理端点 =====
+
+/// 获取当前用户信息
+async fn get_current_user(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> Result<Json<ApiResponse<serde_json::Value>>, StatusCode> {
+    let user_id = extract_user_id(&headers).ok_or(StatusCode::UNAUTHORIZED)?;
+
+    match state.user_service.get_user_by_id(user_id).await {
+        Ok(user) => {
+            let user_data = serde_json::json!({
+                "id": user.id,
+                "username": user.username,
+                "email": user.email,
+                "display_name": user.display_name,
+                "avatar_url": user.avatar_url,
+                "status": user.status,
+                "created_at": user.created_at,
+                "updated_at": user.updated_at
+            });
+            Ok(Json(ApiResponse::ok(user_data)))
+        }
+        Err(e) => {
+            error!("Failed to get current user: {}", e);
+            Err(StatusCode::INTERNAL_SERVER_ERROR)
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+struct UpdateUserRequest {
+    username: Option<String>,
+    email: Option<String>,
+    display_name: Option<String>,
+    avatar_url: Option<String>,
+}
+
+/// 更新当前用户信息
+async fn update_current_user(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(request): Json<UpdateUserRequest>,
+) -> Result<Json<ApiResponse<serde_json::Value>>, StatusCode> {
+    let user_id = extract_user_id(&headers).ok_or(StatusCode::UNAUTHORIZED)?;
+
+    match state.user_service.update_user(
+        user_id,
+        application::UpdateUserRequest {
+            username: request.username,
+            email: request.email,
+            display_name: request.display_name,
+            avatar_url: request.avatar_url,
+        },
+    ).await {
+        Ok(user) => {
+            let user_data = serde_json::json!({
+                "id": user.id,
+                "username": user.username,
+                "email": user.email,
+                "display_name": user.display_name,
+                "avatar_url": user.avatar_url,
+                "status": user.status,
+                "created_at": user.created_at,
+                "updated_at": user.updated_at
+            });
+            Ok(Json(ApiResponse::ok(user_data)))
+        }
+        Err(e) => {
+            error!("Failed to update user: {}", e);
+            Err(StatusCode::BAD_REQUEST)
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+struct SearchUsersQuery {
+    q: String, // 搜索关键词
+    limit: Option<u32>,
+    offset: Option<u32>,
+}
+
+/// 搜索用户
+async fn search_users(
+    State(state): State<AppState>,
+    _headers: HeaderMap,
+    Query(query): Query<SearchUsersQuery>,
+) -> Result<Json<ApiResponse<serde_json::Value>>, StatusCode> {
+    let keyword = query.q.trim();
+    if keyword.is_empty() {
+        return Ok(Json(ApiResponse::<serde_json::Value>::err(
+            "INVALID_QUERY",
+            "Search keyword cannot be empty",
+            Uuid::new_v4().to_string(),
+        )));
+    }
+
+    let limit = query.limit.unwrap_or(20).min(100);
+    let offset = query.offset.unwrap_or(0);
+
+    let q = UserSearchRequest {
+        query: keyword.to_string(),
+        page: (offset / limit) + 1,
+        page_size: limit,
+        status_filter: None,
+    };
+
+    match state.user_service.search_users(q).await {
+        Ok(r) => {
+            let users_data: Vec<serde_json::Value> = r
+                .users
+                .into_iter()
+                .map(|user| {
+                    serde_json::json!({
+                        "id": user.id,
+                        "username": user.username,
+                        "display_name": user.display_name,
+                        "avatar_url": user.avatar_url,
+                        "status": user.status
+                    })
+                })
+                .collect();
+
+            let result = serde_json::json!({
+                "users": users_data,
+                "pagination": {
+                    "limit": r.page_size,
+                    "offset": r.page * r.page_size,
+                    "has_more": r.page == r.total_pages
+                }
+            });
+
+            Ok(Json(ApiResponse::ok(result)))
+        }
+        Err(e) => {
+            error!("Failed to search users: {}", e);
+            Err(StatusCode::INTERNAL_SERVER_ERROR)
+        }
+    }
+}
+
+// ===== 聊天室管理端点 =====
+
+#[derive(Debug, Deserialize)]
+struct UpdateRoomRequest {
+    name: Option<String>,
+    description: Option<String>,
+    is_private: Option<bool>,
+    password: Option<String>,
+}
+
+/// 更新聊天室
+async fn update_room_handler(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(room_id): Path<Uuid>,
+    Json(request): Json<UpdateRoomRequest>,
+) -> Result<Json<ApiResponse<serde_json::Value>>, StatusCode> {
+    let user_id = extract_user_id(&headers).ok_or(StatusCode::UNAUTHORIZED)?;
+
+    // TODO: 检查用户是否有权限更新房间（房主或管理员）
+
+    match state.chat_service.update_room(
+        room_id,
+        application::UpdateRoomRequest {
+            name: request.name,
+            description: request.description,
+            max_members: None,
+            password: request.password,
+        },
+    ).await {
+        Ok(room) => {
+            let room_data = serde_json::json!({
+                "id": room.id,
+                "name": room.name,
+                "description": room.description,
+                "owner_id": room.owner_id,
+                "is_private": room.is_private,
+                "created_at": room.created_at,
+                "updated_at": room.updated_at
+            });
+            Ok(Json(ApiResponse::ok(room_data)))
+        }
+        Err(e) => {
+            error!("Failed to update room: {}", e);
+            Err(StatusCode::BAD_REQUEST)
+        }
+    }
+}
+
+/// 删除聊天室
+async fn delete_room_handler(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(room_id): Path<Uuid>,
+) -> Result<Json<ApiResponse<()>>, StatusCode> {
+    let user_id = extract_user_id(&headers).ok_or(StatusCode::UNAUTHORIZED)?;
+
+    match state.chat_service.delete_room(room_id, user_id).await {
+        Ok(_) => Ok(Json(ApiResponse::ok(()))),
+        Err(e) => {
+            error!("Failed to delete room: {}", e);
+            Err(StatusCode::BAD_REQUEST)
+        }
+    }
+}
+
+/// 离开聊天室
+async fn leave_room_handler(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(room_id): Path<Uuid>,
+) -> Result<Json<ApiResponse<()>>, StatusCode> {
+    let user_id = extract_user_id(&headers).ok_or(StatusCode::UNAUTHORIZED)?;
+
+    match state.chat_service.leave_room(room_id, user_id).await {
+        Ok(_) => Ok(Json(ApiResponse::ok(()))),
+        Err(e) => {
+            error!("Failed to leave room: {}", e);
+            Err(StatusCode::BAD_REQUEST)
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+struct GetRoomMessagesQuery {
+    limit: Option<u32>,
+    offset: Option<u32>,
+    before: Option<chrono::DateTime<chrono::Utc>>,
+    after: Option<chrono::DateTime<chrono::Utc>>,
+}
+
+/// 获取聊天室消息
+async fn get_room_messages(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(room_id): Path<Uuid>,
+    Query(query): Query<GetRoomMessagesQuery>,
+) -> Result<Json<ApiResponse<serde_json::Value>>, StatusCode> {
+    let user_id = extract_user_id(&headers).ok_or(StatusCode::UNAUTHORIZED)?;
+
+    // 检查用户是否在房间内
+    if !state
+        .chat_service
+        .is_user_in_room(room_id, user_id)
+        .await
+        .unwrap_or(false)
+    {
+        return Ok(Json(ApiResponse::<serde_json::Value>::err(
+            "ACCESS_DENIED",
+            "You must be a member of the room to view messages",
+            Uuid::new_v4().to_string(),
+        )));
+    }
+
+    let limit = query.limit.unwrap_or(50).min(100);
+    let offset = query.offset.unwrap_or(0);
+
+    match state
+        .chat_service
+        .get_room_messages(room_id, Some(limit), Some(offset))
+        .await
+    {
+        Ok(messages) => {
+            let messages_data: Vec<serde_json::Value> = messages
+                .into_iter()
+                .map(|msg| {
+                    serde_json::json!({
+                        "id": msg.id,
+                        "room_id": msg.room_id,
+                        "sender_id": msg.sender_id,
+                        "content": msg.content,
+                        "message_type": msg.message_type,
+                        "created_at": msg.created_at,
+                        "updated_at": msg.updated_at
+                    })
+                })
+                .collect();
+
+            let result = serde_json::json!({
+                "messages": messages_data,
+                "pagination": {
+                    "limit": limit,
+                    "offset": offset,
+                    "has_more": messages_data.len() as u32 == limit
+                }
+            });
+
+            Ok(Json(ApiResponse::ok(result)))
+        }
+        Err(e) => {
+            error!("Failed to get room messages: {}", e);
+            Err(StatusCode::INTERNAL_SERVER_ERROR)
+        }
+    }
+}
+
+/// 获取聊天室成员
+async fn get_room_members(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(room_id): Path<Uuid>,
+) -> Result<Json<ApiResponse<serde_json::Value>>, StatusCode> {
+    let user_id = extract_user_id(&headers).ok_or(StatusCode::UNAUTHORIZED)?;
+
+    // 检查用户是否在房间内
+    if !state
+        .chat_service
+        .is_user_in_room(room_id, user_id)
+        .await
+        .unwrap_or(false)
+    {
+        return Ok(Json(ApiResponse::<serde_json::Value>::err(
+            "ACCESS_DENIED",
+            "You must be a member of the room to view members",
+            Uuid::new_v4().to_string(),
+        )));
+    }
+
+    match state.chat_service.get_room_members(room_id).await {
+        Ok(members) => {
+            let members_data: Vec<serde_json::Value> = members
+                .into_iter()
+                .map(|member| {
+                    serde_json::json!({
+                        "user_id": member.user_id,
+                        "username": member.username,
+                        "role": member.role,
+                        "joined_at": member.joined_at
+                    })
+                })
+                .collect();
+
+            let result = serde_json::json!({
+                "members": members_data,
+                "total_count": members_data.len()
+            });
+
+            Ok(Json(ApiResponse::ok(result)))
+        }
+        Err(e) => {
+            error!("Failed to get room members: {}", e);
+            Err(StatusCode::INTERNAL_SERVER_ERROR)
+        }
+    }
+}
+
+// ===== 消息管理端点 =====
+
+/// 获取消息详情
+async fn get_message(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(message_id): Path<Uuid>,
+) -> Result<Json<ApiResponse<serde_json::Value>>, StatusCode> {
+    let _user_id = extract_user_id(&headers).ok_or(StatusCode::UNAUTHORIZED)?;
+
+    match state.chat_service.get_message(message_id).await {
+        Ok(Some(message)) => {
+            let message_data = serde_json::json!({
+                "id": message.id,
+                "room_id": message.room_id,
+                "sender_id": message.sender_id,
+                "content": message.content,
+                "message_type": message.message_type,
+                "created_at": message.created_at,
+                "updated_at": message.updated_at
+            });
+            Ok(Json(ApiResponse::ok(message_data)))
+        }
+        Ok(None) => Ok(Json(ApiResponse::<serde_json::Value>::err(
+            "MESSAGE_NOT_FOUND",
+            "Message not found",
+            Uuid::new_v4().to_string(),
+        ))),
+        Err(e) => {
+            error!("Failed to get message: {}", e);
+            Err(StatusCode::INTERNAL_SERVER_ERROR)
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+struct UpdateMessageRequest {
+    content: String,
+}
+
+/// 更新消息
+async fn update_message(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(message_id): Path<Uuid>,
+    Json(request): Json<UpdateMessageRequest>,
+) -> Result<Json<ApiResponse<serde_json::Value>>, StatusCode> {
+    let user_id = extract_user_id(&headers).ok_or(StatusCode::UNAUTHORIZED)?;
+
+    match state
+        .chat_service
+        .edit_message(message_id, user_id, request.content)
+        .await
+    {
+        Ok(message) => {
+            let message_data = serde_json::json!({
+                "id": message.id,
+                "room_id": message.room_id,
+                "sender_id": message.sender_id,
+                "content": message.content,
+                "message_type": message.message_type,
+                "created_at": message.created_at,
+                "updated_at": message.updated_at
+            });
+            Ok(Json(ApiResponse::ok(message_data)))
+        }
+        Err(e) => {
+            error!("Failed to update message: {}", e);
+            Err(StatusCode::BAD_REQUEST)
+        }
+    }
+}
+
+/// 删除消息
+async fn delete_message(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(message_id): Path<Uuid>,
+) -> Result<Json<ApiResponse<()>>, StatusCode> {
+    let user_id = extract_user_id(&headers).ok_or(StatusCode::UNAUTHORIZED)?;
+
+    match state.chat_service.delete_message(message_id, user_id).await {
+        Ok(_) => Ok(Json(ApiResponse::ok(()))),
+        Err(e) => {
+            error!("Failed to delete message: {}", e);
+            Err(StatusCode::BAD_REQUEST)
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+struct SearchMessagesQuery {
+    q: String,             // 搜索关键词
+    room_id: Option<Uuid>, // 限制在特定房间内搜索
+    limit: Option<u32>,
+    offset: Option<u32>,
+    before: Option<chrono::DateTime<chrono::Utc>>,
+    after: Option<chrono::DateTime<chrono::Utc>>,
+}
+
+/// 搜索消息
+async fn search_messages(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Query(query): Query<SearchMessagesQuery>,
+) -> Result<Json<ApiResponse<serde_json::Value>>, StatusCode> {
+    let user_id = extract_user_id(&headers).ok_or(StatusCode::UNAUTHORIZED)?;
+
+    let keyword = query.q.trim();
+    if keyword.is_empty() {
+        return Ok(Json(ApiResponse::<serde_json::Value>::err(
+            "INVALID_QUERY",
+            "Search keyword cannot be empty",
+            Uuid::new_v4().to_string(),
+        )));
+    }
+
+    let limit = query.limit.unwrap_or(20).min(100);
+    let offset = query.offset.unwrap_or(0);
+
+    match state
+        .chat_service
+        .search_messages(keyword, query.room_id, user_id, limit, offset)
+        .await
+    {
+        Ok(messages) => {
+            let messages_data: Vec<serde_json::Value> = messages
+                .into_iter()
+                .map(|msg| {
+                    serde_json::json!({
+                        "id": msg.id,
+                        "room_id": msg.room_id,
+                        "sender_id": msg.sender_id,
+                        "content": msg.content,
+                        "message_type": msg.message_type,
+                        "created_at": msg.created_at,
+                        "updated_at": msg.updated_at
+                    })
+                })
+                .collect();
+
+            let result = serde_json::json!({
+                "messages": messages_data,
+                "pagination": {
+                    "limit": limit,
+                    "offset": offset,
+                    "has_more": messages_data.len() as u32 == limit
+                }
+            });
+
+            Ok(Json(ApiResponse::ok(result)))
+        }
+        Err(e) => {
+            error!("Failed to search messages: {}", e);
+            Err(StatusCode::INTERNAL_SERVER_ERROR)
+        }
+    }
+}
+
 // 构建 Router
 static APP_STATE: once_cell::sync::OnceCell<AppState> = once_cell::sync::OnceCell::new();
 
@@ -492,14 +1009,33 @@ pub fn build_router() -> Router {
         .route_layer(from_fn_with_state(login_state, rate_limit_login_mw));
 
     let api_v1 = Router::new()
+        // 用户管理端点
+        .route("/users/me", get(get_current_user).put(update_current_user))
+        .route("/users/search", get(search_users))
+        // 聊天室管理端点
         .route("/rooms", post(create_room_handler).get(list_rooms_handler))
-        .route("/rooms/{room_id}", get(get_room_handler))
+        .route(
+            "/rooms/{room_id}",
+            get(get_room_handler)
+                .put(update_room_handler)
+                .delete(delete_room_handler),
+        )
         .route("/rooms/{room_id}/join", post(join_room_handler))
+        .route("/rooms/{room_id}/leave", post(leave_room_handler))
+        .route("/rooms/{room_id}/messages", get(get_room_messages))
+        .route("/rooms/{room_id}/members", get(get_room_members))
+        // 消息管理端点
+        .route(
+            "/messages/{message_id}",
+            get(get_message).put(update_message).delete(delete_message),
+        )
+        .route("/messages/search", get(search_messages))
         .route_layer(from_fn_with_state(state.clone(), auth_jwt_mw));
 
     Router::new()
         .route("/health", get(health_handler))
         .route("/metrics", get(metrics_handler))
+        .route("/ws", get(websocket_handler))
         .nest("/api/auth", api_auth)
         .nest("/api/v1", api_v1)
         .with_state(state)

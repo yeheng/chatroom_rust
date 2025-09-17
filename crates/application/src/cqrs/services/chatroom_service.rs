@@ -20,7 +20,7 @@ use crate::cqrs::{
 use domain::entities::message::MessageType;
 use uuid::Uuid;
 use std::sync::Arc;
-use tracing::{info, warn};
+use tracing::info;
 
 /// 基于 CQRS 的聊天室应用服务
 pub struct CqrsChatRoomService {

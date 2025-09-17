@@ -117,6 +117,51 @@ pub trait ChatRoomService: Send + Sync {
         user_id: Uuid,
         kicked_by: Uuid,
     ) -> ApplicationResult<()>;
+
+    /// 检查用户是否在房间中
+    async fn is_user_in_room(&self, room_id: Uuid, user_id: Uuid) -> ApplicationResult<bool>;
+
+    /// 获取房间消息历史
+    async fn get_room_messages(
+        &self,
+        room_id: Uuid,
+        limit: Option<u32>,
+        offset: Option<u32>,
+    ) -> ApplicationResult<Vec<domain::message::Message>>;
+
+    /// 发送消息
+    async fn send_message(
+        &self,
+        room_id: Uuid,
+        sender_id: Uuid,
+        content: String,
+        message_type: domain::message::MessageType,
+        reply_to_message_id: Option<Uuid>,
+    ) -> ApplicationResult<domain::message::Message>;
+
+    /// 获取消息
+    async fn get_message(&self, message_id: Uuid) -> ApplicationResult<Option<domain::message::Message>>;
+
+    /// 编辑消息
+    async fn edit_message(
+        &self,
+        message_id: Uuid,
+        editor_id: Uuid,
+        new_content: String,
+    ) -> ApplicationResult<domain::message::Message>;
+
+    /// 删除消息
+    async fn delete_message(&self, message_id: Uuid, deleter_id: Uuid) -> ApplicationResult<()>;
+
+    /// 搜索消息
+    async fn search_messages(
+        &self,
+        keyword: &str,
+        room_id: Option<Uuid>,
+        searcher_id: Uuid,
+        limit: u32,
+        offset: u32,
+    ) -> ApplicationResult<Vec<domain::message::Message>>;
 }
 
 /// 更新房间请求
@@ -943,6 +988,116 @@ impl ChatRoomService for ChatRoomServiceImpl {
 
         info!("用户 {} 被踢出房间 {}", user_id, room_id);
         Ok(())
+    }
+
+    /// 检查用户是否在房间中
+    async fn is_user_in_room(&self, room_id: Uuid, user_id: Uuid) -> ApplicationResult<bool> {
+        Ok(self.member_store.is_user_in_room(room_id, user_id).await)
+    }
+
+    /// 获取房间消息历史
+    async fn get_room_messages(
+        &self,
+        room_id: Uuid,
+        limit: Option<u32>,
+        offset: Option<u32>,
+    ) -> ApplicationResult<Vec<domain::message::Message>> {
+        // 验证房间存在
+        let rooms = self.rooms.read().await;
+        if !rooms.contains_key(&room_id) {
+            return Err(ChatRoomError::RoomNotFound(room_id).into());
+        }
+        drop(rooms);
+
+        // 简单实现：返回空列表（实际实现需要连接数据库）
+        // TODO: 连接实际的消息存储
+        let _limit = limit.unwrap_or(50);
+        let _offset = offset.unwrap_or(0);
+        Ok(vec![])
+    }
+
+    /// 发送消息
+    async fn send_message(
+        &self,
+        room_id: Uuid,
+        sender_id: Uuid,
+        content: String,
+        message_type: domain::message::MessageType,
+        reply_to_message_id: Option<Uuid>,
+    ) -> ApplicationResult<domain::message::Message> {
+        // 验证用户在房间中
+        if !self.member_store.is_user_in_room(room_id, sender_id).await {
+            return Err(ChatRoomError::UserNotInRoom(sender_id).into());
+        }
+
+        // 验证消息内容
+        if content.trim().is_empty() {
+            return Err(ApplicationError::Validation("消息内容不能为空".to_string()));
+        }
+
+        // 创建消息
+        use domain::message::Message;
+        let message = match message_type {
+            domain::message::MessageType::Text => {
+                if let Some(reply_id) = reply_to_message_id {
+                    Message::new_reply(room_id, sender_id, content, reply_id)?
+                } else {
+                    Message::new_text(room_id, sender_id, content)?
+                }
+            }
+            domain::message::MessageType::Image { url, thumbnail } => {
+                // 对于图片消息，使用传入的URL信息
+                Message::new_image(room_id, sender_id, content, url, thumbnail)?
+            }
+            domain::message::MessageType::File { .. } => {
+                // 文件消息暂时作为文本消息处理
+                Message::new_text(room_id, sender_id, content)?
+            }
+            domain::message::MessageType::Emoji { .. } => {
+                // 表情消息作为文本消息处理
+                Message::new_text(room_id, sender_id, content)?
+            }
+        };
+
+        // TODO: 实际保存到数据库
+        // 这里只是返回创建的消息
+        Ok(message)
+    }
+
+    /// 获取消息
+    async fn get_message(&self, _message_id: Uuid) -> ApplicationResult<Option<domain::message::Message>> {
+        // TODO: 实际从数据库查询
+        Ok(None)
+    }
+
+    /// 编辑消息
+    async fn edit_message(
+        &self,
+        _message_id: Uuid,
+        _editor_id: Uuid,
+        _new_content: String,
+    ) -> ApplicationResult<domain::message::Message> {
+        // TODO: 实际实现消息编辑
+        Err(ApplicationError::Infrastructure("消息编辑功能尚未实现".to_string()))
+    }
+
+    /// 删除消息
+    async fn delete_message(&self, _message_id: Uuid, _deleter_id: Uuid) -> ApplicationResult<()> {
+        // TODO: 实际实现消息删除
+        Err(ApplicationError::Infrastructure("消息删除功能尚未实现".to_string()))
+    }
+
+    /// 搜索消息
+    async fn search_messages(
+        &self,
+        _keyword: &str,
+        _room_id: Option<Uuid>,
+        _searcher_id: Uuid,
+        _limit: u32,
+        _offset: u32,
+    ) -> ApplicationResult<Vec<domain::message::Message>> {
+        // TODO: 实际实现消息搜索
+        Ok(vec![])
     }
 }
 

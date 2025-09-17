@@ -9,7 +9,7 @@ use crate::cqrs::{
     EventBus,
 };
 use domain::entities::chatroom::{ChatRoom, ChatRoomStatus};
-use domain::entities::message::{Message, MessageType};
+use domain::entities::message::Message;
 use domain::entities::room_member::{RoomMember, MemberRole};
 use std::sync::Arc;
 use std::collections::HashMap;

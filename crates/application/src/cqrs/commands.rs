@@ -167,6 +167,9 @@ impl Command for UpdateChatRoomCommand {
     type Result = domain::entities::chatroom::ChatRoom;
 }
 
+/// 更新房间命令别名 (为了API兼容性)
+pub type UpdateRoomCommand = UpdateChatRoomCommand;
+
 /// 删除聊天室命令
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DeleteChatRoomCommand {

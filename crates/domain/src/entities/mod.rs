@@ -6,7 +6,9 @@ pub mod auth;
 pub mod bot;
 pub mod chatroom;
 pub mod department;
+pub mod file_upload;
 pub mod message;
+pub mod notification;
 pub mod online_statistics;
 pub mod organization;
 pub mod position;
@@ -16,3 +18,7 @@ pub mod room_member;
 pub mod user;
 pub mod user_position;
 pub mod websocket;
+
+// 重新导出核心实体
+pub use file_upload::FileUpload;
+pub use notification::{Notification, NotificationPriority, notification_types};

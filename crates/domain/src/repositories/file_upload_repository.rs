@@ -1,33 +1,11 @@
 //! 文件上传Repository接口定义
 
+use crate::entities::FileUpload;
 use crate::errors::DomainResult;
-use crate::repositories::{Pagination, PaginatedResult, QueryFilter, SortConfig};
+use crate::repositories::{Pagination, PaginatedResult, SortConfig};
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
-use serde_json::Value as JsonValue;
 use uuid::Uuid;
-
-/// 文件上传实体
-#[derive(Debug, Clone)]
-pub struct FileUpload {
-    pub id: Uuid,
-    pub user_id: Uuid,
-    pub room_id: Option<Uuid>,
-    pub filename: String,
-    pub original_filename: String,
-    pub file_size: i64,
-    pub mime_type: String,
-    pub storage_path: String,
-    pub storage_type: String, // local, s3, minio, azure, gcs
-    pub checksum: Option<String>,
-    pub thumbnail_path: Option<String>,
-    pub is_public: bool,
-    pub is_temporary: bool,
-    pub download_count: i32,
-    pub expires_at: Option<DateTime<Utc>>,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
-}
 
 /// 文件分享实体
 #[derive(Debug, Clone)]

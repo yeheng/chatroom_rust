@@ -225,7 +225,8 @@ mod tests {
             status: UserStatus::Active,
             created_at: Utc::now(),
             updated_at: Utc::now(),
-            last_activity_at: Some(Utc::now()),
+            last_active_at: Some(Utc::now()),
+            password_hash: None,
         }
     }
 

@@ -4,28 +4,65 @@
 
 use crate::errors::DomainResult;
 use async_trait::async_trait;
-use chrono::{DateTime, Utc};
 use std::collections::HashMap;
+use chrono::{DateTime, Utc};
 use uuid::Uuid;
 
 // 重新导出所有Repository特征
-pub use user_repository::*;
-pub use chatroom_repository::*;
-pub use message_repository::*;
-pub use room_member_repository::*;
-pub use session_repository::*;
-pub use file_upload_repository::*;
-pub use notification_repository::*;
-pub use statistics_repository::*;
+pub use user_repository::{UserRepository, UserSearchParams, UserStatistics};
+pub use chatroom_repository::{ChatRoomRepository, ChatRoomSearchParams, ChatRoomStatistics, RoomActivityStats};
+pub use message_repository::{MessageRepository, MessageSearchParams, MessageStatistics};
+pub use room_member_repository::{RoomMemberRepository, RoomMemberSearchParams, RoomMemberStatistics, MemberPermissions};
+pub use session_repository::{SessionRepository};
+pub use file_upload_repository::{
+    FileUploadRepository, FileSearchParams, FileStatistics,
+    FileShare, FileShareRepository, FileAccessLog, FileAccessLogRepository
+};
+pub use notification_repository::{
+    NotificationRepository, NotificationSearchParams, NotificationStatistics
+};
+pub use statistics_repository::{
+    DailyStats, DailyStatsRepository, SystemMetric, SystemMetricRepository,
+    OnlineUser, OnlineUserRepository, RoomActivityStats as StatisticsRoomActivityStats,
+    RoomActivityStatsRepository, ErrorLog, ErrorLogRepository,
+    SystemHealthStatus, RealtimeStats, SystemHealthRepository
+};
 
-mod user_repository;
-mod chatroom_repository;
-mod message_repository;
-mod room_member_repository;
-mod session_repository;
-mod file_upload_repository;
-mod notification_repository;
-mod statistics_repository;
+/// 简化的统计Repository接口 - 用于基础统计功能
+#[async_trait]
+pub trait StatisticsRepository: Send + Sync {
+    /// 获取系统统计信息
+    async fn get_system_statistics(&self) -> DomainResult<HashMap<String, u64>>;
+
+    /// 获取用户活动统计
+    async fn get_user_activity_stats(&self, user_id: Uuid, date_from: DateTime<Utc>, date_to: DateTime<Utc>) -> DomainResult<HashMap<String, u64>>;
+
+    /// 获取房间活动统计
+    async fn get_room_activity_stats(&self, room_id: Uuid, date_from: DateTime<Utc>, date_to: DateTime<Utc>) -> DomainResult<HashMap<String, u64>>;
+
+    /// 记录用户在线时长
+    async fn record_user_online_time(&self, user_id: Uuid, duration_minutes: u64) -> DomainResult<()>;
+
+    /// 获取热门房间
+    async fn get_popular_rooms(&self, limit: u32) -> DomainResult<Vec<(Uuid, String, u64)>>;
+
+    /// 获取活跃用户
+    async fn get_active_users(&self, limit: u32) -> DomainResult<Vec<(Uuid, String, u64)>>;
+
+    /// 清理旧统计数据
+    async fn cleanup_old_statistics(&self, days_old: u32) -> DomainResult<u64>;
+}
+
+// RoomActivityStats 已在上面导出
+
+pub mod user_repository;
+pub mod chatroom_repository;
+pub mod message_repository;
+pub mod room_member_repository;
+pub mod session_repository;
+pub mod file_upload_repository;
+pub mod notification_repository;
+pub mod statistics_repository;
 
 /// 分页参数
 #[derive(Debug, Clone)]

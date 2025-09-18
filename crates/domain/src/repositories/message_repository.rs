@@ -1,8 +1,8 @@
 //! 消息Repository接口定义
 
-use crate::entities::message::{Message, MessageStatus, MessageType};
+use crate::entities::message::Message;
 use crate::errors::DomainResult;
-use crate::repositories::{Pagination, PaginatedResult, QueryFilter, SortConfig};
+use crate::repositories::{Pagination, PaginatedResult, SortConfig};
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use serde_json::Value as JsonValue;

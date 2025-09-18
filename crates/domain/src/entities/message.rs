@@ -54,6 +54,18 @@ impl Default for MessageStatus {
     }
 }
 
+impl std::fmt::Display for MessageStatus {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            MessageStatus::Sent => write!(f, "sent"),
+            MessageStatus::Delivered => write!(f, "delivered"),
+            MessageStatus::Read => write!(f, "read"),
+            MessageStatus::Deleted => write!(f, "deleted"),
+            MessageStatus::Recalled => write!(f, "recalled"),
+        }
+    }
+}
+
 /// 消息附件信息
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct MessageAttachment {

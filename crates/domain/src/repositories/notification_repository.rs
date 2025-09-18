@@ -1,31 +1,12 @@
 //! 通知系统Repository接口定义
 
+use crate::entities::Notification;
 use crate::errors::DomainResult;
-use crate::repositories::{Pagination, PaginatedResult, QueryFilter, SortConfig};
+use crate::repositories::{Pagination, PaginatedResult, SortConfig};
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use serde_json::Value as JsonValue;
 use uuid::Uuid;
-
-/// 通知实体
-#[derive(Debug, Clone)]
-pub struct Notification {
-    pub id: Uuid,
-    pub user_id: Uuid,
-    pub notification_type: String,
-    pub title: String,
-    pub message: String,
-    pub data: JsonValue,
-    pub related_user_id: Option<Uuid>,
-    pub related_room_id: Option<Uuid>,
-    pub related_message_id: Option<Uuid>,
-    pub priority: String, // low, normal, high, urgent
-    pub is_read: bool,
-    pub is_dismissed: bool,
-    pub read_at: Option<DateTime<Utc>>,
-    pub expires_at: Option<DateTime<Utc>>,
-    pub created_at: DateTime<Utc>,
-}
 
 /// 通知设置实体
 #[derive(Debug, Clone)]

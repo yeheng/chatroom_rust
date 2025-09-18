@@ -1,8 +1,8 @@
 //! 房间成员Repository接口定义
 
-use crate::entities::room_member::{RoomMember, RoomMemberRole};
+use crate::entities::room_member::{RoomMember, MemberRole};
 use crate::errors::DomainResult;
-use crate::repositories::{Pagination, PaginatedResult, QueryFilter, SortConfig};
+use crate::repositories::{Pagination, PaginatedResult, SortConfig};
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use serde_json::Value as JsonValue;
@@ -25,7 +25,7 @@ pub struct RoomMemberStatistics {
 pub struct RoomMemberSearchParams {
     pub room_id: Option<Uuid>,
     pub user_id: Option<Uuid>,
-    pub role: Option<RoomMemberRole>,
+    pub role: Option<MemberRole>,
     pub is_muted: Option<bool>,
     pub notifications_enabled: Option<bool>,
     pub joined_after: Option<DateTime<Utc>>,
@@ -58,7 +58,7 @@ pub trait RoomMemberRepository: Send + Sync {
     async fn update(&self, member: &RoomMember) -> DomainResult<RoomMember>;
 
     /// 更新成员角色
-    async fn update_role(&self, room_id: Uuid, user_id: Uuid, role: RoomMemberRole) -> DomainResult<()>;
+    async fn update_role(&self, room_id: Uuid, user_id: Uuid, role: MemberRole) -> DomainResult<()>;
 
     /// 设置成员静音状态
     async fn set_muted(&self, room_id: Uuid, user_id: Uuid, is_muted: bool) -> DomainResult<()>;
@@ -82,7 +82,7 @@ pub trait RoomMemberRepository: Send + Sync {
     async fn find_by_room_and_role(
         &self,
         room_id: Uuid,
-        role: RoomMemberRole,
+        role: MemberRole,
         pagination: Pagination,
     ) -> DomainResult<PaginatedResult<RoomMember>>;
 

@@ -87,7 +87,8 @@ impl User {
             status: UserStatus::Active,
             created_at: now,
             updated_at: now,
-            last_activity_at: Some(now),
+            password_hash: None,
+            last_active_at: Some(now),
         })
     }
 
@@ -119,7 +120,8 @@ impl User {
             status: UserStatus::Active,
             created_at: now,
             updated_at: now,
-            last_activity_at: Some(now),
+            password_hash: None,
+            last_active_at: Some(now),
         })
     }
 
@@ -133,7 +135,7 @@ impl User {
         status: UserStatus,
         created_at: DateTime<Utc>,
         updated_at: DateTime<Utc>,
-        last_activity_at: Option<DateTime<Utc>>,
+        last_active_at: Option<DateTime<Utc>>,
     ) -> DomainResult<Self> {
         let username = username.into();
         let email = email.into();
@@ -153,7 +155,8 @@ impl User {
             status,
             created_at,
             updated_at,
-            last_activity_at,
+            password_hash: None,
+            last_active_at,
         })
     }
 
@@ -191,7 +194,7 @@ impl User {
 
     /// 记录最后活跃时间
     pub fn mark_active(&mut self) {
-        self.last_activity_at = Some(Utc::now());
+        self.last_active_at = Some(Utc::now());
         if matches!(self.status, UserStatus::Inactive) {
             self.status = UserStatus::Active;
         }
@@ -314,7 +317,7 @@ mod tests {
         assert_eq!(user.email, "test@example.com");
         assert_eq!(user.status, UserStatus::Active);
         assert!(user.is_active());
-        assert!(user.last_activity_at.is_some());
+        assert!(user.last_active_at.is_some());
     }
 
     #[test]

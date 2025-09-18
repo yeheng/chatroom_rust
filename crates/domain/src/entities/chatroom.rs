@@ -25,6 +25,16 @@ impl Default for ChatRoomStatus {
     }
 }
 
+impl std::fmt::Display for ChatRoomStatus {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ChatRoomStatus::Active => write!(f, "active"),
+            ChatRoomStatus::Archived => write!(f, "archived"),
+            ChatRoomStatus::Deleted => write!(f, "deleted"),
+        }
+    }
+}
+
 /// 聊天室实体
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ChatRoom {

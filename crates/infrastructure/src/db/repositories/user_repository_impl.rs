@@ -4,12 +4,9 @@ use crate::db::DbPool;
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use domain::{
-    entities::user::{User, UserStatus},
-    errors::{DomainError, DomainResult},
-    repositories::{
-        user_repository::{UserRepository, UserSearchParams, UserStatistics},
-        Pagination, PaginatedResult, SortConfig,
-    },
+    entities::user::{User, UserStatus}, errors::{DomainError, DomainResult}, repositories::{
+        PaginatedResult, Pagination, SortConfig
+    }, UserRepository, UserSearchParams, UserStatistics
 };
 use sqlx::{query, query_as, FromRow, Row};
 use std::sync::Arc;
@@ -49,6 +46,7 @@ impl From<DbUser> for User {
             last_active_at: db_user.last_active_at,
             created_at: db_user.created_at,
             updated_at: db_user.updated_at,
+            display_name: todo!(),
         }
     }
 }

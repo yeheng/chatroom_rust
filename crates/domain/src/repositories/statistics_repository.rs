@@ -1,7 +1,7 @@
 //! 系统统计和监控Repository接口定义
 
 use crate::errors::DomainResult;
-use crate::repositories::{Pagination, PaginatedResult, QueryFilter, SortConfig};
+use crate::repositories::{Pagination, PaginatedResult};
 use async_trait::async_trait;
 use chrono::{DateTime, NaiveDate, Utc};
 use serde_json::Value as JsonValue;

@@ -2,7 +2,7 @@
 
 use crate::entities::user::{User, UserStatus};
 use crate::errors::DomainResult;
-use crate::repositories::{Pagination, PaginatedResult, QueryFilter, SortConfig};
+use crate::repositories::{Pagination, PaginatedResult, SortConfig};
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use uuid::Uuid;

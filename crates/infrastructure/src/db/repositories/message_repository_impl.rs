@@ -7,7 +7,7 @@ use domain::{
     entities::message::{Message, MessageStatus, MessageType},
     errors::{DomainError, DomainResult},
     repositories::{
-        MessageRepository, MessageSearchParams, MessageStatistics,
+        message_repository::{MessageRepository, MessageSearchParams, MessageStatistics, ReplyChain},
         Pagination, PaginatedResult, SortConfig,
     },
 };
@@ -111,9 +111,9 @@ impl PostgresMessageRepository {
             param_count += 1;
         }
 
-        if let Some(sender_id) = &params.sender_id {
+        if let Some(user_id) = &params.user_id {
             conditions.push(format!("sender_id = ${}", param_count));
-            values.push(sender_id.to_string());
+            values.push(user_id.to_string());
             param_count += 1;
         }
 
@@ -129,27 +129,25 @@ impl PostgresMessageRepository {
             param_count += 1;
         }
 
-        if let Some(status) = &params.status {
-            conditions.push(format!("status = ${}", param_count));
-            values.push(status.to_string());
-            param_count += 1;
+        if let Some(is_deleted) = params.is_deleted {
+            if is_deleted {
+                conditions.push(format!("status = 'deleted'"));
+            } else {
+                conditions.push(format!("status != 'deleted'"));
+            }
         }
 
-        if let Some(is_bot) = params.is_bot_message {
-            conditions.push(format!("is_bot_message = ${}", param_count));
-            values.push(is_bot.to_string());
-            param_count += 1;
-        }
+        // is_bot_message 字段在 MessageSearchParams 中不存在
 
-        if let Some(sent_after) = &params.sent_after {
+        if let Some(created_after) = &params.created_after {
             conditions.push(format!("created_at > ${}", param_count));
-            values.push(sent_after.to_string());
+            values.push(created_after.to_string());
             param_count += 1;
         }
 
-        if let Some(sent_before) = &params.sent_before {
+        if let Some(created_before) = &params.created_before {
             conditions.push(format!("created_at < ${}", param_count));
-            values.push(sent_before.to_string());
+            values.push(created_before.to_string());
         }
 
         let where_clause = if conditions.is_empty() {
@@ -184,7 +182,7 @@ impl MessageRepository for PostgresMessageRepository {
         .bind(&db_message.status)
         .fetch_one(&*self.pool)
         .await
-        .map_err(|e| DomainError::DatabaseError(e.to_string()))?;
+        .map_err(|e| DomainError::database_error(e.to_string()))?;
 
         Ok(result.into())
     }
@@ -200,7 +198,7 @@ impl MessageRepository for PostgresMessageRepository {
         .bind(id)
         .fetch_optional(&*self.pool)
         .await
-        .map_err(|e| DomainError::DatabaseError(e.to_string()))?;
+        .map_err(|e| DomainError::database_error(e.to_string()))?;
 
         Ok(result.map(|m| m.into()))
     }
@@ -226,7 +224,7 @@ impl MessageRepository for PostgresMessageRepository {
         .bind(room_id)
         .fetch_one(&*self.pool)
         .await
-        .map_err(|e| DomainError::DatabaseError(e.to_string()))?
+        .map_err(|e| DomainError::database_error(e.to_string()))?
         .get(0);
 
         // 获取消息
@@ -244,7 +242,7 @@ impl MessageRepository for PostgresMessageRepository {
         .bind(pagination.offset as i32)
         .fetch_all(&*self.pool)
         .await
-        .map_err(|e| DomainError::DatabaseError(e.to_string()))?;
+        .map_err(|e| DomainError::database_error(e.to_string()))?;
 
         let messages: Vec<Message> = messages.into_iter().map(|m| m.into()).collect();
 
@@ -272,7 +270,7 @@ impl MessageRepository for PostgresMessageRepository {
         .bind(sender_id)
         .fetch_one(&*self.pool)
         .await
-        .map_err(|e| DomainError::DatabaseError(e.to_string()))?
+        .map_err(|e| DomainError::database_error(e.to_string()))?
         .get(0);
 
         // 获取消息
@@ -290,7 +288,7 @@ impl MessageRepository for PostgresMessageRepository {
         .bind(pagination.offset as i32)
         .fetch_all(&*self.pool)
         .await
-        .map_err(|e| DomainError::DatabaseError(e.to_string()))?;
+        .map_err(|e| DomainError::database_error(e.to_string()))?;
 
         let messages: Vec<Message> = messages.into_iter().map(|m| m.into()).collect();
 
@@ -313,7 +311,7 @@ impl MessageRepository for PostgresMessageRepository {
         .bind(&db_message.status)
         .fetch_one(&*self.pool)
         .await
-        .map_err(|e| DomainError::DatabaseError(e.to_string()))?;
+        .map_err(|e| DomainError::database_error(e.to_string()))?;
 
         Ok(result.into())
     }
@@ -323,7 +321,7 @@ impl MessageRepository for PostgresMessageRepository {
             .bind(message_id)
             .execute(&*self.pool)
             .await
-            .map_err(|e| DomainError::DatabaseError(e.to_string()))?;
+            .map_err(|e| DomainError::database_error(e.to_string()))?;
 
         Ok(())
     }
@@ -354,7 +352,7 @@ impl MessageRepository for PostgresMessageRepository {
         let total_count: i64 = query(&count_query)
             .fetch_one(&*self.pool)
             .await
-            .map_err(|e| DomainError::DatabaseError(e.to_string()))?
+            .map_err(|e| DomainError::database_error(e.to_string()))?
             .get(0);
 
         // 获取数据
@@ -369,7 +367,7 @@ impl MessageRepository for PostgresMessageRepository {
         let messages: Vec<DbMessage> = query_as(&data_query)
             .fetch_all(&*self.pool)
             .await
-            .map_err(|e| DomainError::DatabaseError(e.to_string()))?;
+            .map_err(|e| DomainError::database_error(e.to_string()))?;
 
         let messages: Vec<Message> = messages.into_iter().map(|m| m.into()).collect();
 
@@ -392,16 +390,17 @@ impl MessageRepository for PostgresMessageRepository {
         )
             .fetch_one(&*self.pool)
             .await
-            .map_err(|e| DomainError::DatabaseError(e.to_string()))?;
+            .map_err(|e| DomainError::database_error(e.to_string()))?;
 
         Ok(MessageStatistics {
             total_messages: row.get::<i64, _>("total_messages") as u64,
             text_messages: row.get::<i64, _>("text_messages") as u64,
             image_messages: row.get::<i64, _>("image_messages") as u64,
             file_messages: row.get::<i64, _>("file_messages") as u64,
-            bot_messages: row.get::<i64, _>("bot_messages") as u64,
+            emoji_messages: row.get::<i64, _>("emoji_messages") as u64,
+            deleted_messages: row.get::<i64, _>("deleted_messages") as u64,
             messages_today: row.get::<i64, _>("messages_today") as u64,
-            unique_senders: row.get::<i64, _>("unique_senders") as u64,
+            avg_messages_per_room: row.get::<f64, _>("avg_messages_per_room"),
         })
     }
 
@@ -416,7 +415,7 @@ impl MessageRepository for PostgresMessageRepository {
             .bind(room_id)
             .fetch_one(&*self.pool)
             .await
-            .map_err(|e| DomainError::DatabaseError(e.to_string()))?
+            .map_err(|e| DomainError::database_error(e.to_string()))?
             .get(0);
 
         Ok(count as u64)
@@ -430,7 +429,7 @@ impl MessageRepository for PostgresMessageRepository {
         .bind(message_id)
         .fetch_one(&*self.pool)
         .await
-        .map_err(|e| DomainError::DatabaseError(e.to_string()))?
+        .map_err(|e| DomainError::database_error(e.to_string()))?
         .get(0);
 
         // 获取回复
@@ -448,7 +447,7 @@ impl MessageRepository for PostgresMessageRepository {
         .bind(pagination.offset as i32)
         .fetch_all(&*self.pool)
         .await
-        .map_err(|e| DomainError::DatabaseError(e.to_string()))?;
+        .map_err(|e| DomainError::database_error(e.to_string()))?;
 
         let messages: Vec<Message> = messages.into_iter().map(|m| m.into()).collect();
 
@@ -463,7 +462,7 @@ impl MessageRepository for PostgresMessageRepository {
             .bind(new_content)
             .execute(&*self.pool)
             .await
-            .map_err(|e| DomainError::DatabaseError(e.to_string()))?;
+            .map_err(|e| DomainError::database_error(e.to_string()))?;
         Ok(())
     }
 
@@ -472,7 +471,7 @@ impl MessageRepository for PostgresMessageRepository {
             .bind(message_id)
             .execute(&*self.pool)
             .await
-            .map_err(|e| DomainError::DatabaseError(e.to_string()))?;
+            .map_err(|e| DomainError::database_error(e.to_string()))?;
         Ok(())
     }
 
@@ -486,7 +485,7 @@ impl MessageRepository for PostgresMessageRepository {
         Ok(PaginatedResult::new(Vec::new(), 0, pagination))
     }
 
-    async fn get_reply_chain(&self, message_id: Uuid) -> DomainResult<Vec<Message>> {
+    async fn get_reply_chain(&self, message_id: Uuid) -> DomainResult<Vec<ReplyChain>> {
         // 简化实现，返回空结果
         Ok(Vec::new())
     }
@@ -505,7 +504,7 @@ impl MessageRepository for PostgresMessageRepository {
         .bind(limit as i32)
         .fetch_all(&*self.pool)
         .await
-        .map_err(|e| DomainError::DatabaseError(e.to_string()))?;
+        .map_err(|e| DomainError::database_error(e.to_string()))?;
 
         Ok(messages.into_iter().map(|m| m.into()).collect())
     }
@@ -513,39 +512,65 @@ impl MessageRepository for PostgresMessageRepository {
     async fn find_by_room_after(
         &self,
         room_id: Uuid,
-        after_timestamp: DateTime<Utc>,
-        pagination: Pagination,
-    ) -> DomainResult<PaginatedResult<Message>> {
-        // 简化实现，返回空结果
-        Ok(PaginatedResult::new(Vec::new(), 0, pagination))
+        after: DateTime<Utc>,
+        limit: u32,
+    ) -> DomainResult<Vec<Message>> {
+        let messages: Vec<DbMessage> = query_as(
+            r#"
+            SELECT id, room_id, sender_id, message_type, content, reply_to_id, is_bot_message, status, created_at, updated_at
+            FROM messages
+            WHERE room_id = $1 AND created_at > $2 AND status != 'deleted'
+            ORDER BY created_at ASC
+            LIMIT $3
+            "#,
+        )
+        .bind(room_id)
+        .bind(after)
+        .bind(limit as i32)
+        .fetch_all(&*self.pool)
+        .await
+        .map_err(|e| DomainError::database_error(e.to_string()))?;
+
+        Ok(messages.into_iter().map(|m| m.into()).collect())
     }
 
     async fn find_by_room_before(
         &self,
         room_id: Uuid,
-        before_timestamp: DateTime<Utc>,
-        pagination: Pagination,
-    ) -> DomainResult<PaginatedResult<Message>> {
-        // 简化实现，返回空结果
-        Ok(PaginatedResult::new(Vec::new(), 0, pagination))
+        before: DateTime<Utc>,
+        limit: u32,
+    ) -> DomainResult<Vec<Message>> {
+        let messages: Vec<DbMessage> = query_as(
+            r#"
+            SELECT id, room_id, sender_id, message_type, content, reply_to_id, is_bot_message, status, created_at, updated_at
+            FROM messages
+            WHERE room_id = $1 AND created_at < $2 AND status != 'deleted'
+            ORDER BY created_at DESC
+            LIMIT $3
+            "#,
+        )
+        .bind(room_id)
+        .bind(before)
+        .bind(limit as i32)
+        .fetch_all(&*self.pool)
+        .await
+        .map_err(|e| DomainError::database_error(e.to_string()))?;
+
+        Ok(messages.into_iter().map(|m| m.into()).collect())
     }
 
-    async fn count_by_user(&self, user_id: Uuid, room_id: Option<Uuid>) -> DomainResult<u64> {
-        let count_query = if let Some(room_id) = room_id {
-            "SELECT COUNT(*) FROM messages WHERE sender_id = $1 AND room_id = $2 AND status != 'deleted'"
+    async fn count_by_user(&self, user_id: Uuid, include_deleted: bool) -> DomainResult<u64> {
+        let count_query = if include_deleted {
+            "SELECT COUNT(*) FROM messages WHERE sender_id = $1"
         } else {
             "SELECT COUNT(*) FROM messages WHERE sender_id = $1 AND status != 'deleted'"
         };
 
-        let mut query_builder = query(count_query).bind(user_id);
-        if let Some(room_id) = room_id {
-            query_builder = query_builder.bind(room_id);
-        }
-
-        let count: i64 = query_builder
+        let count: i64 = query(count_query)
+            .bind(user_id)
             .fetch_one(&*self.pool)
             .await
-            .map_err(|e| DomainError::DatabaseError(e.to_string()))?
+            .map_err(|e| DomainError::database_error(e.to_string()))?
             .get(0);
 
         Ok(count as u64)
@@ -578,22 +603,22 @@ impl MessageRepository for PostgresMessageRepository {
         .bind(older_than)
         .execute(&*self.pool)
         .await
-        .map_err(|e| DomainError::DatabaseError(e.to_string()))?;
+        .map_err(|e| DomainError::database_error(e.to_string()))?;
 
         Ok(result.rows_affected())
     }
 
-    async fn find_mentions(&self, user_id: Uuid, pagination: Pagination) -> DomainResult<PaginatedResult<Message>> {
+    async fn find_mentions(&self, message_id: Uuid) -> DomainResult<Vec<Uuid>> {
         // 简化实现，返回空结果
-        Ok(PaginatedResult::new(Vec::new(), 0, pagination))
+        Ok(Vec::new())
     }
 
-    async fn update_metadata(&self, message_id: Uuid, metadata: JsonValue) -> DomainResult<()> {
+    async fn update_metadata(&self, message_id: Uuid, metadata: &JsonValue) -> DomainResult<()> {
         // 简化实现，暂时不做任何操作
         Ok(())
     }
 
-    async fn get_room_message_stats_by_day(&self, room_id: Uuid, days: u32) -> DomainResult<Vec<(DateTime<Utc>, u64)>> {
+    async fn get_room_message_stats_by_day(&self, room_id: Uuid, start_date: DateTime<Utc>, end_date: DateTime<Utc>) -> DomainResult<Vec<(DateTime<Utc>, u64)>> {
         // 简化实现，返回空结果
         Ok(Vec::new())
     }
@@ -614,21 +639,9 @@ impl MessageRepository for PostgresMessageRepository {
         .bind(ids)
         .fetch_all(&*self.pool)
         .await
-        .map_err(|e| DomainError::DatabaseError(e.to_string()))?;
+        .map_err(|e| DomainError::database_error(e.to_string()))?;
 
         Ok(messages.into_iter().map(|m| m.into()).collect())
     }
 }
 
-// 为MessageStatus实现Display trait
-impl std::fmt::Display for MessageStatus {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            MessageStatus::Sent => write!(f, "sent"),
-            MessageStatus::Delivered => write!(f, "delivered"),
-            MessageStatus::Read => write!(f, "read"),
-            MessageStatus::Deleted => write!(f, "deleted"),
-            MessageStatus::Recalled => write!(f, "recalled"),
-        }
-    }
-}

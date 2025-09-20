@@ -706,7 +706,7 @@ mod user_service_tests {
             .create_user(create_test_user_request())
             .await
             .unwrap();
-        let original_activity = user.last_activity_at;
+        let original_activity = user.last_active_at;
 
         // 等待一小段时间确保时间戳不同
         tokio::time::sleep(Duration::from_millis(10)).await;
@@ -717,7 +717,7 @@ mod user_service_tests {
 
         // 验证最后活跃时间已更新
         let updated_user = service.get_user_by_id(user.id).await.unwrap();
-        assert!(updated_user.last_activity_at > original_activity);
+        assert!(updated_user.last_active_at > original_activity);
     }
 
     #[tokio::test]

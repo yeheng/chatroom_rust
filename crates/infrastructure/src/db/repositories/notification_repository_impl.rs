@@ -8,9 +8,10 @@ use domain::{
     errors::{DomainError, DomainResult},
     repositories::{NotificationRepository, NotificationSearchParams, NotificationStatistics, Pagination, PaginatedResult, SortConfig},
 };
-use sqlx::{query, query_as, FromRow};
+use sqlx::{query, query_as, FromRow, Row};
 use std::sync::Arc;
 use uuid::Uuid;
+
 
 /// 数据库通知模型
 #[derive(Debug, Clone, FromRow)]
@@ -123,7 +124,7 @@ impl NotificationRepository for PostgresNotificationRepository {
         .bind(&db_notification.group_key)
         .fetch_one(&*self.pool)
         .await
-        .map_err(|e| DomainError::DatabaseError(e.to_string()))?;
+        .map_err(|e| DomainError::database_error(e.to_string()))?;
 
         Ok(result.into())
     }
@@ -141,7 +142,7 @@ impl NotificationRepository for PostgresNotificationRepository {
         .bind(id)
         .fetch_optional(&*self.pool)
         .await
-        .map_err(|e| DomainError::DatabaseError(e.to_string()))?;
+        .map_err(|e| DomainError::database_error(e.to_string()))?;
 
         Ok(result.map(|r| r.into()))
     }
@@ -159,7 +160,7 @@ impl NotificationRepository for PostgresNotificationRepository {
             .bind(user_id)
             .fetch_one(&*self.pool)
             .await
-            .map_err(|e| DomainError::DatabaseError(e.to_string()))?
+            .map_err(|e| DomainError::database_error(e.to_string()))?
             .get(0);
 
         // 获取通知
@@ -179,7 +180,7 @@ impl NotificationRepository for PostgresNotificationRepository {
             .bind(user_id)
             .fetch_all(&*self.pool)
             .await
-            .map_err(|e| DomainError::DatabaseError(e.to_string()))?;
+            .map_err(|e| DomainError::database_error(e.to_string()))?;
 
         let notifications: Vec<Notification> = notifications.into_iter().map(|n| n.into()).collect();
         Ok(PaginatedResult::new(notifications, total_count as u64, pagination))
@@ -190,7 +191,7 @@ impl NotificationRepository for PostgresNotificationRepository {
             .bind(notification_id)
             .execute(&*self.pool)
             .await
-            .map_err(|e| DomainError::DatabaseError(e.to_string()))?;
+            .map_err(|e| DomainError::database_error(e.to_string()))?;
 
         Ok(())
     }
@@ -217,7 +218,7 @@ impl NotificationRepository for PostgresNotificationRepository {
             .bind(user_id)
             .execute(&*self.pool)
             .await
-            .map_err(|e| DomainError::DatabaseError(e.to_string()))?;
+            .map_err(|e| DomainError::database_error(e.to_string()))?;
 
         Ok(result.rows_affected())
     }
@@ -228,7 +229,7 @@ impl NotificationRepository for PostgresNotificationRepository {
             .bind(notification_type)
             .execute(&*self.pool)
             .await
-            .map_err(|e| DomainError::DatabaseError(e.to_string()))?;
+            .map_err(|e| DomainError::database_error(e.to_string()))?;
 
         Ok(result.rows_affected())
     }
@@ -238,7 +239,7 @@ impl NotificationRepository for PostgresNotificationRepository {
             .bind(notification_id)
             .execute(&*self.pool)
             .await
-            .map_err(|e| DomainError::DatabaseError(e.to_string()))?;
+            .map_err(|e| DomainError::database_error(e.to_string()))?;
 
         Ok(())
     }
@@ -248,7 +249,7 @@ impl NotificationRepository for PostgresNotificationRepository {
             .bind(notification_id)
             .execute(&*self.pool)
             .await
-            .map_err(|e| DomainError::DatabaseError(e.to_string()))?;
+            .map_err(|e| DomainError::database_error(e.to_string()))?;
 
         Ok(result.rows_affected() > 0)
     }
@@ -258,7 +259,7 @@ impl NotificationRepository for PostgresNotificationRepository {
             .bind(user_id)
             .fetch_one(&*self.pool)
             .await
-            .map_err(|e| DomainError::DatabaseError(e.to_string()))?
+            .map_err(|e| DomainError::database_error(e.to_string()))?
             .get(0);
 
         Ok(count as u64)
@@ -270,7 +271,7 @@ impl NotificationRepository for PostgresNotificationRepository {
             .bind(notification_type)
             .fetch_one(&*self.pool)
             .await
-            .map_err(|e| DomainError::DatabaseError(e.to_string()))?
+            .map_err(|e| DomainError::database_error(e.to_string()))?
             .get(0);
 
         Ok(count as u64)
@@ -302,14 +303,16 @@ impl NotificationRepository for PostgresNotificationRepository {
         .bind(user_id)
         .fetch_one(&*self.pool)
         .await
-        .map_err(|e| DomainError::DatabaseError(e.to_string()))?;
+        .map_err(|e| DomainError::database_error(e.to_string()))?;
 
         Ok(NotificationStatistics {
             total_notifications: row.get::<i64, _>("total_notifications") as u64,
             unread_notifications: row.get::<i64, _>("unread_notifications") as u64,
-            dismissed_notifications: row.get::<i64, _>("dismissed_notifications") as u64,
-            high_priority_notifications: row.get::<i64, _>("high_priority_notifications") as u64,
+            notifications_by_type: std::collections::HashMap::new(), // 简化实现，返回空 HashMap
+            notifications_by_priority: std::collections::HashMap::new(), // 简化实现，返回空 HashMap
             notifications_today: row.get::<i64, _>("notifications_today") as u64,
+            read_rate: 0.0, // 简化实现
+            avg_read_time_minutes: 0.0, // 简化实现
         })
     }
 
@@ -317,7 +320,7 @@ impl NotificationRepository for PostgresNotificationRepository {
         let result = query("DELETE FROM notifications WHERE expires_at IS NOT NULL AND expires_at < NOW()")
             .execute(&*self.pool)
             .await
-            .map_err(|e| DomainError::DatabaseError(e.to_string()))?;
+            .map_err(|e| DomainError::database_error(e.to_string()))?;
 
         Ok(result.rows_affected())
     }
@@ -352,7 +355,7 @@ impl NotificationRepository for PostgresNotificationRepository {
         .bind(limit as i32)
         .fetch_all(&*self.pool)
         .await
-        .map_err(|e| DomainError::DatabaseError(e.to_string()))?;
+        .map_err(|e| DomainError::database_error(e.to_string()))?;
 
         Ok(notifications.into_iter().map(|n| n.into()).collect())
     }

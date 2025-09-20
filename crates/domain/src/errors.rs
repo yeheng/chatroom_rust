@@ -52,9 +52,19 @@ pub enum DomainError {
     /// 业务规则违反错误
     #[error("业务规则违反: {rule}")]
     BusinessRuleViolation { rule: String },
+
+    #[error("数据库异常: {message}")]
+    DatabaseError { message: String },
 }
 
 impl DomainError {
+
+    /// 创建用户错误
+    pub fn database_error(message: impl Into<String>) -> Self {
+        Self::DatabaseError {
+            message: message.into(),
+        }
+    }
     /// 创建用户错误
     pub fn user_error(message: impl Into<String>) -> Self {
         Self::UserError {

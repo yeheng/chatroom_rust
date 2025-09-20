@@ -14,6 +14,16 @@ use domain::{
 use sqlx::{query, query_as, FromRow, Row};
 use std::sync::Arc;
 use uuid::Uuid;
+
+/// 辅助函数：将 MemberRole 转换为字符串
+fn member_role_to_string(role: MemberRole) -> String {
+    match role {
+        MemberRole::Owner => "owner".to_string(),
+        MemberRole::Admin => "admin".to_string(),
+        MemberRole::Member => "member".to_string(),
+        MemberRole::Bot => "bot".to_string(),
+    }
+}
 use serde_json::Value as JsonValue;
 
 /// 数据库房间成员模型
@@ -53,7 +63,12 @@ impl From<&RoomMember> for DbRoomMember {
         DbRoomMember {
             room_id: member.room_id,
             user_id: member.user_id,
-            role: member.role.to_string(),
+            role: match member.role {
+                domain::entities::room_member::MemberRole::Owner => "owner".to_string(),
+                domain::entities::room_member::MemberRole::Admin => "admin".to_string(),
+                domain::entities::room_member::MemberRole::Member => "member".to_string(),
+                domain::entities::room_member::MemberRole::Bot => "bot".to_string(),
+            },
             is_muted: Some(false), // 默认未静音
             notifications_enabled: Some(true), // 默认启用通知
             last_read_message_id: None,
@@ -93,7 +108,7 @@ impl PostgresRoomMemberRepository {
 
         if let Some(role) = &params.role {
             conditions.push(format!("role = ${}", param_count));
-            values.push(role.to_string());
+            values.push(member_role_to_string(role.clone()));
             param_count += 1;
         }
 
@@ -150,7 +165,7 @@ impl RoomMemberRepository for PostgresRoomMemberRepository {
         .bind(db_member.joined_at)
         .fetch_one(&*self.pool)
         .await
-        .map_err(|e| DomainError::DatabaseError(e.to_string()))?;
+        .map_err(|e| DomainError::database_error(e.to_string()))?;
 
         Ok(result.into())
     }
@@ -167,7 +182,7 @@ impl RoomMemberRepository for PostgresRoomMemberRepository {
         .bind(user_id)
         .fetch_optional(&*self.pool)
         .await
-        .map_err(|e| DomainError::DatabaseError(e.to_string()))?;
+        .map_err(|e| DomainError::database_error(e.to_string()))?;
 
         Ok(result.map(|m| m.into()))
     }
@@ -188,7 +203,7 @@ impl RoomMemberRepository for PostgresRoomMemberRepository {
         .bind(&db_member.role)
         .fetch_one(&*self.pool)
         .await
-        .map_err(|e| DomainError::DatabaseError(e.to_string()))?;
+        .map_err(|e| DomainError::database_error(e.to_string()))?;
 
         Ok(result.into())
     }
@@ -197,10 +212,10 @@ impl RoomMemberRepository for PostgresRoomMemberRepository {
         query("UPDATE room_members SET role = $3 WHERE room_id = $1 AND user_id = $2")
             .bind(room_id)
             .bind(user_id)
-            .bind(role.to_string())
+            .bind(member_role_to_string(role))
             .execute(&*self.pool)
             .await
-            .map_err(|e| DomainError::DatabaseError(e.to_string()))?;
+            .map_err(|e| DomainError::database_error(e.to_string()))?;
 
         Ok(())
     }
@@ -212,7 +227,7 @@ impl RoomMemberRepository for PostgresRoomMemberRepository {
             .bind(is_muted)
             .execute(&*self.pool)
             .await
-            .map_err(|e| DomainError::DatabaseError(e.to_string()))?;
+            .map_err(|e| DomainError::database_error(e.to_string()))?;
 
         Ok(())
     }
@@ -224,7 +239,7 @@ impl RoomMemberRepository for PostgresRoomMemberRepository {
             .bind(enabled)
             .execute(&*self.pool)
             .await
-            .map_err(|e| DomainError::DatabaseError(e.to_string()))?;
+            .map_err(|e| DomainError::database_error(e.to_string()))?;
 
         Ok(())
     }
@@ -236,7 +251,7 @@ impl RoomMemberRepository for PostgresRoomMemberRepository {
             .bind(message_id)
             .execute(&*self.pool)
             .await
-            .map_err(|e| DomainError::DatabaseError(e.to_string()))?;
+            .map_err(|e| DomainError::database_error(e.to_string()))?;
 
         Ok(())
     }
@@ -247,7 +262,7 @@ impl RoomMemberRepository for PostgresRoomMemberRepository {
             .bind(user_id)
             .execute(&*self.pool)
             .await
-            .map_err(|e| DomainError::DatabaseError(e.to_string()))?;
+            .map_err(|e| DomainError::database_error(e.to_string()))?;
 
         Ok(result.rows_affected() > 0)
     }
@@ -258,7 +273,7 @@ impl RoomMemberRepository for PostgresRoomMemberRepository {
             .bind(room_id)
             .fetch_one(&*self.pool)
             .await
-            .map_err(|e| DomainError::DatabaseError(e.to_string()))?
+            .map_err(|e| DomainError::database_error(e.to_string()))?
             .get(0);
 
         // 获取成员
@@ -276,7 +291,7 @@ impl RoomMemberRepository for PostgresRoomMemberRepository {
         .bind(pagination.offset as i32)
         .fetch_all(&*self.pool)
         .await
-        .map_err(|e| DomainError::DatabaseError(e.to_string()))?;
+        .map_err(|e| DomainError::database_error(e.to_string()))?;
 
         let members: Vec<RoomMember> = members.into_iter().map(|m| m.into()).collect();
 
@@ -289,7 +304,7 @@ impl RoomMemberRepository for PostgresRoomMemberRepository {
             .bind(user_id)
             .fetch_one(&*self.pool)
             .await
-            .map_err(|e| DomainError::DatabaseError(e.to_string()))?
+            .map_err(|e| DomainError::database_error(e.to_string()))?
             .get(0);
 
         // 获取成员
@@ -307,7 +322,7 @@ impl RoomMemberRepository for PostgresRoomMemberRepository {
         .bind(pagination.offset as i32)
         .fetch_all(&*self.pool)
         .await
-        .map_err(|e| DomainError::DatabaseError(e.to_string()))?;
+        .map_err(|e| DomainError::database_error(e.to_string()))?;
 
         let members: Vec<RoomMember> = members.into_iter().map(|m| m.into()).collect();
 
@@ -323,10 +338,10 @@ impl RoomMemberRepository for PostgresRoomMemberRepository {
         // 获取总数
         let total_count: i64 = query("SELECT COUNT(*) FROM room_members WHERE room_id = $1 AND role = $2")
             .bind(room_id)
-            .bind(role.to_string())
+            .bind(member_role_to_string(role.clone()))
             .fetch_one(&*self.pool)
             .await
-            .map_err(|e| DomainError::DatabaseError(e.to_string()))?
+            .map_err(|e| DomainError::database_error(e.to_string()))?
             .get(0);
 
         // 获取成员
@@ -340,12 +355,12 @@ impl RoomMemberRepository for PostgresRoomMemberRepository {
             "#,
         )
         .bind(room_id)
-        .bind(role.to_string())
+        .bind(member_role_to_string(role))
         .bind(pagination.limit as i32)
         .bind(pagination.offset as i32)
         .fetch_all(&*self.pool)
         .await
-        .map_err(|e| DomainError::DatabaseError(e.to_string()))?;
+        .map_err(|e| DomainError::database_error(e.to_string()))?;
 
         let members: Vec<RoomMember> = members.into_iter().map(|m| m.into()).collect();
 
@@ -358,7 +373,7 @@ impl RoomMemberRepository for PostgresRoomMemberRepository {
             .bind(user_id)
             .fetch_one(&*self.pool)
             .await
-            .map_err(|e| DomainError::DatabaseError(e.to_string()))?
+            .map_err(|e| DomainError::database_error(e.to_string()))?
             .get(0);
 
         Ok(count > 0)
@@ -417,7 +432,7 @@ impl RoomMemberRepository for PostgresRoomMemberRepository {
             .bind(room_id)
             .fetch_one(&*self.pool)
             .await
-            .map_err(|e| DomainError::DatabaseError(e.to_string()))?
+            .map_err(|e| DomainError::database_error(e.to_string()))?
             .get(0);
 
         Ok(count as u64)
@@ -436,7 +451,7 @@ impl RoomMemberRepository for PostgresRoomMemberRepository {
         .bind(room_id)
         .fetch_one(&*self.pool)
         .await
-        .map_err(|e| DomainError::DatabaseError(e.to_string()))?
+        .map_err(|e| DomainError::database_error(e.to_string()))?
         .get(0);
 
         Ok(count as u64)
@@ -460,7 +475,7 @@ impl RoomMemberRepository for PostgresRoomMemberRepository {
         .bind(room_id)
         .fetch_all(&*self.pool)
         .await
-        .map_err(|e| DomainError::DatabaseError(e.to_string()))?;
+        .map_err(|e| DomainError::database_error(e.to_string()))?;
 
         Ok(members.into_iter().map(|m| m.into()).collect())
     }
@@ -521,7 +536,7 @@ impl RoomMemberRepository for PostgresRoomMemberRepository {
         let total_count: i64 = query(&count_query)
             .fetch_one(&*self.pool)
             .await
-            .map_err(|e| DomainError::DatabaseError(e.to_string()))?
+            .map_err(|e| DomainError::database_error(e.to_string()))?
             .get(0);
 
         // 获取数据
@@ -536,7 +551,7 @@ impl RoomMemberRepository for PostgresRoomMemberRepository {
         let members: Vec<DbRoomMember> = query_as(&data_query)
             .fetch_all(&*self.pool)
             .await
-            .map_err(|e| DomainError::DatabaseError(e.to_string()))?;
+            .map_err(|e| DomainError::database_error(e.to_string()))?;
 
         let members: Vec<RoomMember> = members.into_iter().map(|m| m.into()).collect();
 
@@ -560,7 +575,7 @@ impl RoomMemberRepository for PostgresRoomMemberRepository {
         .bind(room_id)
         .fetch_one(&*self.pool)
         .await
-        .map_err(|e| DomainError::DatabaseError(e.to_string()))?;
+        .map_err(|e| DomainError::database_error(e.to_string()))?;
 
         // 获取在线成员数
         let online_members = self.count_online_by_room(room_id).await?;
@@ -594,7 +609,7 @@ impl RoomMemberRepository for PostgresRoomMemberRepository {
         .bind(user_id)
         .fetch_one(&*self.pool)
         .await
-        .map_err(|e| DomainError::DatabaseError(e.to_string()))?;
+        .map_err(|e| DomainError::database_error(e.to_string()))?;
 
         Ok(row.get::<i64, _>("unread_count") as u64)
     }
@@ -622,7 +637,7 @@ impl RoomMemberRepository for PostgresRoomMemberRepository {
         .bind(limit as i32)
         .fetch_all(&*self.pool)
         .await
-        .map_err(|e| DomainError::DatabaseError(e.to_string()))?;
+        .map_err(|e| DomainError::database_error(e.to_string()))?;
 
         Ok(members.into_iter().map(|m| m.into()).collect())
     }
@@ -634,7 +649,7 @@ impl RoomMemberRepository for PostgresRoomMemberRepository {
             .bind(permissions.to_string())
             .execute(&*self.pool)
             .await
-            .map_err(|e| DomainError::DatabaseError(e.to_string()))?;
+            .map_err(|e| DomainError::database_error(e.to_string()))?;
 
         Ok(())
     }
@@ -645,7 +660,7 @@ impl RoomMemberRepository for PostgresRoomMemberRepository {
             .bind(room_id)
             .fetch_one(&*self.pool)
             .await
-            .map_err(|e| DomainError::DatabaseError(e.to_string()))?
+            .map_err(|e| DomainError::database_error(e.to_string()))?
             .get(0);
 
         // 获取静音成员
@@ -663,7 +678,7 @@ impl RoomMemberRepository for PostgresRoomMemberRepository {
         .bind(pagination.offset as i32)
         .fetch_all(&*self.pool)
         .await
-        .map_err(|e| DomainError::DatabaseError(e.to_string()))?;
+        .map_err(|e| DomainError::database_error(e.to_string()))?;
 
         let members: Vec<RoomMember> = members.into_iter().map(|m| m.into()).collect();
 
@@ -686,20 +701,9 @@ impl RoomMemberRepository for PostgresRoomMemberRepository {
         .bind(inactive_days as i32)
         .execute(&*self.pool)
         .await
-        .map_err(|e| DomainError::DatabaseError(e.to_string()))?;
+        .map_err(|e| DomainError::database_error(e.to_string()))?;
 
         Ok(result.rows_affected())
     }
 }
 
-// 为MemberRole实现Display trait
-impl std::fmt::Display for MemberRole {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            MemberRole::Owner => write!(f, "owner"),
-            MemberRole::Admin => write!(f, "admin"),
-            MemberRole::Member => write!(f, "member"),
-            MemberRole::Bot => write!(f, "bot"),
-        }
-    }
-}

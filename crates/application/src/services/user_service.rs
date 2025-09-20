@@ -1014,7 +1014,7 @@ impl UserService for UserServiceImpl {
 
     async fn update_last_activity(&self, user_id: Uuid) -> ApplicationResult<()> {
         let mut user = self.get_user_by_id(user_id).await?;
-        user.last_activity_at = Some(chrono::Utc::now());
+        user.last_active_at = Some(chrono::Utc::now());
         user.updated_at = chrono::Utc::now();
 
         self.user_store.update_user(user_id, user).await?;

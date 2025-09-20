@@ -8,7 +8,7 @@ use domain::{
     errors::{DomainError, DomainResult},
     repositories::{FileUploadRepository, FileSearchParams, FileStatistics, Pagination, PaginatedResult, SortConfig},
 };
-use sqlx::{query, query_as, FromRow};
+use sqlx::{query, query_as, FromRow, Row};
 use std::sync::Arc;
 use uuid::Uuid;
 
@@ -128,7 +128,7 @@ impl FileUploadRepository for PostgresFileUploadRepository {
         .bind(db_file.expires_at)
         .fetch_one(&*self.pool)
         .await
-        .map_err(|e| DomainError::DatabaseError(e.to_string()))?;
+        .map_err(|e| DomainError::database_error(e.to_string()))?;
 
         Ok(result.into())
     }
@@ -146,7 +146,7 @@ impl FileUploadRepository for PostgresFileUploadRepository {
         .bind(id)
         .fetch_optional(&*self.pool)
         .await
-        .map_err(|e| DomainError::DatabaseError(e.to_string()))?;
+        .map_err(|e| DomainError::database_error(e.to_string()))?;
 
         Ok(result.map(|r| r.into()))
     }
@@ -165,7 +165,7 @@ impl FileUploadRepository for PostgresFileUploadRepository {
         .bind(checksum)
         .fetch_optional(&*self.pool)
         .await
-        .map_err(|e| DomainError::DatabaseError(e.to_string()))?;
+        .map_err(|e| DomainError::database_error(e.to_string()))?;
 
         Ok(result.map(|r| r.into()))
     }
@@ -201,7 +201,7 @@ impl FileUploadRepository for PostgresFileUploadRepository {
         .bind(db_file.expires_at)
         .fetch_one(&*self.pool)
         .await
-        .map_err(|e| DomainError::DatabaseError(e.to_string()))?;
+        .map_err(|e| DomainError::database_error(e.to_string()))?;
 
         Ok(result.into())
     }
@@ -211,7 +211,7 @@ impl FileUploadRepository for PostgresFileUploadRepository {
             .bind(file_id)
             .execute(&*self.pool)
             .await
-            .map_err(|e| DomainError::DatabaseError(e.to_string()))?;
+            .map_err(|e| DomainError::database_error(e.to_string()))?;
 
         Ok(())
     }
@@ -221,7 +221,7 @@ impl FileUploadRepository for PostgresFileUploadRepository {
             .bind(file_id)
             .execute(&*self.pool)
             .await
-            .map_err(|e| DomainError::DatabaseError(e.to_string()))?;
+            .map_err(|e| DomainError::database_error(e.to_string()))?;
 
         Ok(())
     }
@@ -231,7 +231,7 @@ impl FileUploadRepository for PostgresFileUploadRepository {
             .bind(file_id)
             .execute(&*self.pool)
             .await
-            .map_err(|e| DomainError::DatabaseError(e.to_string()))?;
+            .map_err(|e| DomainError::database_error(e.to_string()))?;
 
         Ok(result.rows_affected() > 0)
     }
@@ -242,7 +242,7 @@ impl FileUploadRepository for PostgresFileUploadRepository {
             .bind(user_id)
             .fetch_one(&*self.pool)
             .await
-            .map_err(|e| DomainError::DatabaseError(e.to_string()))?
+            .map_err(|e| DomainError::database_error(e.to_string()))?
             .get(0);
 
         // 获取文件
@@ -262,7 +262,7 @@ impl FileUploadRepository for PostgresFileUploadRepository {
         .bind(pagination.offset as i32)
         .fetch_all(&*self.pool)
         .await
-        .map_err(|e| DomainError::DatabaseError(e.to_string()))?;
+        .map_err(|e| DomainError::database_error(e.to_string()))?;
 
         let files: Vec<FileUpload> = files.into_iter().map(|f| f.into()).collect();
         Ok(PaginatedResult::new(files, total_count as u64, pagination))
@@ -274,7 +274,7 @@ impl FileUploadRepository for PostgresFileUploadRepository {
             .bind(room_id)
             .fetch_one(&*self.pool)
             .await
-            .map_err(|e| DomainError::DatabaseError(e.to_string()))?
+            .map_err(|e| DomainError::database_error(e.to_string()))?
             .get(0);
 
         // 获取文件
@@ -294,7 +294,7 @@ impl FileUploadRepository for PostgresFileUploadRepository {
         .bind(pagination.offset as i32)
         .fetch_all(&*self.pool)
         .await
-        .map_err(|e| DomainError::DatabaseError(e.to_string()))?;
+        .map_err(|e| DomainError::database_error(e.to_string()))?;
 
         let files: Vec<FileUpload> = files.into_iter().map(|f| f.into()).collect();
         Ok(PaginatedResult::new(files, total_count as u64, pagination))
@@ -305,7 +305,7 @@ impl FileUploadRepository for PostgresFileUploadRepository {
         let total_count: i64 = query("SELECT COUNT(*) FROM file_uploads WHERE is_public = true")
             .fetch_one(&*self.pool)
             .await
-            .map_err(|e| DomainError::DatabaseError(e.to_string()))?
+            .map_err(|e| DomainError::database_error(e.to_string()))?
             .get(0);
 
         // 获取文件
@@ -324,7 +324,7 @@ impl FileUploadRepository for PostgresFileUploadRepository {
         .bind(pagination.offset as i32)
         .fetch_all(&*self.pool)
         .await
-        .map_err(|e| DomainError::DatabaseError(e.to_string()))?;
+        .map_err(|e| DomainError::database_error(e.to_string()))?;
 
         let files: Vec<FileUpload> = files.into_iter().map(|f| f.into()).collect();
         Ok(PaginatedResult::new(files, total_count as u64, pagination))
@@ -396,7 +396,7 @@ impl FileUploadRepository for PostgresFileUploadRepository {
         .bind(older_than)
         .fetch_all(&*self.pool)
         .await
-        .map_err(|e| DomainError::DatabaseError(e.to_string()))?;
+        .map_err(|e| DomainError::database_error(e.to_string()))?;
 
         Ok(files.into_iter().map(|f| f.into()).collect())
     }
@@ -413,7 +413,7 @@ impl FileUploadRepository for PostgresFileUploadRepository {
         )
         .fetch_all(&*self.pool)
         .await
-        .map_err(|e| DomainError::DatabaseError(e.to_string()))?;
+        .map_err(|e| DomainError::database_error(e.to_string()))?;
 
         Ok(files.into_iter().map(|f| f.into()).collect())
     }
@@ -428,7 +428,7 @@ impl FileUploadRepository for PostgresFileUploadRepository {
         .bind(older_than_hours as i32)
         .execute(&*self.pool)
         .await
-        .map_err(|e| DomainError::DatabaseError(e.to_string()))?;
+        .map_err(|e| DomainError::database_error(e.to_string()))?;
 
         Ok(result.rows_affected())
     }
@@ -439,7 +439,7 @@ impl FileUploadRepository for PostgresFileUploadRepository {
         )
         .execute(&*self.pool)
         .await
-        .map_err(|e| DomainError::DatabaseError(e.to_string()))?;
+        .map_err(|e| DomainError::database_error(e.to_string()))?;
 
         Ok(result.rows_affected())
     }
@@ -458,7 +458,7 @@ impl FileUploadRepository for PostgresFileUploadRepository {
         )
         .fetch_one(&*self.pool)
         .await
-        .map_err(|e| DomainError::DatabaseError(e.to_string()))?;
+        .map_err(|e| DomainError::database_error(e.to_string()))?;
 
         Ok(FileStatistics {
             total_files: row.get::<i64, _>("total_files") as u64,
@@ -477,7 +477,7 @@ impl FileUploadRepository for PostgresFileUploadRepository {
             .bind(storage_type)
             .fetch_one(&*self.pool)
             .await
-            .map_err(|e| DomainError::DatabaseError(e.to_string()))?
+            .map_err(|e| DomainError::database_error(e.to_string()))?
             .get(0);
 
         // 获取文件
@@ -497,7 +497,7 @@ impl FileUploadRepository for PostgresFileUploadRepository {
         .bind(pagination.offset as i32)
         .fetch_all(&*self.pool)
         .await
-        .map_err(|e| DomainError::DatabaseError(e.to_string()))?;
+        .map_err(|e| DomainError::database_error(e.to_string()))?;
 
         let files: Vec<FileUpload> = files.into_iter().map(|f| f.into()).collect();
         Ok(PaginatedResult::new(files, total_count as u64, pagination))
@@ -508,7 +508,7 @@ impl FileUploadRepository for PostgresFileUploadRepository {
             .bind(user_id)
             .fetch_one(&*self.pool)
             .await
-            .map_err(|e| DomainError::DatabaseError(e.to_string()))?
+            .map_err(|e| DomainError::database_error(e.to_string()))?
             .get(0);
 
         Ok(usage)
@@ -519,7 +519,7 @@ impl FileUploadRepository for PostgresFileUploadRepository {
             .bind(room_id)
             .fetch_one(&*self.pool)
             .await
-            .map_err(|e| DomainError::DatabaseError(e.to_string()))?
+            .map_err(|e| DomainError::database_error(e.to_string()))?
             .get(0);
 
         Ok(usage)
@@ -539,7 +539,7 @@ impl FileUploadRepository for PostgresFileUploadRepository {
         .bind(checksum)
         .fetch_all(&*self.pool)
         .await
-        .map_err(|e| DomainError::DatabaseError(e.to_string()))?;
+        .map_err(|e| DomainError::database_error(e.to_string()))?;
 
         Ok(files.into_iter().map(|f| f.into()).collect())
     }

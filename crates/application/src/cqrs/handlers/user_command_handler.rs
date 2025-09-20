@@ -338,7 +338,7 @@ impl CommandHandler<LoginUserCommand> for UserCommandHandler {
         // 更新用户状态为活跃
         let mut updated_user = user.clone();
         updated_user.status = UserStatus::Active;
-        updated_user.last_activity_at = Some(chrono::Utc::now());
+        updated_user.last_active_at = Some(chrono::Utc::now());
         updated_user.updated_at = chrono::Utc::now();
 
         let updated_user = self.user_repository.save(updated_user).await?;

@@ -69,7 +69,7 @@ impl CqrsAuthService {
                 status: user.status,
                 created_at: user.created_at,
                 updated_at: user.updated_at,
-                last_activity_at: user.last_activity_at,
+                last_activity_at: user.last_active_at,
             },
             access_token: "mock_access_token".to_string(), // TODO: 生成真实的 JWT
             refresh_token: "mock_refresh_token".to_string(),
@@ -108,7 +108,7 @@ impl CqrsAuthService {
                 status: user.status,
                 created_at: user.created_at,
                 updated_at: user.updated_at,
-                last_activity_at: user.last_activity_at,
+                last_activity_at: user.last_active_at,
             },
             access_token: "mock_access_token".to_string(), // TODO: 生成真实的 JWT
             refresh_token: "mock_refresh_token".to_string(),
@@ -167,7 +167,7 @@ impl CqrsAuthService {
             status: user.status,
             created_at: user.created_at,
             updated_at: user.updated_at,
-            last_activity_at: user.last_activity_at,
+            last_activity_at: user.last_active_at,
         })
     }
 

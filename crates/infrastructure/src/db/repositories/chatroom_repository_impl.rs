@@ -135,7 +135,7 @@ impl PostgresChatRoomRepository {
             param_count += 1;
         }
 
-        if let Some(active_since) = &params.active_since {
+        if let Some(active_since) = &params.last_activity_after {
             conditions.push(format!("last_activity_at > ${}", param_count));
             values.push(active_since.to_string());
         }
@@ -176,7 +176,7 @@ impl ChatRoomRepository for PostgresChatRoomRepository {
         .bind(db_room.last_activity_at)
         .fetch_one(&*self.pool)
         .await
-        .map_err(|e| DomainError::DatabaseError(e.to_string()))?;
+        .map_err(|e| DomainError::database_error(e.to_string()))?;
 
         Ok(result.into())
     }
@@ -193,7 +193,7 @@ impl ChatRoomRepository for PostgresChatRoomRepository {
         .bind(id)
         .fetch_optional(&*self.pool)
         .await
-        .map_err(|e| DomainError::DatabaseError(e.to_string()))?;
+        .map_err(|e| DomainError::database_error(e.to_string()))?;
 
         Ok(result.map(|r| r.into()))
     }
@@ -210,7 +210,7 @@ impl ChatRoomRepository for PostgresChatRoomRepository {
         .bind(name)
         .fetch_optional(&*self.pool)
         .await
-        .map_err(|e| DomainError::DatabaseError(e.to_string()))?;
+        .map_err(|e| DomainError::database_error(e.to_string()))?;
 
         Ok(result.map(|r| r.into()))
     }
@@ -223,7 +223,7 @@ impl ChatRoomRepository for PostgresChatRoomRepository {
         .bind(owner_id)
         .fetch_one(&*self.pool)
         .await
-        .map_err(|e| DomainError::DatabaseError(e.to_string()))?
+        .map_err(|e| DomainError::database_error(e.to_string()))?
         .get(0);
 
         // 获取数据
@@ -242,7 +242,7 @@ impl ChatRoomRepository for PostgresChatRoomRepository {
         .bind(pagination.offset as i32)
         .fetch_all(&*self.pool)
         .await
-        .map_err(|e| DomainError::DatabaseError(e.to_string()))?;
+        .map_err(|e| DomainError::database_error(e.to_string()))?;
 
         let rooms: Vec<ChatRoom> = rooms.into_iter().map(|r| r.into()).collect();
 
@@ -274,7 +274,7 @@ impl ChatRoomRepository for PostgresChatRoomRepository {
         .bind(db_room.last_activity_at)
         .fetch_one(&*self.pool)
         .await
-        .map_err(|e| DomainError::DatabaseError(e.to_string()))?;
+        .map_err(|e| DomainError::database_error(e.to_string()))?;
 
         Ok(result.into())
     }
@@ -285,7 +285,7 @@ impl ChatRoomRepository for PostgresChatRoomRepository {
             .bind(count as i32)
             .execute(&*self.pool)
             .await
-            .map_err(|e| DomainError::DatabaseError(e.to_string()))?;
+            .map_err(|e| DomainError::database_error(e.to_string()))?;
 
         Ok(())
     }
@@ -296,7 +296,7 @@ impl ChatRoomRepository for PostgresChatRoomRepository {
             .bind(last_activity_at)
             .execute(&*self.pool)
             .await
-            .map_err(|e| DomainError::DatabaseError(e.to_string()))?;
+            .map_err(|e| DomainError::database_error(e.to_string()))?;
 
         Ok(())
     }
@@ -306,7 +306,7 @@ impl ChatRoomRepository for PostgresChatRoomRepository {
             .bind(room_id)
             .execute(&*self.pool)
             .await
-            .map_err(|e| DomainError::DatabaseError(e.to_string()))?;
+            .map_err(|e| DomainError::database_error(e.to_string()))?;
 
         Ok(())
     }
@@ -337,7 +337,7 @@ impl ChatRoomRepository for PostgresChatRoomRepository {
         let total_count: i64 = query(&count_query)
             .fetch_one(&*self.pool)
             .await
-            .map_err(|e| DomainError::DatabaseError(e.to_string()))?
+            .map_err(|e| DomainError::database_error(e.to_string()))?
             .get(0);
 
         // 获取数据
@@ -353,7 +353,7 @@ impl ChatRoomRepository for PostgresChatRoomRepository {
         let rooms: Vec<DbChatRoom> = query_as(&data_query)
             .fetch_all(&*self.pool)
             .await
-            .map_err(|e| DomainError::DatabaseError(e.to_string()))?;
+            .map_err(|e| DomainError::database_error(e.to_string()))?;
 
         let rooms: Vec<ChatRoom> = rooms.into_iter().map(|r| r.into()).collect();
 
@@ -377,12 +377,11 @@ impl ChatRoomRepository for PostgresChatRoomRepository {
         )
         .fetch_one(&*self.pool)
         .await
-        .map_err(|e| DomainError::DatabaseError(e.to_string()))?;
+        .map_err(|e| DomainError::database_error(e.to_string()))?;
 
         Ok(ChatRoomStatistics {
             total_rooms: row.get::<i64, _>("total_rooms") as u64,
             active_rooms: row.get::<i64, _>("active_rooms") as u64,
-            archived_rooms: row.get::<i64, _>("archived_rooms") as u64,
             private_rooms: row.get::<i64, _>("private_rooms") as u64,
             public_rooms: row.get::<i64, _>("public_rooms") as u64,
             rooms_created_today: row.get::<i64, _>("rooms_created_today") as u64,
@@ -405,7 +404,7 @@ impl ChatRoomRepository for PostgresChatRoomRepository {
         .bind(limit as i32)
         .fetch_all(&*self.pool)
         .await
-        .map_err(|e| DomainError::DatabaseError(e.to_string()))?;
+        .map_err(|e| DomainError::database_error(e.to_string()))?;
 
         Ok(rooms.into_iter().map(|r| r.into()).collect())
     }
@@ -424,7 +423,7 @@ impl ChatRoomRepository for PostgresChatRoomRepository {
         .bind(limit as i32)
         .fetch_all(&*self.pool)
         .await
-        .map_err(|e| DomainError::DatabaseError(e.to_string()))?;
+        .map_err(|e| DomainError::database_error(e.to_string()))?;
 
         Ok(rooms.into_iter().map(|r| r.into()).collect())
     }
@@ -436,7 +435,7 @@ impl ChatRoomRepository for PostgresChatRoomRepository {
         )
         .fetch_one(&*self.pool)
         .await
-        .map_err(|e| DomainError::DatabaseError(e.to_string()))?
+        .map_err(|e| DomainError::database_error(e.to_string()))?
         .get(0);
 
         // 获取数据
@@ -454,7 +453,7 @@ impl ChatRoomRepository for PostgresChatRoomRepository {
         .bind(pagination.offset as i32)
         .fetch_all(&*self.pool)
         .await
-        .map_err(|e| DomainError::DatabaseError(e.to_string()))?;
+        .map_err(|e| DomainError::database_error(e.to_string()))?;
 
         let rooms: Vec<ChatRoom> = rooms.into_iter().map(|r| r.into()).collect();
         Ok(PaginatedResult::new(rooms, total_count as u64, pagination))
@@ -473,7 +472,7 @@ impl ChatRoomRepository for PostgresChatRoomRepository {
         .bind(user_id)
         .fetch_one(&*self.pool)
         .await
-        .map_err(|e| DomainError::DatabaseError(e.to_string()))?
+        .map_err(|e| DomainError::database_error(e.to_string()))?
         .get(0);
 
         // 获取数据
@@ -493,7 +492,7 @@ impl ChatRoomRepository for PostgresChatRoomRepository {
         .bind(pagination.offset as i32)
         .fetch_all(&*self.pool)
         .await
-        .map_err(|e| DomainError::DatabaseError(e.to_string()))?;
+        .map_err(|e| DomainError::database_error(e.to_string()))?;
 
         let rooms: Vec<ChatRoom> = rooms.into_iter().map(|r| r.into()).collect();
         Ok(PaginatedResult::new(rooms, total_count as u64, pagination))
@@ -504,7 +503,7 @@ impl ChatRoomRepository for PostgresChatRoomRepository {
             .bind(name)
             .fetch_one(&*self.pool)
             .await
-            .map_err(|e| DomainError::DatabaseError(e.to_string()))?
+            .map_err(|e| DomainError::database_error(e.to_string()))?
             .get(0);
 
         Ok(count > 0)
@@ -525,7 +524,7 @@ impl ChatRoomRepository for PostgresChatRoomRepository {
             .bind(password_hash.is_some())
             .execute(&*self.pool)
             .await
-            .map_err(|e| DomainError::DatabaseError(e.to_string()))?;
+            .map_err(|e| DomainError::database_error(e.to_string()))?;
 
         Ok(())
     }
@@ -536,7 +535,7 @@ impl ChatRoomRepository for PostgresChatRoomRepository {
             .bind(status.to_string())
             .execute(&*self.pool)
             .await
-            .map_err(|e| DomainError::DatabaseError(e.to_string()))?;
+            .map_err(|e| DomainError::database_error(e.to_string()))?;
 
         Ok(())
     }
@@ -563,7 +562,7 @@ impl ChatRoomRepository for PostgresChatRoomRepository {
         .bind(inactive_days as i32)
         .execute(&*self.pool)
         .await
-        .map_err(|e| DomainError::DatabaseError(e.to_string()))?;
+        .map_err(|e| DomainError::database_error(e.to_string()))?;
 
         Ok(result.rows_affected())
     }
@@ -592,7 +591,7 @@ impl ChatRoomRepository for PostgresChatRoomRepository {
         .bind(ids)
         .fetch_all(&*self.pool)
         .await
-        .map_err(|e| DomainError::DatabaseError(e.to_string()))?;
+        .map_err(|e| DomainError::database_error(e.to_string()))?;
 
         Ok(chatrooms.into_iter().map(|c| c.into()).collect())
     }

@@ -36,7 +36,7 @@ impl UserQueryHandler {
             status: user.status,
             created_at: user.created_at,
             updated_at: user.updated_at,
-            last_activity_at: user.last_activity_at,
+            last_activity_at: user.last_active_at,
         }
     }
 }

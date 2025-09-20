@@ -46,7 +46,7 @@ impl From<DbUser> for User {
             last_active_at: db_user.last_active_at,
             created_at: db_user.created_at,
             updated_at: db_user.updated_at,
-            display_name: todo!(),
+            display_name: None, // 数据库中暂未存储，使用默认值
         }
     }
 }
@@ -149,7 +149,7 @@ impl UserRepository for PostgresUserRepository {
         .bind(db_user.last_active_at)
         .fetch_one(&*self.pool)
         .await
-        .map_err(|e| DomainError::DatabaseError(e.to_string()))?;
+        .map_err(|e| DomainError::database_error(e.to_string()))?;
 
         Ok(result.into())
     }
@@ -165,7 +165,7 @@ impl UserRepository for PostgresUserRepository {
         .bind(id)
         .fetch_optional(&*self.pool)
         .await
-        .map_err(|e| DomainError::DatabaseError(e.to_string()))?;
+        .map_err(|e| DomainError::database_error(e.to_string()))?;
 
         Ok(result.map(|u| u.into()))
     }
@@ -181,7 +181,7 @@ impl UserRepository for PostgresUserRepository {
         .bind(username)
         .fetch_optional(&*self.pool)
         .await
-        .map_err(|e| DomainError::DatabaseError(e.to_string()))?;
+        .map_err(|e| DomainError::database_error(e.to_string()))?;
 
         Ok(result.map(|u| u.into()))
     }
@@ -197,7 +197,7 @@ impl UserRepository for PostgresUserRepository {
         .bind(email)
         .fetch_optional(&*self.pool)
         .await
-        .map_err(|e| DomainError::DatabaseError(e.to_string()))?;
+        .map_err(|e| DomainError::database_error(e.to_string()))?;
 
         Ok(result.map(|u| u.into()))
     }
@@ -223,7 +223,7 @@ impl UserRepository for PostgresUserRepository {
         .bind(db_user.last_active_at)
         .fetch_one(&*self.pool)
         .await
-        .map_err(|e| DomainError::DatabaseError(e.to_string()))?;
+        .map_err(|e| DomainError::database_error(e.to_string()))?;
 
         Ok(result.into())
     }
@@ -234,7 +234,7 @@ impl UserRepository for PostgresUserRepository {
             .bind(password_hash)
             .execute(&*self.pool)
             .await
-            .map_err(|e| DomainError::DatabaseError(e.to_string()))?;
+            .map_err(|e| DomainError::database_error(e.to_string()))?;
 
         Ok(())
     }
@@ -245,7 +245,7 @@ impl UserRepository for PostgresUserRepository {
             .bind(status.to_string())
             .execute(&*self.pool)
             .await
-            .map_err(|e| DomainError::DatabaseError(e.to_string()))?;
+            .map_err(|e| DomainError::database_error(e.to_string()))?;
 
         Ok(())
     }
@@ -256,7 +256,7 @@ impl UserRepository for PostgresUserRepository {
             .bind(last_active_at)
             .execute(&*self.pool)
             .await
-            .map_err(|e| DomainError::DatabaseError(e.to_string()))?;
+            .map_err(|e| DomainError::database_error(e.to_string()))?;
 
         Ok(())
     }
@@ -266,7 +266,7 @@ impl UserRepository for PostgresUserRepository {
             .bind(user_id)
             .execute(&*self.pool)
             .await
-            .map_err(|e| DomainError::DatabaseError(e.to_string()))?;
+            .map_err(|e| DomainError::database_error(e.to_string()))?;
 
         Ok(())
     }
@@ -297,7 +297,7 @@ impl UserRepository for PostgresUserRepository {
         let total_count: i64 = query(&count_query)
             .fetch_one(&*self.pool)
             .await
-            .map_err(|e| DomainError::DatabaseError(e.to_string()))?
+            .map_err(|e| DomainError::database_error(e.to_string()))?
             .get(0);
 
         // 获取数据
@@ -312,7 +312,7 @@ impl UserRepository for PostgresUserRepository {
         let users: Vec<DbUser> = query_as(&data_query)
             .fetch_all(&*self.pool)
             .await
-            .map_err(|e| DomainError::DatabaseError(e.to_string()))?;
+            .map_err(|e| DomainError::database_error(e.to_string()))?;
 
         let users: Vec<User> = users.into_iter().map(|u| u.into()).collect();
 
@@ -334,7 +334,7 @@ impl UserRepository for PostgresUserRepository {
         )
         .fetch_one(&*self.pool)
         .await
-        .map_err(|e| DomainError::DatabaseError(e.to_string()))?;
+        .map_err(|e| DomainError::database_error(e.to_string()))?;
 
         Ok(UserStatistics {
             total_users: row.get::<i64, _>("total_users") as u64,
@@ -351,7 +351,7 @@ impl UserRepository for PostgresUserRepository {
             .bind(username)
             .fetch_one(&*self.pool)
             .await
-            .map_err(|e| DomainError::DatabaseError(e.to_string()))?
+            .map_err(|e| DomainError::database_error(e.to_string()))?
             .get(0);
 
         Ok(count > 0)
@@ -362,7 +362,7 @@ impl UserRepository for PostgresUserRepository {
             .bind(email)
             .fetch_one(&*self.pool)
             .await
-            .map_err(|e| DomainError::DatabaseError(e.to_string()))?
+            .map_err(|e| DomainError::database_error(e.to_string()))?
             .get(0);
 
         Ok(count > 0)
@@ -384,7 +384,7 @@ impl UserRepository for PostgresUserRepository {
         .bind(ids)
         .fetch_all(&*self.pool)
         .await
-        .map_err(|e| DomainError::DatabaseError(e.to_string()))?;
+        .map_err(|e| DomainError::database_error(e.to_string()))?;
 
         Ok(users.into_iter().map(|u| u.into()).collect())
     }
@@ -402,7 +402,7 @@ impl UserRepository for PostgresUserRepository {
         .bind(limit as i32)
         .fetch_all(&*self.pool)
         .await
-        .map_err(|e| DomainError::DatabaseError(e.to_string()))?;
+        .map_err(|e| DomainError::database_error(e.to_string()))?;
 
         Ok(users.into_iter().map(|u| u.into()).collect())
     }
@@ -414,7 +414,7 @@ impl UserRepository for PostgresUserRepository {
         )
         .fetch_one(&*self.pool)
         .await
-        .map_err(|e| DomainError::DatabaseError(e.to_string()))?
+        .map_err(|e| DomainError::database_error(e.to_string()))?
         .get(0);
 
         // 获取在线用户
@@ -431,7 +431,7 @@ impl UserRepository for PostgresUserRepository {
         .bind(pagination.offset as i32)
         .fetch_all(&*self.pool)
         .await
-        .map_err(|e| DomainError::DatabaseError(e.to_string()))?;
+        .map_err(|e| DomainError::database_error(e.to_string()))?;
 
         let users: Vec<User> = users.into_iter().map(|u| u.into()).collect();
 

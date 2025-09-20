@@ -5,39 +5,14 @@ use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use domain::{
     errors::{DomainError, DomainResult},
-    repositories::{SessionRepository, Pagination, PaginatedResult},
+    repositories::{
+        session_repository::{SessionRepository, Session, SessionStatistics},
+        Pagination, PaginatedResult
+    },
 };
-use sqlx::{query, query_as, FromRow};
+use sqlx::{query, query_as, FromRow, Row};
 use std::sync::Arc;
 use uuid::Uuid;
-
-/// 会话实体
-#[derive(Debug, Clone)]
-pub struct Session {
-    pub id: Uuid,
-    pub user_id: Uuid,
-    pub token_hash: String,
-    pub refresh_token: Option<String>,
-    pub device_type: Option<String>,
-    pub device_info: Option<String>,
-    pub ip_address: Option<String>,
-    pub user_agent: Option<String>,
-    pub is_active: bool,
-    pub expires_at: DateTime<Utc>,
-    pub last_accessed_at: DateTime<Utc>,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
-}
-
-/// 会话统计
-#[derive(Debug, Clone)]
-pub struct SessionStatistics {
-    pub total_sessions: u64,
-    pub active_sessions: u64,
-    pub sessions_today: u64,
-    pub unique_users_today: u64,
-    pub avg_session_duration_minutes: f64,
-}
 
 /// 数据库会话模型
 #[derive(Debug, Clone, FromRow)]
@@ -45,16 +20,15 @@ struct DbSession {
     pub id: Uuid,
     pub user_id: Uuid,
     pub token_hash: String,
-    pub refresh_token: Option<String>,
-    pub device_type: Option<String>,
-    pub device_info: Option<String>,
+    pub refresh_token_hash: Option<String>,
     pub ip_address: Option<String>,
     pub user_agent: Option<String>,
+    pub device_info: serde_json::Value,
     pub is_active: bool,
     pub expires_at: DateTime<Utc>,
     pub last_accessed_at: DateTime<Utc>,
     pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
+    pub session_type: String,
 }
 
 impl From<DbSession> for Session {
@@ -63,16 +37,15 @@ impl From<DbSession> for Session {
             id: db_session.id,
             user_id: db_session.user_id,
             token_hash: db_session.token_hash,
-            refresh_token: db_session.refresh_token,
-            device_type: db_session.device_type,
-            device_info: db_session.device_info,
+            refresh_token_hash: db_session.refresh_token_hash,
+            expires_at: db_session.expires_at,
+            created_at: db_session.created_at,
+            last_accessed_at: db_session.last_accessed_at,
             ip_address: db_session.ip_address,
             user_agent: db_session.user_agent,
+            device_info: db_session.device_info,
             is_active: db_session.is_active,
-            expires_at: db_session.expires_at,
-            last_accessed_at: db_session.last_accessed_at,
-            created_at: db_session.created_at,
-            updated_at: db_session.updated_at,
+            session_type: db_session.session_type,
         }
     }
 }
@@ -83,16 +56,15 @@ impl From<&Session> for DbSession {
             id: session.id,
             user_id: session.user_id,
             token_hash: session.token_hash.clone(),
-            refresh_token: session.refresh_token.clone(),
-            device_type: session.device_type.clone(),
-            device_info: session.device_info.clone(),
+            refresh_token_hash: session.refresh_token_hash.clone(),
             ip_address: session.ip_address.clone(),
             user_agent: session.user_agent.clone(),
+            device_info: session.device_info.clone(),
             is_active: session.is_active,
             expires_at: session.expires_at,
             last_accessed_at: session.last_accessed_at,
             created_at: session.created_at,
-            updated_at: session.updated_at,
+            session_type: session.session_type.clone(),
         }
     }
 }
@@ -128,8 +100,8 @@ impl SessionRepository for PostgresSessionRepository {
         .bind(db_session.id)
         .bind(db_session.user_id)
         .bind(&db_session.token_hash)
-        .bind(&db_session.refresh_token)
-        .bind(&db_session.device_type)
+        .bind(&db_session.refresh_token_hash)
+        .bind(&db_session.session_type)
         .bind(&db_session.device_info)
         .bind(&db_session.ip_address)
         .bind(&db_session.user_agent)
@@ -138,7 +110,7 @@ impl SessionRepository for PostgresSessionRepository {
         .bind(db_session.last_accessed_at)
         .fetch_one(&*self.pool)
         .await
-        .map_err(|e| DomainError::DatabaseError(e.to_string()))?;
+        .map_err(|e| DomainError::database_error(e.to_string()))?;
 
         Ok(result.into())
     }
@@ -156,7 +128,7 @@ impl SessionRepository for PostgresSessionRepository {
         .bind(id)
         .fetch_optional(&*self.pool)
         .await
-        .map_err(|e| DomainError::DatabaseError(e.to_string()))?;
+        .map_err(|e| DomainError::database_error(e.to_string()))?;
 
         Ok(result.map(|r| r.into()))
     }
@@ -174,7 +146,7 @@ impl SessionRepository for PostgresSessionRepository {
         .bind(token_hash)
         .fetch_optional(&*self.pool)
         .await
-        .map_err(|e| DomainError::DatabaseError(e.to_string()))?;
+        .map_err(|e| DomainError::database_error(e.to_string()))?;
 
         Ok(result.map(|r| r.into()))
     }
@@ -192,7 +164,7 @@ impl SessionRepository for PostgresSessionRepository {
         .bind(refresh_token)
         .fetch_optional(&*self.pool)
         .await
-        .map_err(|e| DomainError::DatabaseError(e.to_string()))?;
+        .map_err(|e| DomainError::database_error(e.to_string()))?;
 
         Ok(result.map(|r| r.into()))
     }
@@ -214,8 +186,8 @@ impl SessionRepository for PostgresSessionRepository {
         )
         .bind(db_session.id)
         .bind(&db_session.token_hash)
-        .bind(&db_session.refresh_token)
-        .bind(&db_session.device_type)
+        .bind(&db_session.refresh_token_hash)
+        .bind(&db_session.session_type)
         .bind(&db_session.device_info)
         .bind(&db_session.ip_address)
         .bind(&db_session.user_agent)
@@ -224,7 +196,7 @@ impl SessionRepository for PostgresSessionRepository {
         .bind(db_session.last_accessed_at)
         .fetch_one(&*self.pool)
         .await
-        .map_err(|e| DomainError::DatabaseError(e.to_string()))?;
+        .map_err(|e| DomainError::database_error(e.to_string()))?;
 
         Ok(result.into())
     }
@@ -235,7 +207,7 @@ impl SessionRepository for PostgresSessionRepository {
             .bind(last_accessed_at)
             .execute(&*self.pool)
             .await
-            .map_err(|e| DomainError::DatabaseError(e.to_string()))?;
+            .map_err(|e| DomainError::database_error(e.to_string()))?;
 
         Ok(())
     }
@@ -247,7 +219,7 @@ impl SessionRepository for PostgresSessionRepository {
             .bind(new_refresh_token)
             .execute(&*self.pool)
             .await
-            .map_err(|e| DomainError::DatabaseError(e.to_string()))?;
+            .map_err(|e| DomainError::database_error(e.to_string()))?;
 
         Ok(())
     }
@@ -257,7 +229,7 @@ impl SessionRepository for PostgresSessionRepository {
             .bind(session_id)
             .execute(&*self.pool)
             .await
-            .map_err(|e| DomainError::DatabaseError(e.to_string()))?;
+            .map_err(|e| DomainError::database_error(e.to_string()))?;
 
         Ok(())
     }
@@ -267,7 +239,7 @@ impl SessionRepository for PostgresSessionRepository {
             .bind(session_id)
             .execute(&*self.pool)
             .await
-            .map_err(|e| DomainError::DatabaseError(e.to_string()))?;
+            .map_err(|e| DomainError::database_error(e.to_string()))?;
 
         Ok(result.rows_affected() > 0)
     }
@@ -278,7 +250,7 @@ impl SessionRepository for PostgresSessionRepository {
             .bind(user_id)
             .fetch_one(&*self.pool)
             .await
-            .map_err(|e| DomainError::DatabaseError(e.to_string()))?
+            .map_err(|e| DomainError::database_error(e.to_string()))?
             .get(0);
 
         // 获取会话
@@ -298,7 +270,7 @@ impl SessionRepository for PostgresSessionRepository {
         .bind(pagination.offset as i32)
         .fetch_all(&*self.pool)
         .await
-        .map_err(|e| DomainError::DatabaseError(e.to_string()))?;
+        .map_err(|e| DomainError::database_error(e.to_string()))?;
 
         let sessions: Vec<Session> = sessions.into_iter().map(|s| s.into()).collect();
         Ok(PaginatedResult::new(sessions, total_count as u64, pagination))
@@ -310,7 +282,7 @@ impl SessionRepository for PostgresSessionRepository {
             .bind(user_id)
             .fetch_one(&*self.pool)
             .await
-            .map_err(|e| DomainError::DatabaseError(e.to_string()))?
+            .map_err(|e| DomainError::database_error(e.to_string()))?
             .get(0);
 
         // 获取会话
@@ -330,7 +302,7 @@ impl SessionRepository for PostgresSessionRepository {
         .bind(pagination.offset as i32)
         .fetch_all(&*self.pool)
         .await
-        .map_err(|e| DomainError::DatabaseError(e.to_string()))?;
+        .map_err(|e| DomainError::database_error(e.to_string()))?;
 
         let sessions: Vec<Session> = sessions.into_iter().map(|s| s.into()).collect();
         Ok(PaginatedResult::new(sessions, total_count as u64, pagination))
@@ -340,7 +312,7 @@ impl SessionRepository for PostgresSessionRepository {
         let result = query("DELETE FROM sessions WHERE expires_at < NOW() OR (is_active = false AND updated_at < NOW() - INTERVAL '7 days')")
             .execute(&*self.pool)
             .await
-            .map_err(|e| DomainError::DatabaseError(e.to_string()))?;
+            .map_err(|e| DomainError::database_error(e.to_string()))?;
 
         Ok(result.rows_affected())
     }
@@ -349,7 +321,7 @@ impl SessionRepository for PostgresSessionRepository {
         let count: i64 = query("SELECT COUNT(*) FROM sessions WHERE is_active = true AND expires_at > NOW()")
             .fetch_one(&*self.pool)
             .await
-            .map_err(|e| DomainError::DatabaseError(e.to_string()))?
+            .map_err(|e| DomainError::database_error(e.to_string()))?
             .get(0);
 
         Ok(count as u64)
@@ -360,7 +332,7 @@ impl SessionRepository for PostgresSessionRepository {
             .bind(user_id)
             .fetch_one(&*self.pool)
             .await
-            .map_err(|e| DomainError::DatabaseError(e.to_string()))?
+            .map_err(|e| DomainError::database_error(e.to_string()))?
             .get(0);
 
         Ok(count as u64)
@@ -380,7 +352,7 @@ impl SessionRepository for PostgresSessionRepository {
         )
         .fetch_one(&*self.pool)
         .await
-        .map_err(|e| DomainError::DatabaseError(e.to_string()))?;
+        .map_err(|e| DomainError::database_error(e.to_string()))?;
 
         Ok(SessionStatistics {
             total_sessions: row.get::<i64, _>("total_sessions") as u64,
@@ -388,6 +360,7 @@ impl SessionRepository for PostgresSessionRepository {
             sessions_today: row.get::<i64, _>("sessions_today") as u64,
             unique_users_today: row.get::<i64, _>("unique_users_today") as u64,
             avg_session_duration_minutes: row.get::<f64, _>("avg_session_duration_minutes"),
+            sessions_by_type: std::collections::HashMap::new(), // 简化实现，返回空 HashMap
         })
     }
 
@@ -397,7 +370,7 @@ impl SessionRepository for PostgresSessionRepository {
             .bind(ip_address)
             .fetch_one(&*self.pool)
             .await
-            .map_err(|e| DomainError::DatabaseError(e.to_string()))?
+            .map_err(|e| DomainError::database_error(e.to_string()))?
             .get(0);
 
         // 获取会话
@@ -417,7 +390,7 @@ impl SessionRepository for PostgresSessionRepository {
         .bind(pagination.offset as i32)
         .fetch_all(&*self.pool)
         .await
-        .map_err(|e| DomainError::DatabaseError(e.to_string()))?;
+        .map_err(|e| DomainError::database_error(e.to_string()))?;
 
         let sessions: Vec<Session> = sessions.into_iter().map(|s| s.into()).collect();
         Ok(PaginatedResult::new(sessions, total_count as u64, pagination))
@@ -429,7 +402,7 @@ impl SessionRepository for PostgresSessionRepository {
             .bind(device_type)
             .fetch_one(&*self.pool)
             .await
-            .map_err(|e| DomainError::DatabaseError(e.to_string()))?
+            .map_err(|e| DomainError::database_error(e.to_string()))?
             .get(0);
 
         // 获取会话
@@ -449,7 +422,7 @@ impl SessionRepository for PostgresSessionRepository {
         .bind(pagination.offset as i32)
         .fetch_all(&*self.pool)
         .await
-        .map_err(|e| DomainError::DatabaseError(e.to_string()))?;
+        .map_err(|e| DomainError::database_error(e.to_string()))?;
 
         let sessions: Vec<Session> = sessions.into_iter().map(|s| s.into()).collect();
         Ok(PaginatedResult::new(sessions, total_count as u64, pagination))
@@ -460,7 +433,7 @@ impl SessionRepository for PostgresSessionRepository {
             .bind(user_id)
             .execute(&*self.pool)
             .await
-            .map_err(|e| DomainError::DatabaseError(e.to_string()))?;
+            .map_err(|e| DomainError::database_error(e.to_string()))?;
 
         Ok(result.rows_affected())
     }
@@ -471,7 +444,7 @@ impl SessionRepository for PostgresSessionRepository {
             .bind(current_session_id)
             .execute(&*self.pool)
             .await
-            .map_err(|e| DomainError::DatabaseError(e.to_string()))?;
+            .map_err(|e| DomainError::database_error(e.to_string()))?;
 
         Ok(result.rows_affected())
     }

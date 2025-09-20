@@ -63,7 +63,7 @@ impl StatisticsRepository for PostgresStatisticsRepository {
         )
         .fetch_one(&*self.pool)
         .await
-        .map_err(|e| DomainError::DatabaseError(e.to_string()))?;
+        .map_err(|e| DomainError::database_error(e.to_string()))?;
 
         stats.insert("total_users".to_string(), user_stats.get::<i64, _>("total_users") as u64);
         stats.insert("active_users".to_string(), user_stats.get::<i64, _>("active_users") as u64);
@@ -80,7 +80,7 @@ impl StatisticsRepository for PostgresStatisticsRepository {
         )
         .fetch_one(&*self.pool)
         .await
-        .map_err(|e| DomainError::DatabaseError(e.to_string()))?;
+        .map_err(|e| DomainError::database_error(e.to_string()))?;
 
         stats.insert("total_rooms".to_string(), room_stats.get::<i64, _>("total_rooms") as u64);
         stats.insert("active_rooms".to_string(), room_stats.get::<i64, _>("active_rooms") as u64);
@@ -96,7 +96,7 @@ impl StatisticsRepository for PostgresStatisticsRepository {
         )
         .fetch_one(&*self.pool)
         .await
-        .map_err(|e| DomainError::DatabaseError(e.to_string()))?;
+        .map_err(|e| DomainError::database_error(e.to_string()))?;
 
         stats.insert("total_messages".to_string(), message_stats.get::<i64, _>("total_messages") as u64);
         stats.insert("messages_today".to_string(), message_stats.get::<i64, _>("messages_today") as u64);
@@ -120,7 +120,7 @@ impl StatisticsRepository for PostgresStatisticsRepository {
         .bind(date_to)
         .fetch_one(&*self.pool)
         .await
-        .map_err(|e| DomainError::DatabaseError(e.to_string()))?
+        .map_err(|e| DomainError::database_error(e.to_string()))?
         .get(0);
 
         stats.insert("message_count".to_string(), message_count as u64);
@@ -136,7 +136,7 @@ impl StatisticsRepository for PostgresStatisticsRepository {
         .bind(user_id)
         .fetch_one(&*self.pool)
         .await
-        .map_err(|e| DomainError::DatabaseError(e.to_string()))?
+        .map_err(|e| DomainError::database_error(e.to_string()))?
         .get(0);
 
         stats.insert("rooms_joined".to_string(), room_count as u64);
@@ -160,7 +160,7 @@ impl StatisticsRepository for PostgresStatisticsRepository {
         .bind(date_to)
         .fetch_one(&*self.pool)
         .await
-        .map_err(|e| DomainError::DatabaseError(e.to_string()))?
+        .map_err(|e| DomainError::database_error(e.to_string()))?
         .get(0);
 
         stats.insert("message_count".to_string(), message_count as u64);
@@ -178,7 +178,7 @@ impl StatisticsRepository for PostgresStatisticsRepository {
         .bind(date_to)
         .fetch_one(&*self.pool)
         .await
-        .map_err(|e| DomainError::DatabaseError(e.to_string()))?
+        .map_err(|e| DomainError::database_error(e.to_string()))?
         .get(0);
 
         stats.insert("active_users".to_string(), active_users as u64);
@@ -188,7 +188,7 @@ impl StatisticsRepository for PostgresStatisticsRepository {
             .bind(room_id)
             .fetch_one(&*self.pool)
             .await
-            .map_err(|e| DomainError::DatabaseError(e.to_string()))?
+            .map_err(|e| DomainError::database_error(e.to_string()))?
             .get(0);
 
         stats.insert("member_count".to_string(), member_count as u64);
@@ -203,7 +203,7 @@ impl StatisticsRepository for PostgresStatisticsRepository {
             .bind(user_id)
             .execute(&*self.pool)
             .await
-            .map_err(|e| DomainError::DatabaseError(e.to_string()))?;
+            .map_err(|e| DomainError::database_error(e.to_string()))?;
 
         Ok(())
     }
@@ -223,7 +223,7 @@ impl StatisticsRepository for PostgresStatisticsRepository {
         .bind(limit as i32)
         .fetch_all(&*self.pool)
         .await
-        .map_err(|e| DomainError::DatabaseError(e.to_string()))?;
+        .map_err(|e| DomainError::database_error(e.to_string()))?;
 
         let result = rooms
             .into_iter()
@@ -255,7 +255,7 @@ impl StatisticsRepository for PostgresStatisticsRepository {
         .bind(limit as i32)
         .fetch_all(&*self.pool)
         .await
-        .map_err(|e| DomainError::DatabaseError(e.to_string()))?;
+        .map_err(|e| DomainError::database_error(e.to_string()))?;
 
         let result = users
             .into_iter()
@@ -282,7 +282,7 @@ impl StatisticsRepository for PostgresStatisticsRepository {
         .bind(days_old as i32)
         .execute(&*self.pool)
         .await
-        .map_err(|e| DomainError::DatabaseError(e.to_string()))?;
+        .map_err(|e| DomainError::database_error(e.to_string()))?;
 
         Ok(result.rows_affected())
     }

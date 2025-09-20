@@ -2,15 +2,21 @@
 //!
 //! 包含系统中各种领域事件的处理器
 
+use crate::cqrs::{DomainEvent, EventHandler};
 use crate::errors::ApplicationResult;
-use crate::cqrs::{EventHandler, DomainEvent};
 use async_trait::async_trait;
 use std::sync::Arc;
-use tracing::{info, debug};
+use tracing::{debug, info};
 
 /// 消息事件处理器
 pub struct MessageEventHandler {
     // TODO: 添加 WebSocket 管理器、通知服务、搜索服务等依赖
+}
+
+impl Default for MessageEventHandler {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl MessageEventHandler {
@@ -22,7 +28,10 @@ impl MessageEventHandler {
 #[async_trait]
 impl EventHandler for MessageEventHandler {
     fn can_handle(&self, event_type: &str) -> bool {
-        matches!(event_type, "message_sent" | "message_updated" | "message_deleted")
+        matches!(
+            event_type,
+            "message_sent" | "message_updated" | "message_deleted"
+        )
     }
 
     async fn handle(&self, event: Arc<dyn DomainEvent>) -> ApplicationResult<()> {
@@ -58,6 +67,12 @@ impl EventHandler for MessageEventHandler {
 /// 用户事件处理器
 pub struct UserEventHandler {
     // TODO: 添加在线状态服务、通知服务、分析服务等依赖
+}
+
+impl Default for UserEventHandler {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl UserEventHandler {
@@ -111,6 +126,12 @@ pub struct ChatRoomEventHandler {
     // TODO: 添加相关依赖
 }
 
+impl Default for ChatRoomEventHandler {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ChatRoomEventHandler {
     pub fn new() -> Self {
         Self {}
@@ -122,7 +143,11 @@ impl EventHandler for ChatRoomEventHandler {
     fn can_handle(&self, event_type: &str) -> bool {
         matches!(
             event_type,
-            "room_created" | "user_joined_room" | "user_left_room" | "room_updated" | "room_deleted"
+            "room_created"
+                | "user_joined_room"
+                | "user_left_room"
+                | "room_updated"
+                | "room_deleted"
         )
     }
 

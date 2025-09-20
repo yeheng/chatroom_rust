@@ -89,12 +89,7 @@ pub mod notification_types {
 
 impl Notification {
     /// 创建新通知
-    pub fn new(
-        user_id: Uuid,
-        notification_type: String,
-        title: String,
-        content: String,
-    ) -> Self {
+    pub fn new(user_id: Uuid, notification_type: String, title: String, content: String) -> Self {
         let now = Utc::now();
 
         Self {

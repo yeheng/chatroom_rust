@@ -536,15 +536,19 @@ async fn update_current_user(
 ) -> Result<Json<ApiResponse<serde_json::Value>>, StatusCode> {
     let user_id = extract_user_id(&headers).ok_or(StatusCode::UNAUTHORIZED)?;
 
-    match state.user_service.update_user(
-        user_id,
-        application::UpdateUserRequest {
-            username: request.username,
-            email: request.email,
-            display_name: request.display_name,
-            avatar_url: request.avatar_url,
-        },
-    ).await {
+    match state
+        .user_service
+        .update_user(
+            user_id,
+            application::UpdateUserRequest {
+                username: request.username,
+                email: request.email,
+                display_name: request.display_name,
+                avatar_url: request.avatar_url,
+            },
+        )
+        .await
+    {
         Ok(user) => {
             let user_data = serde_json::json!({
                 "id": user.id,
@@ -652,15 +656,19 @@ async fn update_room_handler(
 
     // TODO: 检查用户是否有权限更新房间（房主或管理员）
 
-    match state.chat_service.update_room(
-        room_id,
-        application::UpdateRoomRequest {
-            name: request.name,
-            description: request.description,
-            max_members: None,
-            password: request.password,
-        },
-    ).await {
+    match state
+        .chat_service
+        .update_room(
+            room_id,
+            application::UpdateRoomRequest {
+                name: request.name,
+                description: request.description,
+                max_members: None,
+                password: request.password,
+            },
+        )
+        .await
+    {
         Ok(room) => {
             let room_data = serde_json::json!({
                 "id": room.id,

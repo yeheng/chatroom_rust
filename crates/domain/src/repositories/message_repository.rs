@@ -2,7 +2,7 @@
 
 use crate::entities::message::Message;
 use crate::errors::DomainResult;
-use crate::repositories::{Pagination, PaginatedResult, SortConfig};
+use crate::repositories::{PaginatedResult, Pagination, SortConfig};
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use serde_json::Value as JsonValue;
@@ -104,7 +104,11 @@ pub trait MessageRepository: Send + Sync {
     async fn get_reply_chain(&self, message_id: Uuid) -> DomainResult<Vec<ReplyChain>>;
 
     /// 获取消息的回复列表
-    async fn find_replies(&self, message_id: Uuid, pagination: Pagination) -> DomainResult<PaginatedResult<Message>>;
+    async fn find_replies(
+        &self,
+        message_id: Uuid,
+        pagination: Pagination,
+    ) -> DomainResult<PaginatedResult<Message>>;
 
     /// 获取房间最新消息
     async fn find_latest_by_room(&self, room_id: Uuid, limit: u32) -> DomainResult<Vec<Message>>;

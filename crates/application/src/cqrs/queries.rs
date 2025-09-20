@@ -2,12 +2,12 @@
 //!
 //! 包含用户、聊天室和组织相关的查询
 
+use super::{dtos::*, Query};
+use chrono::{DateTime, Utc};
+use domain::message::MessageType;
+use domain::user::UserStatus;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
-use chrono::{DateTime, Utc};
-use domain::user::UserStatus;
-use domain::message::MessageType;
-use super::{Query, dtos::*};
 
 // ============================================================================
 // 用户查询

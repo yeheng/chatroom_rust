@@ -2,10 +2,10 @@
 //!
 //! 包含用户管理、聊天室管理和组织管理的所有命令
 
+use domain::message::MessageType;
+use domain::user::UserStatus;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
-use domain::user::UserStatus;
-use domain::message::MessageType;
 // use domain::organization::OrganizationSettings;
 use super::Command;
 

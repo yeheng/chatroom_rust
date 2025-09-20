@@ -2,7 +2,7 @@
 
 use crate::entities::user::{User, UserStatus};
 use crate::errors::DomainResult;
-use crate::repositories::{Pagination, PaginatedResult, SortConfig};
+use crate::repositories::{PaginatedResult, Pagination, SortConfig};
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use uuid::Uuid;
@@ -54,7 +54,11 @@ pub trait UserRepository: Send + Sync {
     async fn update_status(&self, user_id: Uuid, status: UserStatus) -> DomainResult<()>;
 
     /// 更新最后活跃时间
-    async fn update_last_active(&self, user_id: Uuid, last_active_at: DateTime<Utc>) -> DomainResult<()>;
+    async fn update_last_active(
+        &self,
+        user_id: Uuid,
+        last_active_at: DateTime<Utc>,
+    ) -> DomainResult<()>;
 
     /// 软删除用户
     async fn soft_delete(&self, user_id: Uuid) -> DomainResult<()>;
@@ -83,13 +87,24 @@ pub trait UserRepository: Send + Sync {
     async fn find_recent_users(&self, limit: u32) -> DomainResult<Vec<User>>;
 
     /// 获取在线用户
-    async fn find_online_users(&self, pagination: Pagination) -> DomainResult<PaginatedResult<User>>;
+    async fn find_online_users(
+        &self,
+        pagination: Pagination,
+    ) -> DomainResult<PaginatedResult<User>>;
 
     /// 根据角色查找用户（企业版功能）
     #[cfg(feature = "enterprise")]
-    async fn find_by_role(&self, role_id: Uuid, pagination: Pagination) -> DomainResult<PaginatedResult<User>>;
+    async fn find_by_role(
+        &self,
+        role_id: Uuid,
+        pagination: Pagination,
+    ) -> DomainResult<PaginatedResult<User>>;
 
     /// 根据组织查找用户（企业版功能）
     #[cfg(feature = "enterprise")]
-    async fn find_by_organization(&self, org_id: Uuid, pagination: Pagination) -> DomainResult<PaginatedResult<User>>;
+    async fn find_by_organization(
+        &self,
+        org_id: Uuid,
+        pagination: Pagination,
+    ) -> DomainResult<PaginatedResult<User>>;
 }

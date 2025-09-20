@@ -2,22 +2,18 @@
 //!
 //! 处理聊天室相关的命令：创建、加入、离开、发送消息等
 
+use crate::cqrs::{commands::*, CommandHandler, EventBus};
 use crate::errors::{ApplicationResult, UserError};
-use crate::cqrs::{
-    CommandHandler,
-    commands::*,
-    EventBus,
-};
-use domain::entities::chatroom::{ChatRoom, ChatRoomStatus};
-use domain::entities::message::Message;
-use domain::entities::room_member::{RoomMember, MemberRole};
-use std::sync::Arc;
-use std::collections::HashMap;
-use tokio::sync::RwLock;
-use uuid::Uuid;
 use async_trait::async_trait;
 use bcrypt;
+use domain::entities::chatroom::{ChatRoom, ChatRoomStatus};
+use domain::entities::message::Message;
+use domain::entities::room_member::{MemberRole, RoomMember};
+use std::collections::HashMap;
+use std::sync::Arc;
+use tokio::sync::RwLock;
 use tracing::info;
+use uuid::Uuid;
 
 /// 聊天室仓储接口
 #[async_trait]
@@ -35,7 +31,11 @@ pub trait ChatRoomRepository: Send + Sync {
 pub trait MessageRepository: Send + Sync {
     async fn save(&self, message: Message) -> ApplicationResult<Message>;
     async fn find_by_id(&self, message_id: Uuid) -> ApplicationResult<Option<Message>>;
-    async fn find_by_room_id(&self, room_id: Uuid, limit: Option<u32>) -> ApplicationResult<Vec<Message>>;
+    async fn find_by_room_id(
+        &self,
+        room_id: Uuid,
+        limit: Option<u32>,
+    ) -> ApplicationResult<Vec<Message>>;
     async fn delete(&self, message_id: Uuid) -> ApplicationResult<()>;
 }
 
@@ -43,7 +43,11 @@ pub trait MessageRepository: Send + Sync {
 #[async_trait]
 pub trait RoomMemberRepository: Send + Sync {
     async fn save(&self, member: RoomMember) -> ApplicationResult<RoomMember>;
-    async fn find_by_room_and_user(&self, room_id: Uuid, user_id: Uuid) -> ApplicationResult<Option<RoomMember>>;
+    async fn find_by_room_and_user(
+        &self,
+        room_id: Uuid,
+        user_id: Uuid,
+    ) -> ApplicationResult<Option<RoomMember>>;
     async fn find_by_room_id(&self, room_id: Uuid) -> ApplicationResult<Vec<RoomMember>>;
     async fn remove(&self, room_id: Uuid, user_id: Uuid) -> ApplicationResult<()>;
 }
@@ -92,7 +96,10 @@ impl ChatRoomRepository for InMemoryChatRoomRepository {
             room.updated_at = chrono::Utc::now();
             Ok(())
         } else {
-            Err(crate::errors::ApplicationError::NotFound(format!("聊天室不存在: {}", room_id)).into())
+            Err(crate::errors::ApplicationError::NotFound(format!(
+                "聊天室不存在: {}",
+                room_id
+            )))
         }
     }
 
@@ -175,7 +182,11 @@ impl MessageRepository for InMemoryMessageRepository {
         Ok(messages.get(&message_id).cloned())
     }
 
-    async fn find_by_room_id(&self, room_id: Uuid, limit: Option<u32>) -> ApplicationResult<Vec<Message>> {
+    async fn find_by_room_id(
+        &self,
+        room_id: Uuid,
+        limit: Option<u32>,
+    ) -> ApplicationResult<Vec<Message>> {
         let messages = self.messages.read().await;
         let room_messages = self.room_messages.read().await;
 
@@ -206,7 +217,7 @@ impl MessageRepository for InMemoryMessageRepository {
 /// 内存房间成员仓储实现
 pub struct InMemoryRoomMemberRepository {
     members: Arc<RwLock<HashMap<(Uuid, Uuid), RoomMember>>>, // (room_id, user_id) -> member
-    room_members: Arc<RwLock<HashMap<Uuid, Vec<Uuid>>>>, // room_id -> user_ids
+    room_members: Arc<RwLock<HashMap<Uuid, Vec<Uuid>>>>,     // room_id -> user_ids
 }
 
 impl Default for InMemoryRoomMemberRepository {
@@ -250,7 +261,11 @@ impl RoomMemberRepository for InMemoryRoomMemberRepository {
         Ok(member)
     }
 
-    async fn find_by_room_and_user(&self, room_id: Uuid, user_id: Uuid) -> ApplicationResult<Option<RoomMember>> {
+    async fn find_by_room_and_user(
+        &self,
+        room_id: Uuid,
+        user_id: Uuid,
+    ) -> ApplicationResult<Option<RoomMember>> {
         let members = self.members.read().await;
         let key = (room_id, user_id);
         Ok(members.get(&key).cloned())
@@ -307,15 +322,21 @@ impl ChatRoomCommandHandler {
     /// 验证房间名称
     fn validate_room_name(name: &str) -> ApplicationResult<()> {
         if name.is_empty() {
-            return Err(crate::errors::ApplicationError::Validation("房间名称不能为空".to_string()));
+            return Err(crate::errors::ApplicationError::Validation(
+                "房间名称不能为空".to_string(),
+            ));
         }
 
         if name.len() < 2 {
-            return Err(crate::errors::ApplicationError::Validation("房间名称长度至少2个字符".to_string()));
+            return Err(crate::errors::ApplicationError::Validation(
+                "房间名称长度至少2个字符".to_string(),
+            ));
         }
 
         if name.len() > 100 {
-            return Err(crate::errors::ApplicationError::Validation("房间名称长度不能超过100个字符".to_string()));
+            return Err(crate::errors::ApplicationError::Validation(
+                "房间名称长度不能超过100个字符".to_string(),
+            ));
         }
 
         Ok(())
@@ -324,11 +345,15 @@ impl ChatRoomCommandHandler {
     /// 验证消息内容
     fn validate_message_content(content: &str) -> ApplicationResult<()> {
         if content.is_empty() {
-            return Err(crate::errors::ApplicationError::Validation("消息内容不能为空".to_string()));
+            return Err(crate::errors::ApplicationError::Validation(
+                "消息内容不能为空".to_string(),
+            ));
         }
 
         if content.len() > 10000 {
-            return Err(crate::errors::ApplicationError::Validation("消息长度不能超过10000个字符".to_string()));
+            return Err(crate::errors::ApplicationError::Validation(
+                "消息长度不能超过10000个字符".to_string(),
+            ));
         }
 
         Ok(())
@@ -338,8 +363,9 @@ impl ChatRoomCommandHandler {
     async fn hash_password(&self, password: &str) -> ApplicationResult<String> {
         let password = password.to_string();
         tokio::task::spawn_blocking(move || {
-            bcrypt::hash(&password, bcrypt::DEFAULT_COST)
-                .map_err(|e| crate::errors::ApplicationError::Infrastructure(format!("密码哈希失败: {}", e)))
+            bcrypt::hash(&password, bcrypt::DEFAULT_COST).map_err(|e| {
+                crate::errors::ApplicationError::Infrastructure(format!("密码哈希失败: {}", e))
+            })
         })
         .await
         .map_err(|e| {
@@ -352,8 +378,9 @@ impl ChatRoomCommandHandler {
         let password = password.to_string();
         let hash = hash.to_string();
         tokio::task::spawn_blocking(move || {
-            bcrypt::verify(&password, &hash)
-                .map_err(|e| crate::errors::ApplicationError::Infrastructure(format!("密码验证失败: {}", e)))
+            bcrypt::verify(&password, &hash).map_err(|e| {
+                crate::errors::ApplicationError::Infrastructure(format!("密码验证失败: {}", e))
+            })
         })
         .await
         .map_err(|e| {
@@ -371,17 +398,20 @@ impl CommandHandler<CreateChatRoomCommand> for ChatRoomCommandHandler {
         Self::validate_room_name(&command.name)?;
 
         // 验证用户存在
-        let _owner = self.user_repository
+        let _owner = self
+            .user_repository
             .find_by_id(command.owner_id)
             .await?
-            .ok_or_else(|| UserError::UserNotFound(command.owner_id))?;
+            .ok_or(UserError::UserNotFound(command.owner_id))?;
 
         // 哈希密码（如果是私密房间）
         let password_hash = if command.is_private {
             if let Some(ref password) = command.password {
                 Some(self.hash_password(password).await?)
             } else {
-                return Err(crate::errors::ApplicationError::Validation("私密房间必须设置密码".to_string()));
+                return Err(crate::errors::ApplicationError::Validation(
+                    "私密房间必须设置密码".to_string(),
+                ));
             }
         } else {
             None
@@ -390,8 +420,9 @@ impl CommandHandler<CreateChatRoomCommand> for ChatRoomCommandHandler {
         // 创建聊天室
         let room = if command.is_private {
             // 私密房间需要密码哈希
-            let password = password_hash.as_ref()
-                .ok_or_else(|| crate::errors::ApplicationError::Validation("私密房间需要密码".to_string()))?;
+            let password = password_hash.as_ref().ok_or_else(|| {
+                crate::errors::ApplicationError::Validation("私密房间需要密码".to_string())
+            })?;
             ChatRoom::new_private(
                 command.name,
                 command.description,
@@ -412,11 +443,7 @@ impl CommandHandler<CreateChatRoomCommand> for ChatRoomCommandHandler {
         let saved_room = self.room_repository.save(room).await?;
 
         // 创建房主成员记录
-        let owner_member = RoomMember::new(
-            saved_room.id,
-            command.owner_id,
-            MemberRole::Owner,
-        );
+        let owner_member = RoomMember::new(saved_room.id, command.owner_id, MemberRole::Owner);
 
         self.member_repository.save(owner_member).await?;
 
@@ -428,28 +455,46 @@ impl CommandHandler<CreateChatRoomCommand> for ChatRoomCommandHandler {
 #[async_trait]
 impl CommandHandler<JoinChatRoomCommand> for ChatRoomCommandHandler {
     async fn handle(&self, command: JoinChatRoomCommand) -> ApplicationResult<()> {
-        info!("处理加入聊天室命令: 用户 {} 加入房间 {}", command.user_id, command.room_id);
+        info!(
+            "处理加入聊天室命令: 用户 {} 加入房间 {}",
+            command.user_id, command.room_id
+        );
 
         // 验证用户存在
-        let _user = self.user_repository
+        let _user = self
+            .user_repository
             .find_by_id(command.user_id)
             .await?
-            .ok_or_else(|| UserError::UserNotFound(command.user_id))?;
+            .ok_or(UserError::UserNotFound(command.user_id))?;
 
         // 获取聊天室
-        let mut room = self.room_repository
+        let mut room = self
+            .room_repository
             .find_by_id(command.room_id)
             .await?
-            .ok_or_else(|| crate::errors::ApplicationError::NotFound(format!("聊天室不存在: {}", command.room_id)))?;
+            .ok_or_else(|| {
+                crate::errors::ApplicationError::NotFound(format!(
+                    "聊天室不存在: {}",
+                    command.room_id
+                ))
+            })?;
 
         // 检查房间状态
         if room.status != ChatRoomStatus::Active {
-            return Err(crate::errors::ApplicationError::Validation("房间不可用".to_string()));
+            return Err(crate::errors::ApplicationError::Validation(
+                "房间不可用".to_string(),
+            ));
         }
 
         // 检查用户是否已在房间中
-        if self.room_repository.is_user_in_room(command.room_id, command.user_id).await? {
-            return Err(crate::errors::ApplicationError::Validation("用户已在房间中".to_string()));
+        if self
+            .room_repository
+            .is_user_in_room(command.room_id, command.user_id)
+            .await?
+        {
+            return Err(crate::errors::ApplicationError::Validation(
+                "用户已在房间中".to_string(),
+            ));
         }
 
         // 验证私密房间密码
@@ -458,10 +503,14 @@ impl CommandHandler<JoinChatRoomCommand> for ChatRoomCommandHandler {
                 if let Some(ref password) = command.password {
                     let is_valid = self.verify_password(password, password_hash).await?;
                     if !is_valid {
-                        return Err(crate::errors::ApplicationError::Validation("房间密码错误".to_string()));
+                        return Err(crate::errors::ApplicationError::Validation(
+                            "房间密码错误".to_string(),
+                        ));
                     }
                 } else {
-                    return Err(crate::errors::ApplicationError::Validation("私密房间需要密码".to_string()));
+                    return Err(crate::errors::ApplicationError::Validation(
+                        "私密房间需要密码".to_string(),
+                    ));
                 }
             }
         }
@@ -469,16 +518,14 @@ impl CommandHandler<JoinChatRoomCommand> for ChatRoomCommandHandler {
         // 检查房间成员数量限制
         if let Some(max_members) = room.max_members {
             if room.member_count >= max_members {
-                return Err(crate::errors::ApplicationError::Validation("房间已满".to_string()));
+                return Err(crate::errors::ApplicationError::Validation(
+                    "房间已满".to_string(),
+                ));
             }
         }
 
         // 创建成员记录
-        let member = RoomMember::new(
-            command.room_id,
-            command.user_id,
-            MemberRole::Member,
-        );
+        let member = RoomMember::new(command.room_id, command.user_id, MemberRole::Member);
 
         self.member_repository.save(member).await?;
 
@@ -495,26 +542,45 @@ impl CommandHandler<JoinChatRoomCommand> for ChatRoomCommandHandler {
 #[async_trait]
 impl CommandHandler<LeaveChatRoomCommand> for ChatRoomCommandHandler {
     async fn handle(&self, command: LeaveChatRoomCommand) -> ApplicationResult<()> {
-        info!("处理离开聊天室命令: 用户 {} 离开房间 {}", command.user_id, command.room_id);
+        info!(
+            "处理离开聊天室命令: 用户 {} 离开房间 {}",
+            command.user_id, command.room_id
+        );
 
         // 验证用户在房间中
-        if !self.room_repository.is_user_in_room(command.room_id, command.user_id).await? {
-            return Err(crate::errors::ApplicationError::Validation("用户不在房间中".to_string()));
+        if !self
+            .room_repository
+            .is_user_in_room(command.room_id, command.user_id)
+            .await?
+        {
+            return Err(crate::errors::ApplicationError::Validation(
+                "用户不在房间中".to_string(),
+            ));
         }
 
         // 获取聊天室
-        let mut room = self.room_repository
+        let mut room = self
+            .room_repository
             .find_by_id(command.room_id)
             .await?
-            .ok_or_else(|| crate::errors::ApplicationError::NotFound(format!("聊天室不存在: {}", command.room_id)))?;
+            .ok_or_else(|| {
+                crate::errors::ApplicationError::NotFound(format!(
+                    "聊天室不存在: {}",
+                    command.room_id
+                ))
+            })?;
 
         // 检查是否是房主（房主不能直接离开，需要先转让或删除房间）
         if room.owner_id == command.user_id {
-            return Err(crate::errors::ApplicationError::Validation("房主不能离开房间，请先转让房间或删除房间".to_string()));
+            return Err(crate::errors::ApplicationError::Validation(
+                "房主不能离开房间，请先转让房间或删除房间".to_string(),
+            ));
         }
 
         // 移除成员记录
-        self.member_repository.remove(command.room_id, command.user_id).await?;
+        self.member_repository
+            .remove(command.room_id, command.user_id)
+            .await?;
 
         // 更新房间成员数量
         if room.member_count > 0 {
@@ -531,26 +597,43 @@ impl CommandHandler<LeaveChatRoomCommand> for ChatRoomCommandHandler {
 #[async_trait]
 impl CommandHandler<SendMessageCommand> for ChatRoomCommandHandler {
     async fn handle(&self, command: SendMessageCommand) -> ApplicationResult<Message> {
-        info!("处理发送消息命令: 用户 {} 在房间 {} 发送消息", command.user_id, command.room_id);
+        info!(
+            "处理发送消息命令: 用户 {} 在房间 {} 发送消息",
+            command.user_id, command.room_id
+        );
 
         // 验证消息内容
         Self::validate_message_content(&command.content)?;
 
         // 验证用户在房间中
-        if !self.room_repository.is_user_in_room(command.room_id, command.user_id).await? {
-            return Err(crate::errors::ApplicationError::Validation("用户不在房间中".to_string()));
+        if !self
+            .room_repository
+            .is_user_in_room(command.room_id, command.user_id)
+            .await?
+        {
+            return Err(crate::errors::ApplicationError::Validation(
+                "用户不在房间中".to_string(),
+            ));
         }
 
         // 验证回复消息（如果有）
         if let Some(reply_to_id) = command.reply_to_message_id {
-            let reply_message = self.message_repository
+            let reply_message = self
+                .message_repository
                 .find_by_id(reply_to_id)
                 .await?
-                .ok_or_else(|| crate::errors::ApplicationError::NotFound(format!("回复的消息不存在: {}", reply_to_id)))?;
+                .ok_or_else(|| {
+                    crate::errors::ApplicationError::NotFound(format!(
+                        "回复的消息不存在: {}",
+                        reply_to_id
+                    ))
+                })?;
 
             // 确保回复的消息在同一个房间
             if reply_message.room_id != command.room_id {
-                return Err(crate::errors::ApplicationError::Validation("只能回复同一房间的消息".to_string()));
+                return Err(crate::errors::ApplicationError::Validation(
+                    "只能回复同一房间的消息".to_string(),
+                ));
             }
         }
 
@@ -563,18 +646,17 @@ impl CommandHandler<SendMessageCommand> for ChatRoomCommandHandler {
                 reply_to_id,
             )
         } else {
-            Message::new_text(
-                command.room_id,
-                command.user_id,
-                command.content,
-            )
+            Message::new_text(command.room_id, command.user_id, command.content)
         }
         .map_err(crate::errors::ApplicationError::from)?;
 
         // 保存消息
         let saved_message = self.message_repository.save(message).await?;
 
-        info!("消息发送成功: {} ({})", saved_message.content, saved_message.id);
+        info!(
+            "消息发送成功: {} ({})",
+            saved_message.content, saved_message.id
+        );
         Ok(saved_message)
     }
 }
@@ -585,19 +667,30 @@ impl CommandHandler<UpdateChatRoomCommand> for ChatRoomCommandHandler {
         info!("处理更新聊天室命令: {}", command.room_id);
 
         // 获取聊天室
-        let mut room = self.room_repository
+        let mut room = self
+            .room_repository
             .find_by_id(command.room_id)
             .await?
-            .ok_or_else(|| crate::errors::ApplicationError::NotFound(format!("聊天室不存在: {}", command.room_id)))?;
+            .ok_or_else(|| {
+                crate::errors::ApplicationError::NotFound(format!(
+                    "聊天室不存在: {}",
+                    command.room_id
+                ))
+            })?;
 
         // 验证权限（只有房主或管理员可以更新）
-        let member = self.member_repository
+        let member = self
+            .member_repository
             .find_by_room_and_user(command.room_id, command.user_id)
             .await?
-            .ok_or_else(|| crate::errors::ApplicationError::Validation("用户不在房间中".to_string()))?;
+            .ok_or_else(|| {
+                crate::errors::ApplicationError::Validation("用户不在房间中".to_string())
+            })?;
 
         if member.role != MemberRole::Owner && member.role != MemberRole::Admin {
-            return Err(crate::errors::ApplicationError::Validation("没有权限更新房间信息".to_string()));
+            return Err(crate::errors::ApplicationError::Validation(
+                "没有权限更新房间信息".to_string(),
+            ));
         }
 
         // 更新房间信息
@@ -615,10 +708,11 @@ impl CommandHandler<UpdateChatRoomCommand> for ChatRoomCommandHandler {
         }
 
         if let Some(max_members) = command.max_members {
-            if max_members > 0 && (max_members as u32) < room.member_count {
-                return Err(crate::errors::ApplicationError::Validation(
-                    format!("最大成员数不能少于当前成员数: {}", room.member_count)
-                ));
+            if max_members > 0 && max_members < room.member_count {
+                return Err(crate::errors::ApplicationError::Validation(format!(
+                    "最大成员数不能少于当前成员数: {}",
+                    room.member_count
+                )));
             }
             room.max_members = Some(max_members);
             updated = true;
@@ -641,23 +735,36 @@ impl CommandHandler<DeleteChatRoomCommand> for ChatRoomCommandHandler {
         info!("处理删除聊天室命令: {}", command.room_id);
 
         // 获取聊天室
-        let room = self.room_repository
+        let room = self
+            .room_repository
             .find_by_id(command.room_id)
             .await?
-            .ok_or_else(|| crate::errors::ApplicationError::NotFound(format!("聊天室不存在: {}", command.room_id)))?;
+            .ok_or_else(|| {
+                crate::errors::ApplicationError::NotFound(format!(
+                    "聊天室不存在: {}",
+                    command.room_id
+                ))
+            })?;
 
         // 验证权限（只有房主可以删除）
         if room.owner_id != command.user_id {
-            return Err(crate::errors::ApplicationError::Validation("只有房主可以删除房间".to_string()));
+            return Err(crate::errors::ApplicationError::Validation(
+                "只有房主可以删除房间".to_string(),
+            ));
         }
 
         // 软删除房间
         self.room_repository.delete(command.room_id).await?;
 
         // 移除所有成员记录
-        let members = self.member_repository.find_by_room_id(command.room_id).await?;
+        let members = self
+            .member_repository
+            .find_by_room_id(command.room_id)
+            .await?;
         for member in members {
-            self.member_repository.remove(command.room_id, member.user_id).await?;
+            self.member_repository
+                .remove(command.room_id, member.user_id)
+                .await?;
         }
 
         info!("聊天室删除成功: {}", command.room_id);
@@ -671,14 +778,22 @@ impl CommandHandler<UpdateMessageCommand> for ChatRoomCommandHandler {
         info!("处理更新消息命令: {}", command.message_id);
 
         // 获取消息
-        let mut message = self.message_repository
+        let mut message = self
+            .message_repository
             .find_by_id(command.message_id)
             .await?
-            .ok_or_else(|| crate::errors::ApplicationError::NotFound(format!("消息不存在: {}", command.message_id)))?;
+            .ok_or_else(|| {
+                crate::errors::ApplicationError::NotFound(format!(
+                    "消息不存在: {}",
+                    command.message_id
+                ))
+            })?;
 
         // 验证权限（只有消息发送者可以修改）
         if message.sender_id != command.user_id {
-            return Err(crate::errors::ApplicationError::Validation("只能修改自己发送的消息".to_string()));
+            return Err(crate::errors::ApplicationError::Validation(
+                "只能修改自己发送的消息".to_string(),
+            ));
         }
 
         // 验证消息内容
@@ -702,10 +817,16 @@ impl CommandHandler<DeleteMessageCommand> for ChatRoomCommandHandler {
         info!("处理删除消息命令: {}", command.message_id);
 
         // 获取消息
-        let message = self.message_repository
+        let message = self
+            .message_repository
             .find_by_id(command.message_id)
             .await?
-            .ok_or_else(|| crate::errors::ApplicationError::NotFound(format!("消息不存在: {}", command.message_id)))?;
+            .ok_or_else(|| {
+                crate::errors::ApplicationError::NotFound(format!(
+                    "消息不存在: {}",
+                    command.message_id
+                ))
+            })?;
 
         // 验证权限（消息发送者或房间管理员可以删除）
         let can_delete = if message.sender_id == command.user_id {
@@ -713,7 +834,8 @@ impl CommandHandler<DeleteMessageCommand> for ChatRoomCommandHandler {
             true
         } else {
             // 检查是否是房间管理员或房主
-            if let Some(member) = self.member_repository
+            if let Some(member) = self
+                .member_repository
                 .find_by_room_and_user(message.room_id, command.user_id)
                 .await?
             {
@@ -724,7 +846,9 @@ impl CommandHandler<DeleteMessageCommand> for ChatRoomCommandHandler {
         };
 
         if !can_delete {
-            return Err(crate::errors::ApplicationError::Validation("没有权限删除此消息".to_string()));
+            return Err(crate::errors::ApplicationError::Validation(
+                "没有权限删除此消息".to_string(),
+            ));
         }
 
         // 删除消息

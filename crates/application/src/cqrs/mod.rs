@@ -5,23 +5,23 @@
 //! - 命令总线、查询总线、事件总线
 //! - 处理器接口
 
-pub mod commands;
-pub mod queries;
-pub mod handlers;
-pub mod dtos;
-pub mod buses;
-pub mod events;
-pub mod services;
-pub mod container;
 pub mod application;
+pub mod buses;
+pub mod commands;
+pub mod container;
+pub mod dtos;
+pub mod events;
+pub mod handlers;
+pub mod queries;
+pub mod services;
 
-pub use commands::*;
-pub use queries::*;
-pub use handlers::*;
-pub use dtos::*;
-pub use services::*;
-pub use container::*;
 pub use application::*;
+pub use commands::*;
+pub use container::*;
+pub use dtos::*;
+pub use handlers::*;
+pub use queries::*;
+pub use services::*;
 // pub use buses::*;
 // pub use events::*;
 

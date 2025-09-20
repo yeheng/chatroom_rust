@@ -4,11 +4,11 @@ use crate::db::DbPool;
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use domain::{
-    entities::room_member::{RoomMember, MemberRole},
+    entities::room_member::{MemberRole, RoomMember},
     errors::{DomainError, DomainResult},
     repositories::{
-        RoomMemberRepository, RoomMemberSearchParams, RoomMemberStatistics, MemberPermissions,
-        Pagination, PaginatedResult, SortConfig,
+        MemberPermissions, PaginatedResult, Pagination, RoomMemberRepository,
+        RoomMemberSearchParams, RoomMemberStatistics, SortConfig,
     },
 };
 use sqlx::{query, query_as, FromRow, Row};
@@ -69,7 +69,7 @@ impl From<&RoomMember> for DbRoomMember {
                 domain::entities::room_member::MemberRole::Member => "member".to_string(),
                 domain::entities::room_member::MemberRole::Bot => "bot".to_string(),
             },
-            is_muted: Some(false), // 默认未静音
+            is_muted: Some(false),             // 默认未静音
             notifications_enabled: Some(true), // 默认启用通知
             last_read_message_id: None,
             joined_at: member.joined_at,
@@ -170,7 +170,11 @@ impl RoomMemberRepository for PostgresRoomMemberRepository {
         Ok(result.into())
     }
 
-    async fn find_by_room_and_user(&self, room_id: Uuid, user_id: Uuid) -> DomainResult<Option<RoomMember>> {
+    async fn find_by_room_and_user(
+        &self,
+        room_id: Uuid,
+        user_id: Uuid,
+    ) -> DomainResult<Option<RoomMember>> {
         let result = query_as::<_, DbRoomMember>(
             r#"
             SELECT room_id, user_id, role, is_muted, notifications_enabled, last_read_message_id, joined_at, custom_permissions
@@ -208,7 +212,12 @@ impl RoomMemberRepository for PostgresRoomMemberRepository {
         Ok(result.into())
     }
 
-    async fn update_role(&self, room_id: Uuid, user_id: Uuid, role: MemberRole) -> DomainResult<()> {
+    async fn update_role(
+        &self,
+        room_id: Uuid,
+        user_id: Uuid,
+        role: MemberRole,
+    ) -> DomainResult<()> {
         query("UPDATE room_members SET role = $3 WHERE room_id = $1 AND user_id = $2")
             .bind(room_id)
             .bind(user_id)
@@ -232,7 +241,12 @@ impl RoomMemberRepository for PostgresRoomMemberRepository {
         Ok(())
     }
 
-    async fn set_notifications(&self, room_id: Uuid, user_id: Uuid, enabled: bool) -> DomainResult<()> {
+    async fn set_notifications(
+        &self,
+        room_id: Uuid,
+        user_id: Uuid,
+        enabled: bool,
+    ) -> DomainResult<()> {
         query("UPDATE room_members SET notifications_enabled = $3 WHERE room_id = $1 AND user_id = $2")
             .bind(room_id)
             .bind(user_id)
@@ -244,14 +258,21 @@ impl RoomMemberRepository for PostgresRoomMemberRepository {
         Ok(())
     }
 
-    async fn update_last_read(&self, room_id: Uuid, user_id: Uuid, message_id: Uuid) -> DomainResult<()> {
-        query("UPDATE room_members SET last_read_message_id = $3 WHERE room_id = $1 AND user_id = $2")
-            .bind(room_id)
-            .bind(user_id)
-            .bind(message_id)
-            .execute(&*self.pool)
-            .await
-            .map_err(|e| DomainError::database_error(e.to_string()))?;
+    async fn update_last_read(
+        &self,
+        room_id: Uuid,
+        user_id: Uuid,
+        message_id: Uuid,
+    ) -> DomainResult<()> {
+        query(
+            "UPDATE room_members SET last_read_message_id = $3 WHERE room_id = $1 AND user_id = $2",
+        )
+        .bind(room_id)
+        .bind(user_id)
+        .bind(message_id)
+        .execute(&*self.pool)
+        .await
+        .map_err(|e| DomainError::database_error(e.to_string()))?;
 
         Ok(())
     }
@@ -267,7 +288,11 @@ impl RoomMemberRepository for PostgresRoomMemberRepository {
         Ok(result.rows_affected() > 0)
     }
 
-    async fn find_by_room(&self, room_id: Uuid, pagination: Pagination) -> DomainResult<PaginatedResult<RoomMember>> {
+    async fn find_by_room(
+        &self,
+        room_id: Uuid,
+        pagination: Pagination,
+    ) -> DomainResult<PaginatedResult<RoomMember>> {
         // 获取总数
         let total_count: i64 = query("SELECT COUNT(*) FROM room_members WHERE room_id = $1")
             .bind(room_id)
@@ -295,10 +320,18 @@ impl RoomMemberRepository for PostgresRoomMemberRepository {
 
         let members: Vec<RoomMember> = members.into_iter().map(|m| m.into()).collect();
 
-        Ok(PaginatedResult::new(members, total_count as u64, pagination))
+        Ok(PaginatedResult::new(
+            members,
+            total_count as u64,
+            pagination,
+        ))
     }
 
-    async fn find_by_user(&self, user_id: Uuid, pagination: Pagination) -> DomainResult<PaginatedResult<RoomMember>> {
+    async fn find_by_user(
+        &self,
+        user_id: Uuid,
+        pagination: Pagination,
+    ) -> DomainResult<PaginatedResult<RoomMember>> {
         // 获取总数
         let total_count: i64 = query("SELECT COUNT(*) FROM room_members WHERE user_id = $1")
             .bind(user_id)
@@ -326,7 +359,11 @@ impl RoomMemberRepository for PostgresRoomMemberRepository {
 
         let members: Vec<RoomMember> = members.into_iter().map(|m| m.into()).collect();
 
-        Ok(PaginatedResult::new(members, total_count as u64, pagination))
+        Ok(PaginatedResult::new(
+            members,
+            total_count as u64,
+            pagination,
+        ))
     }
 
     async fn find_by_room_and_role(
@@ -336,13 +373,14 @@ impl RoomMemberRepository for PostgresRoomMemberRepository {
         pagination: Pagination,
     ) -> DomainResult<PaginatedResult<RoomMember>> {
         // 获取总数
-        let total_count: i64 = query("SELECT COUNT(*) FROM room_members WHERE room_id = $1 AND role = $2")
-            .bind(room_id)
-            .bind(member_role_to_string(role.clone()))
-            .fetch_one(&*self.pool)
-            .await
-            .map_err(|e| DomainError::database_error(e.to_string()))?
-            .get(0);
+        let total_count: i64 =
+            query("SELECT COUNT(*) FROM room_members WHERE room_id = $1 AND role = $2")
+                .bind(room_id)
+                .bind(member_role_to_string(role.clone()))
+                .fetch_one(&*self.pool)
+                .await
+                .map_err(|e| DomainError::database_error(e.to_string()))?
+                .get(0);
 
         // 获取成员
         let members: Vec<DbRoomMember> = query_as(
@@ -364,17 +402,22 @@ impl RoomMemberRepository for PostgresRoomMemberRepository {
 
         let members: Vec<RoomMember> = members.into_iter().map(|m| m.into()).collect();
 
-        Ok(PaginatedResult::new(members, total_count as u64, pagination))
+        Ok(PaginatedResult::new(
+            members,
+            total_count as u64,
+            pagination,
+        ))
     }
 
     async fn is_member(&self, room_id: Uuid, user_id: Uuid) -> DomainResult<bool> {
-        let count: i64 = query("SELECT COUNT(*) FROM room_members WHERE room_id = $1 AND user_id = $2")
-            .bind(room_id)
-            .bind(user_id)
-            .fetch_one(&*self.pool)
-            .await
-            .map_err(|e| DomainError::database_error(e.to_string()))?
-            .get(0);
+        let count: i64 =
+            query("SELECT COUNT(*) FROM room_members WHERE room_id = $1 AND user_id = $2")
+                .bind(room_id)
+                .bind(user_id)
+                .fetch_one(&*self.pool)
+                .await
+                .map_err(|e| DomainError::database_error(e.to_string()))?
+                .get(0);
 
         Ok(count > 0)
     }
@@ -393,7 +436,11 @@ impl RoomMemberRepository for PostgresRoomMemberRepository {
         }
     }
 
-    async fn get_member_permissions(&self, room_id: Uuid, user_id: Uuid) -> DomainResult<MemberPermissions> {
+    async fn get_member_permissions(
+        &self,
+        room_id: Uuid,
+        user_id: Uuid,
+    ) -> DomainResult<MemberPermissions> {
         let member = self.find_by_room_and_user(room_id, user_id).await?;
         match member {
             Some(member) => {
@@ -401,8 +448,8 @@ impl RoomMemberRepository for PostgresRoomMemberRepository {
                 let is_admin = member.is_admin();
 
                 Ok(MemberPermissions {
-                    can_send_messages: true, // 所有成员都可以发消息
-                    can_edit_messages: true, // 可以编辑自己的消息
+                    can_send_messages: true,       // 所有成员都可以发消息
+                    can_edit_messages: true,       // 可以编辑自己的消息
                     can_delete_messages: is_admin, // 管理员可以删除消息
                     can_kick_members: is_admin,
                     can_ban_members: is_admin,
@@ -446,7 +493,7 @@ impl RoomMemberRepository for PostgresRoomMemberRepository {
             FROM room_members rm
             JOIN users u ON rm.user_id = u.id
             WHERE rm.room_id = $1 AND u.last_active_at > NOW() - INTERVAL '15 minutes'
-            "#
+            "#,
         )
         .bind(room_id)
         .fetch_one(&*self.pool)
@@ -528,7 +575,11 @@ impl RoomMemberRepository for PostgresRoomMemberRepository {
 
         let base_query = format!(
             "FROM room_members {}",
-            if where_clause.is_empty() { "WHERE 1=1".to_string() } else { where_clause }
+            if where_clause.is_empty() {
+                "WHERE 1=1".to_string()
+            } else {
+                where_clause
+            }
         );
 
         // 获取总数
@@ -555,7 +606,11 @@ impl RoomMemberRepository for PostgresRoomMemberRepository {
 
         let members: Vec<RoomMember> = members.into_iter().map(|m| m.into()).collect();
 
-        Ok(PaginatedResult::new(members, total_count as u64, pagination))
+        Ok(PaginatedResult::new(
+            members,
+            total_count as u64,
+            pagination,
+        ))
     }
 
     async fn get_statistics(&self, room_id: Uuid) -> DomainResult<RoomMemberStatistics> {
@@ -603,7 +658,7 @@ impl RoomMemberRepository for PostgresRoomMemberRepository {
             AND (rm.last_read_message_id IS NULL OR m.created_at > (
                 SELECT created_at FROM messages WHERE id = rm.last_read_message_id
             ))
-            "#
+            "#,
         )
         .bind(room_id)
         .bind(user_id)
@@ -642,26 +697,38 @@ impl RoomMemberRepository for PostgresRoomMemberRepository {
         Ok(members.into_iter().map(|m| m.into()).collect())
     }
 
-    async fn update_permissions(&self, room_id: Uuid, user_id: Uuid, permissions: &JsonValue) -> DomainResult<()> {
-        query("UPDATE room_members SET custom_permissions = $3 WHERE room_id = $1 AND user_id = $2")
-            .bind(room_id)
-            .bind(user_id)
-            .bind(permissions.to_string())
-            .execute(&*self.pool)
-            .await
-            .map_err(|e| DomainError::database_error(e.to_string()))?;
+    async fn update_permissions(
+        &self,
+        room_id: Uuid,
+        user_id: Uuid,
+        permissions: &JsonValue,
+    ) -> DomainResult<()> {
+        query(
+            "UPDATE room_members SET custom_permissions = $3 WHERE room_id = $1 AND user_id = $2",
+        )
+        .bind(room_id)
+        .bind(user_id)
+        .bind(permissions.to_string())
+        .execute(&*self.pool)
+        .await
+        .map_err(|e| DomainError::database_error(e.to_string()))?;
 
         Ok(())
     }
 
-    async fn find_muted_members(&self, room_id: Uuid, pagination: Pagination) -> DomainResult<PaginatedResult<RoomMember>> {
+    async fn find_muted_members(
+        &self,
+        room_id: Uuid,
+        pagination: Pagination,
+    ) -> DomainResult<PaginatedResult<RoomMember>> {
         // 获取总数
-        let total_count: i64 = query("SELECT COUNT(*) FROM room_members WHERE room_id = $1 AND is_muted = true")
-            .bind(room_id)
-            .fetch_one(&*self.pool)
-            .await
-            .map_err(|e| DomainError::database_error(e.to_string()))?
-            .get(0);
+        let total_count: i64 =
+            query("SELECT COUNT(*) FROM room_members WHERE room_id = $1 AND is_muted = true")
+                .bind(room_id)
+                .fetch_one(&*self.pool)
+                .await
+                .map_err(|e| DomainError::database_error(e.to_string()))?
+                .get(0);
 
         // 获取静音成员
         let members: Vec<DbRoomMember> = query_as(
@@ -682,7 +749,11 @@ impl RoomMemberRepository for PostgresRoomMemberRepository {
 
         let members: Vec<RoomMember> = members.into_iter().map(|m| m.into()).collect();
 
-        Ok(PaginatedResult::new(members, total_count as u64, pagination))
+        Ok(PaginatedResult::new(
+            members,
+            total_count as u64,
+            pagination,
+        ))
     }
 
     async fn cleanup_inactive_members(&self, inactive_days: u32) -> DomainResult<u64> {
@@ -696,7 +767,7 @@ impl RoomMemberRepository for PostgresRoomMemberRepository {
                 FROM users u
                 WHERE u.last_active_at < NOW() - INTERVAL '$1 days'
             )
-            "#
+            "#,
         )
         .bind(inactive_days as i32)
         .execute(&*self.pool)
@@ -706,4 +777,3 @@ impl RoomMemberRepository for PostgresRoomMemberRepository {
         Ok(result.rows_affected())
     }
 }
-

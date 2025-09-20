@@ -2,18 +2,16 @@
 //!
 //! 处理聊天室相关的查询：查找房间、获取消息历史等
 
-use crate::errors::ApplicationResult;
-use crate::cqrs::{
-    QueryHandler,
-    queries::*,
-    dtos::*,
+use super::chatroom_command_handler::{
+    ChatRoomRepository, MessageRepository, RoomMemberRepository,
 };
+use crate::cqrs::{dtos::*, queries::*, QueryHandler};
+use crate::errors::ApplicationResult;
+use async_trait::async_trait;
 use domain::entities::chatroom::ChatRoom;
 use domain::entities::message::Message;
 use domain::entities::room_member::RoomMember;
-use super::chatroom_command_handler::{ChatRoomRepository, MessageRepository, RoomMemberRepository};
 use std::sync::Arc;
-use async_trait::async_trait;
 
 /// 聊天室查询处理器
 pub struct ChatRoomQueryHandler {
@@ -94,7 +92,8 @@ impl QueryHandler<GetChatRoomByIdQuery> for ChatRoomQueryHandler {
 #[async_trait]
 impl QueryHandler<GetRoomMessagesQuery> for ChatRoomQueryHandler {
     async fn handle(&self, query: GetRoomMessagesQuery) -> ApplicationResult<Vec<MessageDto>> {
-        let messages = self.message_repository
+        let messages = self
+            .message_repository
             .find_by_room_id(query.room_id, query.limit)
             .await?;
 
@@ -110,12 +109,13 @@ impl QueryHandler<GetRoomMessagesQuery> for ChatRoomQueryHandler {
 #[async_trait]
 impl QueryHandler<GetRoomMembersQuery> for ChatRoomQueryHandler {
     async fn handle(&self, query: GetRoomMembersQuery) -> ApplicationResult<Vec<RoomMemberDto>> {
-        let members = self.member_repository.find_by_room_id(query.room_id).await?;
+        let members = self
+            .member_repository
+            .find_by_room_id(query.room_id)
+            .await?;
 
-        let member_dtos: Vec<RoomMemberDto> = members
-            .into_iter()
-            .map(|m| self.member_to_dto(m))
-            .collect();
+        let member_dtos: Vec<RoomMemberDto> =
+            members.into_iter().map(|m| self.member_to_dto(m)).collect();
 
         Ok(member_dtos)
     }
@@ -126,10 +126,7 @@ impl QueryHandler<GetUserRoomsQuery> for ChatRoomQueryHandler {
     async fn handle(&self, query: GetUserRoomsQuery) -> ApplicationResult<Vec<ChatRoomDto>> {
         let rooms = self.room_repository.find_by_user_id(query.user_id).await?;
 
-        let room_dtos: Vec<ChatRoomDto> = rooms
-            .into_iter()
-            .map(|r| self.room_to_dto(r))
-            .collect();
+        let room_dtos: Vec<ChatRoomDto> = rooms.into_iter().map(|r| self.room_to_dto(r)).collect();
 
         Ok(room_dtos)
     }
@@ -150,21 +147,26 @@ impl QueryHandler<SearchPublicRoomsQuery> for ChatRoomQueryHandler {
 
 #[async_trait]
 impl QueryHandler<GetChatRoomDetailQuery> for ChatRoomQueryHandler {
-    async fn handle(&self, query: GetChatRoomDetailQuery) -> ApplicationResult<Option<ChatRoomDetailDto>> {
+    async fn handle(
+        &self,
+        query: GetChatRoomDetailQuery,
+    ) -> ApplicationResult<Option<ChatRoomDetailDto>> {
         let room = match self.room_repository.find_by_id(query.room_id).await? {
             Some(room) => room,
             None => return Ok(None),
         };
 
         // 获取房间成员
-        let members = self.member_repository.find_by_room_id(query.room_id).await?;
-        let member_dtos: Vec<RoomMemberDto> = members
-            .into_iter()
-            .map(|m| self.member_to_dto(m))
-            .collect();
+        let members = self
+            .member_repository
+            .find_by_room_id(query.room_id)
+            .await?;
+        let member_dtos: Vec<RoomMemberDto> =
+            members.into_iter().map(|m| self.member_to_dto(m)).collect();
 
         // 获取最近消息
-        let recent_messages = self.message_repository
+        let recent_messages = self
+            .message_repository
             .find_by_room_id(query.room_id, Some(10))
             .await?;
         let message_dtos: Vec<MessageDto> = recent_messages

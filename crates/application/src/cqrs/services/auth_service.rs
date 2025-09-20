@@ -2,19 +2,18 @@
 //!
 //! 提供用户认证相关的高级业务逻辑
 
-use crate::errors::ApplicationResult;
 use crate::cqrs::{
-    CommandHandler,
-    QueryHandler,
-    commands::{RegisterUserCommand, LoginUserCommand, UpdateUserCommand, UpdateUserStatusCommand},
-    queries::{GetUserByIdQuery, GetUserByEmailQuery, GetUserProfileQuery},
-    dtos::{UserDto, AuthResponseDto, UserProfileDto},
+    commands::{LoginUserCommand, RegisterUserCommand, UpdateUserCommand, UpdateUserStatusCommand},
+    dtos::{AuthResponseDto, UserDto, UserProfileDto},
     handlers::{UserCommandHandler, UserQueryHandler},
+    queries::{GetUserByEmailQuery, GetUserByIdQuery, GetUserProfileQuery},
+    CommandHandler, QueryHandler,
 };
+use crate::errors::ApplicationResult;
 use domain::entities::user::UserStatus;
-use uuid::Uuid;
 use std::sync::Arc;
 use tracing::{info, warn};
+use uuid::Uuid;
 
 /// 基于 CQRS 的认证应用服务
 pub struct CqrsAuthService {
@@ -132,7 +131,10 @@ impl CqrsAuthService {
     }
 
     /// 获取用户完整资料
-    pub async fn get_user_profile(&self, user_id: Uuid) -> ApplicationResult<Option<UserProfileDto>> {
+    pub async fn get_user_profile(
+        &self,
+        user_id: Uuid,
+    ) -> ApplicationResult<Option<UserProfileDto>> {
         let query = GetUserProfileQuery { user_id };
         self.user_query_handler.handle(query).await
     }
@@ -179,10 +181,7 @@ impl CqrsAuthService {
     ) -> ApplicationResult<()> {
         info!("更新用户状态: {} -> {:?}", user_id, status);
 
-        let command = UpdateUserStatusCommand {
-            user_id,
-            status,
-        };
+        let command = UpdateUserStatusCommand { user_id, status };
 
         self.user_command_handler.handle(command).await
     }
@@ -224,7 +223,9 @@ impl CqrsAuthService {
                 expires_in: 3600,
             })
         } else {
-            Err(crate::errors::ApplicationError::Validation("无效的刷新令牌".to_string()))
+            Err(crate::errors::ApplicationError::Validation(
+                "无效的刷新令牌".to_string(),
+            ))
         }
     }
 }

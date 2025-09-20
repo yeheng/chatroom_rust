@@ -2,13 +2,11 @@
 //!
 //! 展示如何使用依赖注入容器来构建完整的 CQRS 应用
 
-use crate::cqrs::{
-    DependencyContainer, ContainerBuilder,
-};
+use crate::cqrs::{ContainerBuilder, DependencyContainer};
 use crate::errors::ApplicationResult;
 use domain::entities::message::MessageType;
+use tracing::{debug, info};
 use uuid::Uuid;
-use tracing::{info, debug};
 
 /// CQRS 应用程序
 ///
@@ -82,13 +80,15 @@ impl CqrsApplication {
     async fn demo_user_registration(&self) -> ApplicationResult<Uuid> {
         let auth_service = self.container.auth_service();
 
-        let auth_response = auth_service.register_user(
-            "demo_user".to_string(),
-            "demo@example.com".to_string(),
-            "password123".to_string(),
-            Some("演示用户".to_string()),
-            None,
-        ).await?;
+        let auth_response = auth_service
+            .register_user(
+                "demo_user".to_string(),
+                "demo@example.com".to_string(),
+                "password123".to_string(),
+                Some("演示用户".to_string()),
+                None,
+            )
+            .await?;
 
         info!("用户注册成功: {}", auth_response.user.username);
         Ok(auth_response.user.id)
@@ -98,14 +98,16 @@ impl CqrsApplication {
     async fn demo_chatroom_creation(&self, owner_id: Uuid) -> ApplicationResult<Uuid> {
         let chatroom_service = self.container.chatroom_service();
 
-        let room = chatroom_service.create_room(
-            "演示聊天室".to_string(),
-            Some("这是一个CQRS演示聊天室".to_string()),
-            owner_id,
-            false, // 公开房间
-            None,  // 无密码
-            Some(100), // 最多100人
-        ).await?;
+        let room = chatroom_service
+            .create_room(
+                "演示聊天室".to_string(),
+                Some("这是一个CQRS演示聊天室".to_string()),
+                owner_id,
+                false,     // 公开房间
+                None,      // 无密码
+                Some(100), // 最多100人
+            )
+            .await?;
 
         info!("聊天室创建成功: {}", room.name);
         Ok(room.id)
@@ -115,13 +117,15 @@ impl CqrsApplication {
     async fn demo_message_sending(&self, user_id: Uuid, room_id: Uuid) -> ApplicationResult<Uuid> {
         let chatroom_service = self.container.chatroom_service();
 
-        let message = chatroom_service.send_message(
-            room_id,
-            user_id,
-            "Hello, CQRS World!".to_string(),
-            MessageType::Text,
-            None,
-        ).await?;
+        let message = chatroom_service
+            .send_message(
+                room_id,
+                user_id,
+                "Hello, CQRS World!".to_string(),
+                MessageType::Text,
+                None,
+            )
+            .await?;
 
         info!("消息发送成功: {}", message.content);
         Ok(message.id)
@@ -139,11 +143,16 @@ impl CqrsApplication {
 
         // 查询聊天室信息
         if let Some(room) = chatroom_service.get_room(room_id).await? {
-            info!("查询到聊天室: {} (成员数: {})", room.name, room.member_count);
+            info!(
+                "查询到聊天室: {} (成员数: {})",
+                room.name, room.member_count
+            );
         }
 
         // 查询房间消息
-        let messages = chatroom_service.get_room_messages(room_id, Some(10)).await?;
+        let messages = chatroom_service
+            .get_room_messages(room_id, Some(10))
+            .await?;
         info!("查询到 {} 条消息", messages.len());
 
         // 查询房间成员

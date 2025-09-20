@@ -4,9 +4,12 @@ use crate::db::DbPool;
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use domain::{
-    FileUpload,
     errors::{DomainError, DomainResult},
-    repositories::{FileUploadRepository, FileSearchParams, FileStatistics, Pagination, PaginatedResult, SortConfig},
+    repositories::{
+        FileSearchParams, FileStatistics, FileUploadRepository, PaginatedResult, Pagination,
+        SortConfig,
+    },
+    FileUpload,
 };
 use sqlx::{query, query_as, FromRow, Row};
 use std::sync::Arc;
@@ -236,7 +239,11 @@ impl FileUploadRepository for PostgresFileUploadRepository {
         Ok(result.rows_affected() > 0)
     }
 
-    async fn find_by_user(&self, user_id: Uuid, pagination: Pagination) -> DomainResult<PaginatedResult<FileUpload>> {
+    async fn find_by_user(
+        &self,
+        user_id: Uuid,
+        pagination: Pagination,
+    ) -> DomainResult<PaginatedResult<FileUpload>> {
         // 获取总数
         let total_count: i64 = query("SELECT COUNT(*) FROM file_uploads WHERE user_id = $1")
             .bind(user_id)
@@ -268,7 +275,11 @@ impl FileUploadRepository for PostgresFileUploadRepository {
         Ok(PaginatedResult::new(files, total_count as u64, pagination))
     }
 
-    async fn find_by_room(&self, room_id: Uuid, pagination: Pagination) -> DomainResult<PaginatedResult<FileUpload>> {
+    async fn find_by_room(
+        &self,
+        room_id: Uuid,
+        pagination: Pagination,
+    ) -> DomainResult<PaginatedResult<FileUpload>> {
         // 获取总数
         let total_count: i64 = query("SELECT COUNT(*) FROM file_uploads WHERE room_id = $1")
             .bind(room_id)
@@ -300,7 +311,10 @@ impl FileUploadRepository for PostgresFileUploadRepository {
         Ok(PaginatedResult::new(files, total_count as u64, pagination))
     }
 
-    async fn find_public_files(&self, pagination: Pagination) -> DomainResult<PaginatedResult<FileUpload>> {
+    async fn find_public_files(
+        &self,
+        pagination: Pagination,
+    ) -> DomainResult<PaginatedResult<FileUpload>> {
         // 获取总数
         let total_count: i64 = query("SELECT COUNT(*) FROM file_uploads WHERE is_public = true")
             .fetch_one(&*self.pool)
@@ -383,7 +397,10 @@ impl FileUploadRepository for PostgresFileUploadRepository {
         Ok(PaginatedResult::new(Vec::new(), 0, pagination))
     }
 
-    async fn find_temporary_files(&self, older_than: DateTime<Utc>) -> DomainResult<Vec<FileUpload>> {
+    async fn find_temporary_files(
+        &self,
+        older_than: DateTime<Utc>,
+    ) -> DomainResult<Vec<FileUpload>> {
         let files: Vec<DbFileUpload> = query_as(
             r#"
             SELECT id, user_id, room_id, filename, original_filename, file_size, mime_type,
@@ -423,7 +440,7 @@ impl FileUploadRepository for PostgresFileUploadRepository {
             r#"
             DELETE FROM file_uploads
             WHERE is_temporary = true AND created_at < NOW() - INTERVAL '$1 hours'
-            "#
+            "#,
         )
         .bind(older_than_hours as i32)
         .execute(&*self.pool)
@@ -434,12 +451,11 @@ impl FileUploadRepository for PostgresFileUploadRepository {
     }
 
     async fn cleanup_expired_files(&self) -> DomainResult<u64> {
-        let result = query(
-            "DELETE FROM file_uploads WHERE expires_at IS NOT NULL AND expires_at < NOW()"
-        )
-        .execute(&*self.pool)
-        .await
-        .map_err(|e| DomainError::database_error(e.to_string()))?;
+        let result =
+            query("DELETE FROM file_uploads WHERE expires_at IS NOT NULL AND expires_at < NOW()")
+                .execute(&*self.pool)
+                .await
+                .map_err(|e| DomainError::database_error(e.to_string()))?;
 
         Ok(result.rows_affected())
     }
@@ -471,7 +487,11 @@ impl FileUploadRepository for PostgresFileUploadRepository {
         })
     }
 
-    async fn find_by_storage_type(&self, storage_type: &str, pagination: Pagination) -> DomainResult<PaginatedResult<FileUpload>> {
+    async fn find_by_storage_type(
+        &self,
+        storage_type: &str,
+        pagination: Pagination,
+    ) -> DomainResult<PaginatedResult<FileUpload>> {
         // 获取总数
         let total_count: i64 = query("SELECT COUNT(*) FROM file_uploads WHERE storage_type = $1")
             .bind(storage_type)
@@ -504,23 +524,25 @@ impl FileUploadRepository for PostgresFileUploadRepository {
     }
 
     async fn calculate_user_storage_usage(&self, user_id: Uuid) -> DomainResult<i64> {
-        let usage: i64 = query("SELECT COALESCE(SUM(file_size), 0) FROM file_uploads WHERE user_id = $1")
-            .bind(user_id)
-            .fetch_one(&*self.pool)
-            .await
-            .map_err(|e| DomainError::database_error(e.to_string()))?
-            .get(0);
+        let usage: i64 =
+            query("SELECT COALESCE(SUM(file_size), 0) FROM file_uploads WHERE user_id = $1")
+                .bind(user_id)
+                .fetch_one(&*self.pool)
+                .await
+                .map_err(|e| DomainError::database_error(e.to_string()))?
+                .get(0);
 
         Ok(usage)
     }
 
     async fn calculate_room_storage_usage(&self, room_id: Uuid) -> DomainResult<i64> {
-        let usage: i64 = query("SELECT COALESCE(SUM(file_size), 0) FROM file_uploads WHERE room_id = $1")
-            .bind(room_id)
-            .fetch_one(&*self.pool)
-            .await
-            .map_err(|e| DomainError::database_error(e.to_string()))?
-            .get(0);
+        let usage: i64 =
+            query("SELECT COALESCE(SUM(file_size), 0) FROM file_uploads WHERE room_id = $1")
+                .bind(room_id)
+                .fetch_one(&*self.pool)
+                .await
+                .map_err(|e| DomainError::database_error(e.to_string()))?
+                .get(0);
 
         Ok(usage)
     }

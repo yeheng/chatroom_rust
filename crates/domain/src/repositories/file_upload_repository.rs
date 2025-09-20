@@ -2,7 +2,7 @@
 
 use crate::entities::FileUpload;
 use crate::errors::DomainResult;
-use crate::repositories::{Pagination, PaginatedResult, SortConfig};
+use crate::repositories::{PaginatedResult, Pagination, SortConfig};
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use uuid::Uuid;
@@ -90,13 +90,24 @@ pub trait FileUploadRepository: Send + Sync {
     async fn delete(&self, file_id: Uuid) -> DomainResult<bool>;
 
     /// 获取用户上传的文件
-    async fn find_by_user(&self, user_id: Uuid, pagination: Pagination) -> DomainResult<PaginatedResult<FileUpload>>;
+    async fn find_by_user(
+        &self,
+        user_id: Uuid,
+        pagination: Pagination,
+    ) -> DomainResult<PaginatedResult<FileUpload>>;
 
     /// 获取房间的文件
-    async fn find_by_room(&self, room_id: Uuid, pagination: Pagination) -> DomainResult<PaginatedResult<FileUpload>>;
+    async fn find_by_room(
+        &self,
+        room_id: Uuid,
+        pagination: Pagination,
+    ) -> DomainResult<PaginatedResult<FileUpload>>;
 
     /// 获取公开文件
-    async fn find_public_files(&self, pagination: Pagination) -> DomainResult<PaginatedResult<FileUpload>>;
+    async fn find_public_files(
+        &self,
+        pagination: Pagination,
+    ) -> DomainResult<PaginatedResult<FileUpload>>;
 
     /// 根据条件搜索文件
     async fn search(
@@ -107,7 +118,10 @@ pub trait FileUploadRepository: Send + Sync {
     ) -> DomainResult<PaginatedResult<FileUpload>>;
 
     /// 获取临时文件列表
-    async fn find_temporary_files(&self, older_than: DateTime<Utc>) -> DomainResult<Vec<FileUpload>>;
+    async fn find_temporary_files(
+        &self,
+        older_than: DateTime<Utc>,
+    ) -> DomainResult<Vec<FileUpload>>;
 
     /// 获取过期文件列表
     async fn find_expired_files(&self) -> DomainResult<Vec<FileUpload>>;
@@ -122,7 +136,11 @@ pub trait FileUploadRepository: Send + Sync {
     async fn get_statistics(&self) -> DomainResult<FileStatistics>;
 
     /// 根据存储类型获取文件
-    async fn find_by_storage_type(&self, storage_type: &str, pagination: Pagination) -> DomainResult<PaginatedResult<FileUpload>>;
+    async fn find_by_storage_type(
+        &self,
+        storage_type: &str,
+        pagination: Pagination,
+    ) -> DomainResult<PaginatedResult<FileUpload>>;
 
     /// 计算用户存储使用量
     async fn calculate_user_storage_usage(&self, user_id: Uuid) -> DomainResult<i64>;
@@ -144,10 +162,18 @@ pub trait FileShareRepository: Send + Sync {
     async fn find_by_token(&self, token: &str) -> DomainResult<Option<FileShare>>;
 
     /// 根据文件ID查找分享
-    async fn find_by_file(&self, file_id: Uuid, pagination: Pagination) -> DomainResult<PaginatedResult<FileShare>>;
+    async fn find_by_file(
+        &self,
+        file_id: Uuid,
+        pagination: Pagination,
+    ) -> DomainResult<PaginatedResult<FileShare>>;
 
     /// 根据分享者查找分享
-    async fn find_by_user(&self, user_id: Uuid, pagination: Pagination) -> DomainResult<PaginatedResult<FileShare>>;
+    async fn find_by_user(
+        &self,
+        user_id: Uuid,
+        pagination: Pagination,
+    ) -> DomainResult<PaginatedResult<FileShare>>;
 
     /// 增加下载计数
     async fn increment_download_count(&self, share_id: Uuid) -> DomainResult<()>;
@@ -159,13 +185,20 @@ pub trait FileShareRepository: Send + Sync {
     async fn delete(&self, share_id: Uuid) -> DomainResult<bool>;
 
     /// 验证分享访问权限
-    async fn validate_access(&self, token: &str, password: Option<&str>) -> DomainResult<Option<(FileUpload, FileShare)>>;
+    async fn validate_access(
+        &self,
+        token: &str,
+        password: Option<&str>,
+    ) -> DomainResult<Option<(FileUpload, FileShare)>>;
 
     /// 清理过期分享链接
     async fn cleanup_expired_shares(&self) -> DomainResult<u64>;
 
     /// 获取活跃分享链接
-    async fn find_active_shares(&self, pagination: Pagination) -> DomainResult<PaginatedResult<FileShare>>;
+    async fn find_active_shares(
+        &self,
+        pagination: Pagination,
+    ) -> DomainResult<PaginatedResult<FileShare>>;
 }
 
 /// 文件访问日志Repository接口
@@ -175,16 +208,28 @@ pub trait FileAccessLogRepository: Send + Sync {
     async fn log_access(&self, log: &FileAccessLog) -> DomainResult<FileAccessLog>;
 
     /// 获取文件访问历史
-    async fn find_by_file(&self, file_id: Uuid, pagination: Pagination) -> DomainResult<PaginatedResult<FileAccessLog>>;
+    async fn find_by_file(
+        &self,
+        file_id: Uuid,
+        pagination: Pagination,
+    ) -> DomainResult<PaginatedResult<FileAccessLog>>;
 
     /// 获取用户访问历史
-    async fn find_by_user(&self, user_id: Uuid, pagination: Pagination) -> DomainResult<PaginatedResult<FileAccessLog>>;
+    async fn find_by_user(
+        &self,
+        user_id: Uuid,
+        pagination: Pagination,
+    ) -> DomainResult<PaginatedResult<FileAccessLog>>;
 
     /// 根据访问类型统计
     async fn count_by_access_type(&self, file_id: Uuid, access_type: &str) -> DomainResult<u64>;
 
     /// 获取文件下载统计
-    async fn get_download_stats(&self, file_id: Uuid, days: u32) -> DomainResult<Vec<(chrono::NaiveDate, u64)>>;
+    async fn get_download_stats(
+        &self,
+        file_id: Uuid,
+        days: u32,
+    ) -> DomainResult<Vec<(chrono::NaiveDate, u64)>>;
 
     /// 清理旧的访问日志
     async fn cleanup_old_logs(&self, older_than: DateTime<Utc>) -> DomainResult<u64>;

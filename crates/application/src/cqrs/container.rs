@@ -6,24 +6,23 @@
 //! - 查询处理器
 //! - 应用服务
 
-use crate::errors::ApplicationResult;
 use crate::cqrs::{
     handlers::{
-        UserCommandHandler, UserQueryHandler,
-        ChatRoomCommandHandler, ChatRoomQueryHandler,
-        OrganizationCommandHandler,
-        user_command_handler::{UserRepository, InMemoryUserRepository},
         chatroom_command_handler::{
-            ChatRoomRepository, MessageRepository, RoomMemberRepository,
-            InMemoryChatRoomRepository, InMemoryMessageRepository, InMemoryRoomMemberRepository,
+            ChatRoomRepository, InMemoryChatRoomRepository, InMemoryMessageRepository,
+            InMemoryRoomMemberRepository, MessageRepository, RoomMemberRepository,
         },
-        organization_command_handler::{OrganizationRepository, InMemoryOrganizationRepository},
+        organization_command_handler::{InMemoryOrganizationRepository, OrganizationRepository},
+        user_command_handler::{InMemoryUserRepository, UserRepository},
+        ChatRoomCommandHandler, ChatRoomQueryHandler, OrganizationCommandHandler,
+        UserCommandHandler, UserQueryHandler,
     },
     services::{CqrsAuthService, CqrsChatRoomService, CqrsOrganizationService},
 };
-use std::sync::Arc;
+use crate::errors::ApplicationResult;
 use std::collections::HashMap;
-use tracing::{info, debug};
+use std::sync::Arc;
+use tracing::{debug, info};
 
 /// 依赖注入容器
 ///
@@ -97,10 +96,14 @@ impl DependencyContainer {
 
         // 创建仓储实例（使用内存实现进行快速原型开发）
         let user_repository = Arc::new(InMemoryUserRepository::new()) as Arc<dyn UserRepository>;
-        let chatroom_repository = Arc::new(InMemoryChatRoomRepository::new()) as Arc<dyn ChatRoomRepository>;
-        let message_repository = Arc::new(InMemoryMessageRepository::new()) as Arc<dyn MessageRepository>;
-        let room_member_repository = Arc::new(InMemoryRoomMemberRepository::new()) as Arc<dyn RoomMemberRepository>;
-        let organization_repository = Arc::new(InMemoryOrganizationRepository::new()) as Arc<dyn OrganizationRepository>;
+        let chatroom_repository =
+            Arc::new(InMemoryChatRoomRepository::new()) as Arc<dyn ChatRoomRepository>;
+        let message_repository =
+            Arc::new(InMemoryMessageRepository::new()) as Arc<dyn MessageRepository>;
+        let room_member_repository =
+            Arc::new(InMemoryRoomMemberRepository::new()) as Arc<dyn RoomMemberRepository>;
+        let organization_repository =
+            Arc::new(InMemoryOrganizationRepository::new()) as Arc<dyn OrganizationRepository>;
 
         // 创建命令处理器
         let user_command_handler = Arc::new(UserCommandHandler::new(user_repository.clone()));
@@ -111,7 +114,7 @@ impl DependencyContainer {
             user_repository.clone(),
         ));
         let organization_command_handler = Arc::new(OrganizationCommandHandler::new(
-            organization_repository.clone()
+            organization_repository.clone(),
         ));
 
         // 创建查询处理器
@@ -250,7 +253,9 @@ impl DependencyContainer {
     where
         T: serde::de::DeserializeOwned,
     {
-        self.config.custom_settings.get(key)
+        self.config
+            .custom_settings
+            .get(key)
             .and_then(|value| serde_json::from_value(value.clone()).ok())
     }
 
@@ -259,10 +264,9 @@ impl DependencyContainer {
     where
         T: serde::Serialize,
     {
-        let json_value = serde_json::to_value(value)
-            .map_err(|e| crate::errors::ApplicationError::Validation(
-                format!("无法序列化配置值: {}", e)
-            ))?;
+        let json_value = serde_json::to_value(value).map_err(|e| {
+            crate::errors::ApplicationError::Validation(format!("无法序列化配置值: {}", e))
+        })?;
         self.config.custom_settings.insert(key, json_value);
         Ok(())
     }
@@ -283,7 +287,8 @@ impl DependencyContainer {
         status.service_status = self.check_services().await?;
 
         // 计算整体健康状态
-        status.overall_healthy = status.repository_status && status.handler_status && status.service_status;
+        status.overall_healthy =
+            status.repository_status && status.handler_status && status.service_status;
 
         debug!("健康检查完成: {:?}", status);
         Ok(status)
@@ -292,22 +297,22 @@ impl DependencyContainer {
     /// 检查仓储状态
     async fn check_repositories(&self) -> ApplicationResult<bool> {
         // 简化实现：检查仓储实例是否存在（通过Arc的引用计数）
-        Ok(Arc::strong_count(&self.user_repository) > 0 &&
-           Arc::strong_count(&self.chatroom_repository) > 0)
+        Ok(Arc::strong_count(&self.user_repository) > 0
+            && Arc::strong_count(&self.chatroom_repository) > 0)
     }
 
     /// 检查处理器状态
     async fn check_handlers(&self) -> ApplicationResult<bool> {
         // 简化实现：检查处理器实例是否存在（通过Arc的引用计数）
-        Ok(Arc::strong_count(&self.user_command_handler) > 0 &&
-           Arc::strong_count(&self.user_query_handler) > 0)
+        Ok(Arc::strong_count(&self.user_command_handler) > 0
+            && Arc::strong_count(&self.user_query_handler) > 0)
     }
 
     /// 检查服务状态
     async fn check_services(&self) -> ApplicationResult<bool> {
         // 简化实现：检查服务实例是否存在（通过Arc的引用计数）
-        Ok(Arc::strong_count(&self.auth_service) > 0 &&
-           Arc::strong_count(&self.chatroom_service) > 0)
+        Ok(Arc::strong_count(&self.auth_service) > 0
+            && Arc::strong_count(&self.chatroom_service) > 0)
     }
 
     /// 优雅关闭容器
@@ -388,10 +393,9 @@ impl ContainerBuilder {
     where
         T: serde::Serialize,
     {
-        let json_value = serde_json::to_value(value)
-            .map_err(|e| crate::errors::ApplicationError::Validation(
-                format!("无法序列化配置值: {}", e)
-            ))?;
+        let json_value = serde_json::to_value(value).map_err(|e| {
+            crate::errors::ApplicationError::Validation(format!("无法序列化配置值: {}", e))
+        })?;
         self.config.custom_settings.insert(key, json_value);
         Ok(self)
     }

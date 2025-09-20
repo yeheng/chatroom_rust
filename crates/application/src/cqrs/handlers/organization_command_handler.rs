@@ -2,19 +2,15 @@
 //!
 //! 处理组织相关的命令：创建组织、添加用户、管理角色等
 
+use crate::cqrs::{commands::*, CommandHandler, EventBus};
 use crate::errors::ApplicationResult;
-use crate::cqrs::{
-    CommandHandler,
-    commands::*,
-    EventBus,
-};
-use domain::organization::{Organization, OrganizationType, OrganizationStatus};
-use std::sync::Arc;
-use std::collections::HashMap;
-use tokio::sync::RwLock;
-use uuid::Uuid;
 use async_trait::async_trait;
+use domain::organization::{Organization, OrganizationStatus, OrganizationType};
+use std::collections::HashMap;
+use std::sync::Arc;
+use tokio::sync::RwLock;
 use tracing::info;
+use uuid::Uuid;
 
 /// 组织仓储接口
 #[async_trait]
@@ -23,7 +19,8 @@ pub trait OrganizationRepository: Send + Sync {
     async fn find_by_id(&self, org_id: Uuid) -> ApplicationResult<Option<Organization>>;
     async fn find_by_owner_id(&self, owner_id: Uuid) -> ApplicationResult<Vec<Organization>>;
     async fn delete(&self, org_id: Uuid) -> ApplicationResult<()>;
-    async fn is_user_in_organization(&self, org_id: Uuid, user_id: Uuid) -> ApplicationResult<bool>;
+    async fn is_user_in_organization(&self, org_id: Uuid, user_id: Uuid)
+        -> ApplicationResult<bool>;
     async fn get_member_count(&self, org_id: Uuid) -> ApplicationResult<u32>;
 }
 
@@ -75,11 +72,18 @@ impl OrganizationRepository for InMemoryOrganizationRepository {
             org.updated_at = chrono::Utc::now();
             Ok(())
         } else {
-            Err(crate::errors::ApplicationError::NotFound(format!("组织不存在: {}", org_id)))
+            Err(crate::errors::ApplicationError::NotFound(format!(
+                "组织不存在: {}",
+                org_id
+            )))
         }
     }
 
-    async fn is_user_in_organization(&self, org_id: Uuid, user_id: Uuid) -> ApplicationResult<bool> {
+    async fn is_user_in_organization(
+        &self,
+        org_id: Uuid,
+        user_id: Uuid,
+    ) -> ApplicationResult<bool> {
         let user_orgs = self.user_orgs.read().await;
         if let Some(org_ids) = user_orgs.get(&user_id) {
             Ok(org_ids.contains(&org_id))
@@ -118,15 +122,21 @@ impl OrganizationCommandHandler {
     /// 验证组织名称
     fn validate_organization_name(name: &str) -> ApplicationResult<()> {
         if name.is_empty() {
-            return Err(crate::errors::ApplicationError::Validation("组织名称不能为空".to_string()));
+            return Err(crate::errors::ApplicationError::Validation(
+                "组织名称不能为空".to_string(),
+            ));
         }
 
         if name.len() < 2 {
-            return Err(crate::errors::ApplicationError::Validation("组织名称长度至少2个字符".to_string()));
+            return Err(crate::errors::ApplicationError::Validation(
+                "组织名称长度至少2个字符".to_string(),
+            ));
         }
 
         if name.len() > 100 {
-            return Err(crate::errors::ApplicationError::Validation("组织名称长度不能超过100个字符".to_string()));
+            return Err(crate::errors::ApplicationError::Validation(
+                "组织名称长度不能超过100个字符".to_string(),
+            ));
         }
 
         Ok(())
@@ -145,7 +155,7 @@ impl CommandHandler<CreateOrganizationCommand> for OrganizationCommandHandler {
         let organization = Organization::new(
             command.name,
             command.description,
-            None, // parent_id
+            None,                      // parent_id
             OrganizationType::Company, // 默认为公司类型
         );
 
@@ -160,26 +170,46 @@ impl CommandHandler<CreateOrganizationCommand> for OrganizationCommandHandler {
 #[async_trait]
 impl CommandHandler<AddUserToOrganizationCommand> for OrganizationCommandHandler {
     async fn handle(&self, command: AddUserToOrganizationCommand) -> ApplicationResult<()> {
-        info!("处理添加用户到组织命令: 用户 {} 到组织 {}", command.user_id, command.organization_id);
+        info!(
+            "处理添加用户到组织命令: 用户 {} 到组织 {}",
+            command.user_id, command.organization_id
+        );
 
         // 验证组织存在
-        let organization = self.org_repository
+        let organization = self
+            .org_repository
             .find_by_id(command.organization_id)
             .await?
-            .ok_or_else(|| crate::errors::ApplicationError::NotFound(format!("组织不存在: {}", command.organization_id)))?;
+            .ok_or_else(|| {
+                crate::errors::ApplicationError::NotFound(format!(
+                    "组织不存在: {}",
+                    command.organization_id
+                ))
+            })?;
 
         // 检查组织状态
         if organization.status != OrganizationStatus::Active {
-            return Err(crate::errors::ApplicationError::Validation("组织不可用".to_string()));
+            return Err(crate::errors::ApplicationError::Validation(
+                "组织不可用".to_string(),
+            ));
         }
 
         // 检查用户是否已在组织中
-        if self.org_repository.is_user_in_organization(command.organization_id, command.user_id).await? {
-            return Err(crate::errors::ApplicationError::Validation("用户已在组织中".to_string()));
+        if self
+            .org_repository
+            .is_user_in_organization(command.organization_id, command.user_id)
+            .await?
+        {
+            return Err(crate::errors::ApplicationError::Validation(
+                "用户已在组织中".to_string(),
+            ));
         }
 
         // TODO: 这里应该创建 OrganizationMember 记录，但为了简化，我们只是标记为成功
-        info!("用户 {} 成功添加到组织 {}", command.user_id, command.organization_id);
+        info!(
+            "用户 {} 成功添加到组织 {}",
+            command.user_id, command.organization_id
+        );
         Ok(())
     }
 }
@@ -190,10 +220,16 @@ impl CommandHandler<UpdateOrganizationCommand> for OrganizationCommandHandler {
         info!("处理更新组织命令: {}", command.organization_id);
 
         // 获取组织
-        let mut organization = self.org_repository
+        let mut organization = self
+            .org_repository
             .find_by_id(command.organization_id)
             .await?
-            .ok_or_else(|| crate::errors::ApplicationError::NotFound(format!("组织不存在: {}", command.organization_id)))?;
+            .ok_or_else(|| {
+                crate::errors::ApplicationError::NotFound(format!(
+                    "组织不存在: {}",
+                    command.organization_id
+                ))
+            })?;
 
         // 验证权限（简化实现：暂时跳过权限检查）
         // 实际应该通过组织成员关系来验证是否有权限
@@ -233,10 +269,16 @@ impl CommandHandler<DeleteOrganizationCommand> for OrganizationCommandHandler {
         info!("处理删除组织命令: {}", command.organization_id);
 
         // 获取组织
-        let organization = self.org_repository
+        let organization = self
+            .org_repository
             .find_by_id(command.organization_id)
             .await?
-            .ok_or_else(|| crate::errors::ApplicationError::NotFound(format!("组织不存在: {}", command.organization_id)))?;
+            .ok_or_else(|| {
+                crate::errors::ApplicationError::NotFound(format!(
+                    "组织不存在: {}",
+                    command.organization_id
+                ))
+            })?;
 
         // 验证权限（简化实现：暂时跳过权限检查）
         // 实际应该通过组织成员关系来验证是否有权限

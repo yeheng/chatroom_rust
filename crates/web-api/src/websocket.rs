@@ -15,10 +15,10 @@ use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
 use crate::AppState;
-use domain::entities::websocket::*;
-use domain::services::websocket_service::{ConnectionManager, MessageRouter};
-use domain::services::auth_service::AuthService;
 use application::services::{ChatRoomService, UserService};
+use domain::entities::websocket::*;
+use domain::services::auth_service::AuthService;
+use domain::services::websocket_service::{ConnectionManager, MessageRouter};
 use infrastructure::websocket::*;
 
 /// WebSocket消息传输类型
@@ -46,6 +46,12 @@ pub struct WebSocketHandler {
     message_router: Arc<InMemoryMessageRouter>,
     /// 房间管理器
     room_manager: Arc<InMemoryRoomManager>,
+}
+
+impl Default for WebSocketHandler {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl WebSocketHandler {
@@ -85,9 +91,7 @@ impl WebSocketHandler {
         let handler = Arc::new(Self::new());
 
         // 升级连接
-        Ok(ws.on_upgrade(move |socket| {
-            Self::handle_socket(socket, user_id, handler, state.0)
-        }))
+        Ok(ws.on_upgrade(move |socket| Self::handle_socket(socket, user_id, handler, state.0)))
     }
 
     /// 验证JWT token
@@ -254,7 +258,10 @@ impl WebSocketHandler {
                         }
                     }
                     Ok(axum::extract::ws::Message::Close(_)) => {
-                        info!("WebSocket connection closed by client: {}", recv_connection_id);
+                        info!(
+                            "WebSocket connection closed by client: {}",
+                            recv_connection_id
+                        );
                         break;
                     }
                     Err(e) => {
@@ -264,7 +271,10 @@ impl WebSocketHandler {
                 }
             }
 
-            debug!("Receive task completed for connection: {}", recv_connection_id);
+            debug!(
+                "Receive task completed for connection: {}",
+                recv_connection_id
+            );
         });
 
         // 等待任一任务完成
@@ -278,7 +288,10 @@ impl WebSocketHandler {
         }
 
         // 清理连接
-        handler.message_router.unregister_sender(connection_id).await;
+        handler
+            .message_router
+            .unregister_sender(connection_id)
+            .await;
         if let Err(e) = handler
             .connection_manager
             .unregister_connection(connection_id)
@@ -309,8 +322,15 @@ impl WebSocketHandler {
 
         match client_message {
             ClientMessage::JoinRoom { room_id, password } => {
-                Self::handle_join_room(handler, app_state, connection_id, user_id, room_id, password)
-                    .await?;
+                Self::handle_join_room(
+                    handler,
+                    app_state,
+                    connection_id,
+                    user_id,
+                    room_id,
+                    password,
+                )
+                .await?;
             }
             ClientMessage::LeaveRoom { room_id } => {
                 Self::handle_leave_room(handler, connection_id, user_id, room_id).await?;
@@ -360,11 +380,8 @@ impl WebSocketHandler {
             .await
         {
             // 发送错误消息
-            let error_message = WebSocketFrame::error(
-                "JOIN_ROOM_FAILED".to_string(),
-                e.to_string(),
-                None,
-            );
+            let error_message =
+                WebSocketFrame::error("JOIN_ROOM_FAILED".to_string(), e.to_string(), None);
             handler
                 .message_router
                 .route_to_connection(connection_id, error_message)
@@ -379,15 +396,20 @@ impl WebSocketHandler {
             .await?;
 
         // 获取连接信息以得到用户名
-        let connection_info = handler.connection_manager.get_connection(connection_id).await;
-        let username = connection_info.map(|conn| conn.username).unwrap_or_else(|| "Unknown".to_string());
+        let connection_info = handler
+            .connection_manager
+            .get_connection(connection_id)
+            .await;
+        let username = connection_info
+            .map(|conn| conn.username)
+            .unwrap_or_else(|| "Unknown".to_string());
 
         // 发送成功消息
         let success_message = WebSocketFrame::new(
             MessageType::ServerToClient(domain::entities::websocket::ServerMessage::RoomJoined {
                 room_id: room_id.clone(),
                 room_name: "Chat Room".to_string(), // TODO: 获取实际房间名称
-                user_count: 1, // TODO: 获取实际用户数量
+                user_count: 1,                      // TODO: 获取实际用户数量
                 joined_at: chrono::Utc::now(),
             }),
             serde_json::Value::Null,
@@ -439,9 +461,14 @@ impl WebSocketHandler {
         room_id: String,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         // 获取连接信息以得到用户名
-        let connection_info = handler.connection_manager.get_connection(connection_id).await;
-        let username = connection_info.map(|conn| conn.username).unwrap_or_else(|| "Unknown".to_string());
-        
+        let connection_info = handler
+            .connection_manager
+            .get_connection(connection_id)
+            .await;
+        let username = connection_info
+            .map(|conn| conn.username)
+            .unwrap_or_else(|| "Unknown".to_string());
+
         // 通知房间内其他用户
         let user_left_message = WebSocketFrame::new(
             MessageType::ServerToClient(domain::entities::websocket::ServerMessage::UserLeft {
@@ -524,20 +551,21 @@ impl WebSocketHandler {
         }
 
         // 使用应用服务发送消息
-        let message = match app_state.chat_service.send_message(
-            Uuid::parse_str(&room_id)?,
-            user_id,
-            content,
-            message_type,
-            None, // reply_to_message_id
-        ).await {
+        let message = match app_state
+            .chat_service
+            .send_message(
+                Uuid::parse_str(&room_id)?,
+                user_id,
+                content,
+                message_type,
+                None, // reply_to_message_id
+            )
+            .await
+        {
             Ok(message) => message,
             Err(e) => {
-                let error_message = WebSocketFrame::error(
-                    "SEND_MESSAGE_FAILED".to_string(),
-                    e.to_string(),
-                    None,
-                );
+                let error_message =
+                    WebSocketFrame::error("SEND_MESSAGE_FAILED".to_string(), e.to_string(), None);
                 handler
                     .message_router
                     .route_to_connection(connection_id, error_message)
@@ -596,9 +624,7 @@ pub enum ClientMessage {
         password: Option<String>,
     },
     /// 离开房间
-    LeaveRoom {
-        room_id: String,
-    },
+    LeaveRoom { room_id: String },
     /// 发送消息
     SendMessage {
         room_id: String,
@@ -653,8 +679,5 @@ pub enum ServerMessage {
         timestamp: chrono::DateTime<chrono::Utc>,
     },
     /// 错误消息
-    Error {
-        code: String,
-        message: String,
-    },
+    Error { code: String, message: String },
 }

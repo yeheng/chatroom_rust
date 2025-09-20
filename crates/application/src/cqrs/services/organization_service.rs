@@ -2,19 +2,19 @@
 //!
 //! 提供组织管理相关的高级业务逻辑（企业级功能）
 
-use crate::errors::ApplicationResult;
 use crate::cqrs::{
-    CommandHandler,
     commands::{
-        CreateOrganizationCommand, UpdateOrganizationCommand, DeleteOrganizationCommand,
-        AddUserToOrganizationCommand,
+        AddUserToOrganizationCommand, CreateOrganizationCommand, DeleteOrganizationCommand,
+        UpdateOrganizationCommand,
     },
     dtos::OrganizationDto,
     handlers::OrganizationCommandHandler,
+    CommandHandler,
 };
-use uuid::Uuid;
+use crate::errors::ApplicationResult;
 use std::sync::Arc;
 use tracing::{info, warn};
+use uuid::Uuid;
 
 /// 基于 CQRS 的组织应用服务
 pub struct CqrsOrganizationService {
@@ -52,9 +52,9 @@ impl CqrsOrganizationService {
             id: organization.id,
             name: organization.name,
             description: organization.description,
-            owner_id: owner_id, // 使用传入的 owner_id，因为实体没有这个字段
+            owner_id,                          // 使用传入的 owner_id，因为实体没有这个字段
             settings: serde_json::Value::Null, // 实体中没有 settings 字段
-            member_count: 1, // 创建时只有所有者一个成员
+            member_count: 1,                   // 创建时只有所有者一个成员
             created_at: organization.created_at,
             updated_at: organization.updated_at,
         })
@@ -85,7 +85,7 @@ impl CqrsOrganizationService {
             id: organization.id,
             name: organization.name,
             description: organization.description,
-            owner_id: owner_id,
+            owner_id,
             settings: serde_json::Value::Null,
             member_count: 1,
             created_at: organization.created_at,

@@ -385,7 +385,7 @@ impl MessageHistoryServiceImpl {
         }
         let data = data_encoding::BASE64.decode(cursor.as_bytes()).ok()?;
         let c: C = serde_json::from_slice(&data).ok()?;
-        
+
         let dt = DateTime::from_timestamp(c.t, c.n)?.naive_utc();
         let dt = chrono::DateTime::<chrono::Utc>::from_naive_utc_and_offset(dt, chrono::Utc);
         let id = Uuid::parse_str(&c.id).ok()?;

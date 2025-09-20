@@ -2,25 +2,24 @@
 //!
 //! 提供聊天室相关的高级业务逻辑
 
-use crate::errors::ApplicationResult;
 use crate::cqrs::{
-    CommandHandler,
-    QueryHandler,
     commands::{
-        CreateChatRoomCommand, JoinChatRoomCommand, LeaveChatRoomCommand, SendMessageCommand,
-        UpdateChatRoomCommand, DeleteChatRoomCommand, UpdateMessageCommand, DeleteMessageCommand,
+        CreateChatRoomCommand, DeleteChatRoomCommand, DeleteMessageCommand, JoinChatRoomCommand,
+        LeaveChatRoomCommand, SendMessageCommand, UpdateChatRoomCommand, UpdateMessageCommand,
     },
-    queries::{
-        GetChatRoomByIdQuery, GetRoomMessagesQuery, GetRoomMembersQuery, GetUserRoomsQuery,
-        SearchPublicRoomsQuery, GetChatRoomDetailQuery,
-    },
-    dtos::{ChatRoomDto, MessageDto, RoomMemberDto, ChatRoomDetailDto},
+    dtos::{ChatRoomDetailDto, ChatRoomDto, MessageDto, RoomMemberDto},
     handlers::{ChatRoomCommandHandler, ChatRoomQueryHandler},
+    queries::{
+        GetChatRoomByIdQuery, GetChatRoomDetailQuery, GetRoomMembersQuery, GetRoomMessagesQuery,
+        GetUserRoomsQuery, SearchPublicRoomsQuery,
+    },
+    CommandHandler, QueryHandler,
 };
+use crate::errors::ApplicationResult;
 use domain::entities::message::MessageType;
-use uuid::Uuid;
 use std::sync::Arc;
 use tracing::info;
+use uuid::Uuid;
 
 /// 基于 CQRS 的聊天室应用服务
 pub struct CqrsChatRoomService {
@@ -95,17 +94,10 @@ impl CqrsChatRoomService {
     }
 
     /// 离开聊天室
-    pub async fn leave_room(
-        &self,
-        room_id: Uuid,
-        user_id: Uuid,
-    ) -> ApplicationResult<()> {
+    pub async fn leave_room(&self, room_id: Uuid, user_id: Uuid) -> ApplicationResult<()> {
         info!("用户 {} 离开房间 {}", user_id, room_id);
 
-        let command = LeaveChatRoomCommand {
-            room_id,
-            user_id,
-        };
+        let command = LeaveChatRoomCommand { room_id, user_id };
 
         self.room_command_handler.handle(command).await
     }
@@ -184,17 +176,10 @@ impl CqrsChatRoomService {
     }
 
     /// 删除聊天室
-    pub async fn delete_room(
-        &self,
-        room_id: Uuid,
-        user_id: Uuid,
-    ) -> ApplicationResult<()> {
+    pub async fn delete_room(&self, room_id: Uuid, user_id: Uuid) -> ApplicationResult<()> {
         info!("删除聊天室: {}", room_id);
 
-        let command = DeleteChatRoomCommand {
-            room_id,
-            user_id,
-        };
+        let command = DeleteChatRoomCommand { room_id, user_id };
 
         self.room_command_handler.handle(command).await
     }
@@ -234,11 +219,7 @@ impl CqrsChatRoomService {
     }
 
     /// 删除消息
-    pub async fn delete_message(
-        &self,
-        message_id: Uuid,
-        user_id: Uuid,
-    ) -> ApplicationResult<()> {
+    pub async fn delete_message(&self, message_id: Uuid, user_id: Uuid) -> ApplicationResult<()> {
         info!("删除消息: {}", message_id);
 
         let command = DeleteMessageCommand {
@@ -256,7 +237,10 @@ impl CqrsChatRoomService {
     }
 
     /// 获取聊天室详细信息
-    pub async fn get_room_detail(&self, room_id: Uuid) -> ApplicationResult<Option<ChatRoomDetailDto>> {
+    pub async fn get_room_detail(
+        &self,
+        room_id: Uuid,
+    ) -> ApplicationResult<Option<ChatRoomDetailDto>> {
         let query = GetChatRoomDetailQuery { room_id };
         self.room_query_handler.handle(query).await
     }
@@ -327,7 +311,10 @@ impl CqrsChatRoomService {
     pub async fn get_room_member_count(&self, room_id: Uuid) -> ApplicationResult<u32> {
         match self.get_room(room_id).await? {
             Some(room) => Ok(room.member_count),
-            None => Err(crate::errors::ApplicationError::NotFound(format!("房间不存在: {}", room_id))),
+            None => Err(crate::errors::ApplicationError::NotFound(format!(
+                "房间不存在: {}",
+                room_id
+            ))),
         }
     }
 }

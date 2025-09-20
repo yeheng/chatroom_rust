@@ -2,16 +2,12 @@
 //!
 //! 处理用户相关的查询：根据 ID 查找、搜索用户等
 
-use crate::errors::ApplicationResult;
-use crate::cqrs::{
-    QueryHandler,
-    queries::*,
-    dtos::*,
-};
-use domain::entities::user::User;
 use super::user_command_handler::UserRepository;
-use std::sync::Arc;
+use crate::cqrs::{dtos::*, queries::*, QueryHandler};
+use crate::errors::ApplicationResult;
 use async_trait::async_trait;
+use domain::entities::user::User;
+use std::sync::Arc;
 
 /// 用户查询处理器
 pub struct UserQueryHandler {
@@ -20,9 +16,7 @@ pub struct UserQueryHandler {
 
 impl UserQueryHandler {
     pub fn new(user_repository: Arc<dyn UserRepository>) -> Self {
-        Self {
-            user_repository,
-        }
+        Self { user_repository }
     }
 
     /// 将 User 实体转换为 UserDto
@@ -52,7 +46,10 @@ impl QueryHandler<GetUserByIdQuery> for UserQueryHandler {
 #[async_trait]
 impl QueryHandler<GetUserByUsernameQuery> for UserQueryHandler {
     async fn handle(&self, query: GetUserByUsernameQuery) -> ApplicationResult<Option<UserDto>> {
-        let user = self.user_repository.find_by_username(query.username).await?;
+        let user = self
+            .user_repository
+            .find_by_username(query.username)
+            .await?;
         Ok(user.map(|u| self.user_to_dto(u)))
     }
 }
@@ -81,7 +78,10 @@ impl QueryHandler<SearchUsersQuery> for UserQueryHandler {
 
 #[async_trait]
 impl QueryHandler<GetUserProfileQuery> for UserQueryHandler {
-    async fn handle(&self, query: GetUserProfileQuery) -> ApplicationResult<Option<UserProfileDto>> {
+    async fn handle(
+        &self,
+        query: GetUserProfileQuery,
+    ) -> ApplicationResult<Option<UserProfileDto>> {
         let user = self.user_repository.find_by_id(query.user_id).await?;
 
         match user {

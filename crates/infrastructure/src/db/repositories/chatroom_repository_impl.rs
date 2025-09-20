@@ -7,8 +7,10 @@ use domain::{
     entities::chatroom::{ChatRoom, ChatRoomStatus},
     errors::{DomainError, DomainResult},
     repositories::{
-        chatroom_repository::{ChatRoomRepository, ChatRoomSearchParams, ChatRoomStatistics, RoomActivityStats},
-        Pagination, PaginatedResult, SortConfig,
+        chatroom_repository::{
+            ChatRoomRepository, ChatRoomSearchParams, ChatRoomStatistics, RoomActivityStats,
+        },
+        PaginatedResult, Pagination, SortConfig,
     },
 };
 use sqlx::{query, query_as, FromRow, Row};
@@ -54,7 +56,8 @@ impl From<DbChatRoom> for ChatRoom {
             db_room.created_at,
             db_room.updated_at,
             db_room.last_activity_at,
-        ).unwrap() // 从数据库加载的数据应该是有效的
+        )
+        .unwrap() // 从数据库加载的数据应该是有效的
     }
 }
 
@@ -215,16 +218,19 @@ impl ChatRoomRepository for PostgresChatRoomRepository {
         Ok(result.map(|r| r.into()))
     }
 
-    async fn find_by_owner(&self, owner_id: Uuid, pagination: Pagination) -> DomainResult<PaginatedResult<ChatRoom>> {
+    async fn find_by_owner(
+        &self,
+        owner_id: Uuid,
+        pagination: Pagination,
+    ) -> DomainResult<PaginatedResult<ChatRoom>> {
         // 获取总数
-        let total_count: i64 = query(
-            "SELECT COUNT(*) FROM chat_rooms WHERE owner_id = $1 AND status != 'deleted'"
-        )
-        .bind(owner_id)
-        .fetch_one(&*self.pool)
-        .await
-        .map_err(|e| DomainError::database_error(e.to_string()))?
-        .get(0);
+        let total_count: i64 =
+            query("SELECT COUNT(*) FROM chat_rooms WHERE owner_id = $1 AND status != 'deleted'")
+                .bind(owner_id)
+                .fetch_one(&*self.pool)
+                .await
+                .map_err(|e| DomainError::database_error(e.to_string()))?
+                .get(0);
 
         // 获取数据
         let rooms: Vec<DbChatRoom> = query_as(
@@ -290,7 +296,11 @@ impl ChatRoomRepository for PostgresChatRoomRepository {
         Ok(())
     }
 
-    async fn update_last_activity(&self, room_id: Uuid, last_activity_at: DateTime<Utc>) -> DomainResult<()> {
+    async fn update_last_activity(
+        &self,
+        room_id: Uuid,
+        last_activity_at: DateTime<Utc>,
+    ) -> DomainResult<()> {
         query("UPDATE chat_rooms SET last_activity_at = $2 WHERE id = $1")
             .bind(room_id)
             .bind(last_activity_at)
@@ -329,7 +339,11 @@ impl ChatRoomRepository for PostgresChatRoomRepository {
 
         let base_query = format!(
             "FROM chat_rooms {} AND status != 'deleted'",
-            if where_clause.is_empty() { "WHERE 1=1".to_string() } else { where_clause }
+            if where_clause.is_empty() {
+                "WHERE 1=1".to_string()
+            } else {
+                where_clause
+            }
         );
 
         // 获取总数
@@ -386,7 +400,9 @@ impl ChatRoomRepository for PostgresChatRoomRepository {
             public_rooms: row.get::<i64, _>("public_rooms") as u64,
             rooms_created_today: row.get::<i64, _>("rooms_created_today") as u64,
             rooms_with_activity_today: row.get::<i64, _>("rooms_active_last_hour") as u64,
-            avg_members_per_room: row.get::<Option<f64>, _>("avg_members_per_room").unwrap_or(0.0),
+            avg_members_per_room: row
+                .get::<Option<f64>, _>("avg_members_per_room")
+                .unwrap_or(0.0),
         })
     }
 
@@ -428,15 +444,17 @@ impl ChatRoomRepository for PostgresChatRoomRepository {
         Ok(rooms.into_iter().map(|r| r.into()).collect())
     }
 
-    async fn find_public_rooms(&self, pagination: Pagination) -> DomainResult<PaginatedResult<ChatRoom>> {
+    async fn find_public_rooms(
+        &self,
+        pagination: Pagination,
+    ) -> DomainResult<PaginatedResult<ChatRoom>> {
         // 获取总数
-        let total_count: i64 = query(
-            "SELECT COUNT(*) FROM chat_rooms WHERE status = 'active' AND is_private = false"
-        )
-        .fetch_one(&*self.pool)
-        .await
-        .map_err(|e| DomainError::database_error(e.to_string()))?
-        .get(0);
+        let total_count: i64 =
+            query("SELECT COUNT(*) FROM chat_rooms WHERE status = 'active' AND is_private = false")
+                .fetch_one(&*self.pool)
+                .await
+                .map_err(|e| DomainError::database_error(e.to_string()))?
+                .get(0);
 
         // 获取数据
         let rooms: Vec<DbChatRoom> = query_as(
@@ -459,7 +477,11 @@ impl ChatRoomRepository for PostgresChatRoomRepository {
         Ok(PaginatedResult::new(rooms, total_count as u64, pagination))
     }
 
-    async fn find_by_member(&self, user_id: Uuid, pagination: Pagination) -> DomainResult<PaginatedResult<ChatRoom>> {
+    async fn find_by_member(
+        &self,
+        user_id: Uuid,
+        pagination: Pagination,
+    ) -> DomainResult<PaginatedResult<ChatRoom>> {
         // 获取总数
         let total_count: i64 = query(
             r#"
@@ -467,7 +489,7 @@ impl ChatRoomRepository for PostgresChatRoomRepository {
             FROM chat_rooms cr
             JOIN room_members rm ON cr.id = rm.room_id
             WHERE rm.user_id = $1 AND cr.status != 'deleted'
-            "#
+            "#,
         )
         .bind(user_id)
         .fetch_one(&*self.pool)
@@ -499,12 +521,13 @@ impl ChatRoomRepository for PostgresChatRoomRepository {
     }
 
     async fn name_exists(&self, name: &str) -> DomainResult<bool> {
-        let count: i64 = query("SELECT COUNT(*) FROM chat_rooms WHERE name = $1 AND status != 'deleted'")
-            .bind(name)
-            .fetch_one(&*self.pool)
-            .await
-            .map_err(|e| DomainError::database_error(e.to_string()))?
-            .get(0);
+        let count: i64 =
+            query("SELECT COUNT(*) FROM chat_rooms WHERE name = $1 AND status != 'deleted'")
+                .bind(name)
+                .fetch_one(&*self.pool)
+                .await
+                .map_err(|e| DomainError::database_error(e.to_string()))?
+                .get(0);
 
         Ok(count > 0)
     }
@@ -540,7 +563,12 @@ impl ChatRoomRepository for PostgresChatRoomRepository {
         Ok(())
     }
 
-    async fn get_activity_stats(&self, room_id: Uuid, _date_from: DateTime<Utc>, _date_to: DateTime<Utc>) -> DomainResult<RoomActivityStats> {
+    async fn get_activity_stats(
+        &self,
+        room_id: Uuid,
+        _date_from: DateTime<Utc>,
+        _date_to: DateTime<Utc>,
+    ) -> DomainResult<RoomActivityStats> {
         // 这里应该从messages表和其他相关表获取活动统计，暂时返回默认值
         Ok(RoomActivityStats {
             room_id,
@@ -557,7 +585,7 @@ impl ChatRoomRepository for PostgresChatRoomRepository {
             DELETE FROM chat_rooms
             WHERE status = 'deleted'
             AND updated_at < NOW() - INTERVAL '$1 days'
-            "#
+            "#,
         )
         .bind(inactive_days as i32)
         .execute(&*self.pool)
@@ -568,7 +596,11 @@ impl ChatRoomRepository for PostgresChatRoomRepository {
     }
 
     #[cfg(feature = "enterprise")]
-    async fn find_by_organization(&self, _org_id: Uuid, pagination: Pagination) -> DomainResult<PaginatedResult<ChatRoom>> {
+    async fn find_by_organization(
+        &self,
+        _org_id: Uuid,
+        pagination: Pagination,
+    ) -> DomainResult<PaginatedResult<ChatRoom>> {
         // 企业版功能，暂时返回空结果
         Ok(PaginatedResult::new(Vec::new(), 0, pagination))
     }

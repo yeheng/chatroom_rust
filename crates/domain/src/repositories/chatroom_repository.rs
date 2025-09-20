@@ -2,7 +2,7 @@
 
 use crate::entities::chatroom::{ChatRoom, ChatRoomStatus};
 use crate::errors::DomainResult;
-use crate::repositories::{Pagination, PaginatedResult, SortConfig};
+use crate::repositories::{PaginatedResult, Pagination, SortConfig};
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use uuid::Uuid;
@@ -67,7 +67,11 @@ pub trait ChatRoomRepository: Send + Sync {
     async fn update_status(&self, room_id: Uuid, status: ChatRoomStatus) -> DomainResult<()>;
 
     /// 更新最后活跃时间
-    async fn update_last_activity(&self, room_id: Uuid, last_activity_at: DateTime<Utc>) -> DomainResult<()>;
+    async fn update_last_activity(
+        &self,
+        room_id: Uuid,
+        last_activity_at: DateTime<Utc>,
+    ) -> DomainResult<()>;
 
     /// 设置房间密码
     async fn set_password(&self, room_id: Uuid, password_hash: Option<&str>) -> DomainResult<()>;
@@ -84,13 +88,24 @@ pub trait ChatRoomRepository: Send + Sync {
     ) -> DomainResult<PaginatedResult<ChatRoom>>;
 
     /// 获取用户拥有的聊天室
-    async fn find_by_owner(&self, owner_id: Uuid, pagination: Pagination) -> DomainResult<PaginatedResult<ChatRoom>>;
+    async fn find_by_owner(
+        &self,
+        owner_id: Uuid,
+        pagination: Pagination,
+    ) -> DomainResult<PaginatedResult<ChatRoom>>;
 
     /// 获取用户参与的聊天室
-    async fn find_by_member(&self, user_id: Uuid, pagination: Pagination) -> DomainResult<PaginatedResult<ChatRoom>>;
+    async fn find_by_member(
+        &self,
+        user_id: Uuid,
+        pagination: Pagination,
+    ) -> DomainResult<PaginatedResult<ChatRoom>>;
 
     /// 获取公开聊天室列表
-    async fn find_public_rooms(&self, pagination: Pagination) -> DomainResult<PaginatedResult<ChatRoom>>;
+    async fn find_public_rooms(
+        &self,
+        pagination: Pagination,
+    ) -> DomainResult<PaginatedResult<ChatRoom>>;
 
     /// 获取最活跃的聊天室
     async fn find_most_active(&self, limit: u32) -> DomainResult<Vec<ChatRoom>>;
@@ -111,12 +126,21 @@ pub trait ChatRoomRepository: Send + Sync {
     async fn verify_password(&self, room_id: Uuid, password: &str) -> DomainResult<bool>;
 
     /// 获取房间活动统计
-    async fn get_activity_stats(&self, room_id: Uuid, date_from: DateTime<Utc>, date_to: DateTime<Utc>) -> DomainResult<RoomActivityStats>;
+    async fn get_activity_stats(
+        &self,
+        room_id: Uuid,
+        date_from: DateTime<Utc>,
+        date_to: DateTime<Utc>,
+    ) -> DomainResult<RoomActivityStats>;
 
     /// 清理不活跃的房间
     async fn cleanup_inactive_rooms(&self, inactive_days: u32) -> DomainResult<u64>;
 
     /// 根据组织查找聊天室（企业版功能）
     #[cfg(feature = "enterprise")]
-    async fn find_by_organization(&self, org_id: Uuid, pagination: Pagination) -> DomainResult<PaginatedResult<ChatRoom>>;
+    async fn find_by_organization(
+        &self,
+        org_id: Uuid,
+        pagination: Pagination,
+    ) -> DomainResult<PaginatedResult<ChatRoom>>;
 }

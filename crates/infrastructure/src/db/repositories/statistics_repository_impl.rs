@@ -65,9 +65,18 @@ impl StatisticsRepository for PostgresStatisticsRepository {
         .await
         .map_err(|e| DomainError::database_error(e.to_string()))?;
 
-        stats.insert("total_users".to_string(), user_stats.get::<i64, _>("total_users") as u64);
-        stats.insert("active_users".to_string(), user_stats.get::<i64, _>("active_users") as u64);
-        stats.insert("online_users".to_string(), user_stats.get::<i64, _>("online_users") as u64);
+        stats.insert(
+            "total_users".to_string(),
+            user_stats.get::<i64, _>("total_users") as u64,
+        );
+        stats.insert(
+            "active_users".to_string(),
+            user_stats.get::<i64, _>("active_users") as u64,
+        );
+        stats.insert(
+            "online_users".to_string(),
+            user_stats.get::<i64, _>("online_users") as u64,
+        );
 
         // 房间统计
         let room_stats = query(
@@ -82,8 +91,14 @@ impl StatisticsRepository for PostgresStatisticsRepository {
         .await
         .map_err(|e| DomainError::database_error(e.to_string()))?;
 
-        stats.insert("total_rooms".to_string(), room_stats.get::<i64, _>("total_rooms") as u64);
-        stats.insert("active_rooms".to_string(), room_stats.get::<i64, _>("active_rooms") as u64);
+        stats.insert(
+            "total_rooms".to_string(),
+            room_stats.get::<i64, _>("total_rooms") as u64,
+        );
+        stats.insert(
+            "active_rooms".to_string(),
+            room_stats.get::<i64, _>("active_rooms") as u64,
+        );
 
         // 消息统计
         let message_stats = query(
@@ -98,13 +113,24 @@ impl StatisticsRepository for PostgresStatisticsRepository {
         .await
         .map_err(|e| DomainError::database_error(e.to_string()))?;
 
-        stats.insert("total_messages".to_string(), message_stats.get::<i64, _>("total_messages") as u64);
-        stats.insert("messages_today".to_string(), message_stats.get::<i64, _>("messages_today") as u64);
+        stats.insert(
+            "total_messages".to_string(),
+            message_stats.get::<i64, _>("total_messages") as u64,
+        );
+        stats.insert(
+            "messages_today".to_string(),
+            message_stats.get::<i64, _>("messages_today") as u64,
+        );
 
         Ok(stats)
     }
 
-    async fn get_user_activity_stats(&self, user_id: Uuid, date_from: DateTime<Utc>, date_to: DateTime<Utc>) -> DomainResult<HashMap<String, u64>> {
+    async fn get_user_activity_stats(
+        &self,
+        user_id: Uuid,
+        date_from: DateTime<Utc>,
+        date_to: DateTime<Utc>,
+    ) -> DomainResult<HashMap<String, u64>> {
         let mut stats = HashMap::new();
 
         // 用户消息统计
@@ -113,7 +139,7 @@ impl StatisticsRepository for PostgresStatisticsRepository {
             SELECT COUNT(*)
             FROM messages
             WHERE sender_id = $1 AND created_at BETWEEN $2 AND $3 AND status != 'deleted'
-            "#
+            "#,
         )
         .bind(user_id)
         .bind(date_from)
@@ -131,7 +157,7 @@ impl StatisticsRepository for PostgresStatisticsRepository {
             SELECT COUNT(DISTINCT room_id)
             FROM room_members
             WHERE user_id = $1
-            "#
+            "#,
         )
         .bind(user_id)
         .fetch_one(&*self.pool)
@@ -144,7 +170,12 @@ impl StatisticsRepository for PostgresStatisticsRepository {
         Ok(stats)
     }
 
-    async fn get_room_activity_stats(&self, room_id: Uuid, date_from: DateTime<Utc>, date_to: DateTime<Utc>) -> DomainResult<HashMap<String, u64>> {
+    async fn get_room_activity_stats(
+        &self,
+        room_id: Uuid,
+        date_from: DateTime<Utc>,
+        date_to: DateTime<Utc>,
+    ) -> DomainResult<HashMap<String, u64>> {
         let mut stats = HashMap::new();
 
         // 房间消息统计
@@ -153,7 +184,7 @@ impl StatisticsRepository for PostgresStatisticsRepository {
             SELECT COUNT(*)
             FROM messages
             WHERE room_id = $1 AND created_at BETWEEN $2 AND $3 AND status != 'deleted'
-            "#
+            "#,
         )
         .bind(room_id)
         .bind(date_from)
@@ -171,7 +202,7 @@ impl StatisticsRepository for PostgresStatisticsRepository {
             SELECT COUNT(DISTINCT sender_id)
             FROM messages
             WHERE room_id = $1 AND created_at BETWEEN $2 AND $3 AND status != 'deleted'
-            "#
+            "#,
         )
         .bind(room_id)
         .bind(date_from)
@@ -196,7 +227,11 @@ impl StatisticsRepository for PostgresStatisticsRepository {
         Ok(stats)
     }
 
-    async fn record_user_online_time(&self, user_id: Uuid, duration_minutes: u64) -> DomainResult<()> {
+    async fn record_user_online_time(
+        &self,
+        user_id: Uuid,
+        duration_minutes: u64,
+    ) -> DomainResult<()> {
         // 这里可以记录到专门的在线时长表，或者更新用户表的统计字段
         // 简化实现：暂时只更新最后活跃时间
         query("UPDATE users SET last_active_at = NOW() WHERE id = $1")
@@ -218,7 +253,7 @@ impl StatisticsRepository for PostgresStatisticsRepository {
             GROUP BY cr.id, cr.name
             ORDER BY member_count DESC, cr.last_activity_at DESC
             LIMIT $1
-            "#
+            "#,
         )
         .bind(limit as i32)
         .fetch_all(&*self.pool)
@@ -250,7 +285,7 @@ impl StatisticsRepository for PostgresStatisticsRepository {
             GROUP BY u.id, u.username
             ORDER BY message_count DESC, u.last_active_at DESC
             LIMIT $1
-            "#
+            "#,
         )
         .bind(limit as i32)
         .fetch_all(&*self.pool)
@@ -277,7 +312,7 @@ impl StatisticsRepository for PostgresStatisticsRepository {
             r#"
             DELETE FROM statistics_records
             WHERE created_at < NOW() - INTERVAL '$1 days'
-            "#
+            "#,
         )
         .bind(days_old as i32)
         .execute(&*self.pool)

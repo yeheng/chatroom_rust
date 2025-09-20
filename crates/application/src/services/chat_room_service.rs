@@ -140,7 +140,10 @@ pub trait ChatRoomService: Send + Sync {
     ) -> ApplicationResult<domain::message::Message>;
 
     /// 获取消息
-    async fn get_message(&self, message_id: Uuid) -> ApplicationResult<Option<domain::message::Message>>;
+    async fn get_message(
+        &self,
+        message_id: Uuid,
+    ) -> ApplicationResult<Option<domain::message::Message>>;
 
     /// 编辑消息
     async fn edit_message(
@@ -1065,7 +1068,10 @@ impl ChatRoomService for ChatRoomServiceImpl {
     }
 
     /// 获取消息
-    async fn get_message(&self, _message_id: Uuid) -> ApplicationResult<Option<domain::message::Message>> {
+    async fn get_message(
+        &self,
+        _message_id: Uuid,
+    ) -> ApplicationResult<Option<domain::message::Message>> {
         // TODO: 实际从数据库查询
         Ok(None)
     }
@@ -1078,13 +1084,17 @@ impl ChatRoomService for ChatRoomServiceImpl {
         _new_content: String,
     ) -> ApplicationResult<domain::message::Message> {
         // TODO: 实际实现消息编辑
-        Err(ApplicationError::Infrastructure("消息编辑功能尚未实现".to_string()))
+        Err(ApplicationError::Infrastructure(
+            "消息编辑功能尚未实现".to_string(),
+        ))
     }
 
     /// 删除消息
     async fn delete_message(&self, _message_id: Uuid, _deleter_id: Uuid) -> ApplicationResult<()> {
         // TODO: 实际实现消息删除
-        Err(ApplicationError::Infrastructure("消息删除功能尚未实现".to_string()))
+        Err(ApplicationError::Infrastructure(
+            "消息删除功能尚未实现".to_string(),
+        ))
     }
 
     /// 搜索消息

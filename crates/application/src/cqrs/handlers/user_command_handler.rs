@@ -2,21 +2,17 @@
 //!
 //! 处理用户相关的命令：注册、登录、更新、删除等
 
+use crate::cqrs::{commands::*, CommandHandler, EventBus};
 use crate::errors::{ApplicationResult, UserError};
-use crate::cqrs::{
-    CommandHandler,
-    commands::*,
-    EventBus,
-};
-use domain::entities::user::{User, UserStatus};
-use infrastructure::events::ChatEvent;
-use std::sync::Arc;
-use std::collections::HashMap;
-use tokio::sync::RwLock;
-use uuid::Uuid;
 use async_trait::async_trait;
 use bcrypt;
+use domain::entities::user::{User, UserStatus};
+use infrastructure::events::ChatEvent;
+use std::collections::HashMap;
+use std::sync::Arc;
+use tokio::sync::RwLock;
 use tracing::info;
+use uuid::Uuid;
 
 /// 简化的用户仓储接口
 #[async_trait]
@@ -271,11 +267,19 @@ impl CommandHandler<RegisterUserCommand> for UserCommandHandler {
         Self::validate_password(&command.password)?;
 
         // 检查用户名和邮箱是否已存在
-        if let Some(_) = self.user_repository.find_by_username(command.username.clone()).await? {
+        if let Some(_) = self
+            .user_repository
+            .find_by_username(command.username.clone())
+            .await?
+        {
             return Err(UserError::UsernameConflict(command.username).into());
         }
 
-        if let Some(_) = self.user_repository.find_by_email(command.email.clone()).await? {
+        if let Some(_) = self
+            .user_repository
+            .find_by_email(command.email.clone())
+            .await?
+        {
             return Err(UserError::EmailConflict(command.email).into());
         }
 
@@ -294,7 +298,9 @@ impl CommandHandler<RegisterUserCommand> for UserCommandHandler {
 
         // 保存用户和密码哈希
         let saved_user = self.user_repository.save(user).await?;
-        self.user_repository.store_password_hash(saved_user.id, password_hash).await?;
+        self.user_repository
+            .store_password_hash(saved_user.id, password_hash)
+            .await?;
 
         // 发布用户注册事件
         self.publish_user_event(ChatEvent::UserCreated {
@@ -302,7 +308,8 @@ impl CommandHandler<RegisterUserCommand> for UserCommandHandler {
             username: saved_user.username.clone(),
             email: saved_user.email.clone(),
             timestamp: chrono::Utc::now(),
-        }).await?;
+        })
+        .await?;
 
         info!("用户注册成功: {} ({})", saved_user.username, saved_user.id);
         Ok(saved_user)
@@ -315,7 +322,8 @@ impl CommandHandler<LoginUserCommand> for UserCommandHandler {
         info!("处理用户登录命令: {}", command.email);
 
         // 查找用户
-        let user = self.user_repository
+        let user = self
+            .user_repository
             .find_by_email(command.email.clone())
             .await?
             .ok_or(UserError::InvalidCredentials)?;
@@ -327,7 +335,9 @@ impl CommandHandler<LoginUserCommand> for UserCommandHandler {
 
         // 验证密码
         if let Some(password_hash) = self.user_repository.get_password_hash(user.id).await? {
-            let is_valid = self.verify_password(&command.password, &password_hash).await?;
+            let is_valid = self
+                .verify_password(&command.password, &password_hash)
+                .await?;
             if !is_valid {
                 return Err(UserError::InvalidCredentials.into());
             }
@@ -344,12 +354,14 @@ impl CommandHandler<LoginUserCommand> for UserCommandHandler {
         let updated_user = self.user_repository.save(updated_user).await?;
 
         // 发布登录事件
-        self.publish_user_event(ChatEvent::UserCreated {  // 暂时使用UserCreated，避免UserLoggedIn不存在的错误
+        self.publish_user_event(ChatEvent::UserCreated {
+            // 暂时使用UserCreated，避免UserLoggedIn不存在的错误
             user_id: updated_user.id,
             username: updated_user.username.clone(),
             email: updated_user.email.clone(),
             timestamp: chrono::Utc::now(),
-        }).await?;
+        })
+        .await?;
 
         info!("用户登录成功: {} ({})", updated_user.email, updated_user.id);
         Ok(updated_user)
@@ -362,7 +374,8 @@ impl CommandHandler<UpdateUserCommand> for UserCommandHandler {
         info!("处理用户更新命令: {}", command.user_id);
 
         // 获取现有用户
-        let mut user = self.user_repository
+        let mut user = self
+            .user_repository
             .find_by_id(command.user_id)
             .await?
             .ok_or(UserError::UserNotFound(command.user_id))?;
@@ -399,10 +412,14 @@ impl CommandHandler<UpdateUserCommand> for UserCommandHandler {
 #[async_trait]
 impl CommandHandler<UpdateUserStatusCommand> for UserCommandHandler {
     async fn handle(&self, command: UpdateUserStatusCommand) -> ApplicationResult<()> {
-        info!("处理用户状态更新命令: {} -> {:?}", command.user_id, command.status);
+        info!(
+            "处理用户状态更新命令: {} -> {:?}",
+            command.user_id, command.status
+        );
 
         // 获取现有用户
-        let mut user = self.user_repository
+        let mut user = self
+            .user_repository
             .find_by_id(command.user_id)
             .await?
             .ok_or(UserError::UserNotFound(command.user_id))?;
@@ -425,7 +442,8 @@ impl CommandHandler<DeleteUserCommand> for UserCommandHandler {
         info!("处理用户删除命令: {}", command.user_id);
 
         // 验证用户存在
-        let _user = self.user_repository
+        let _user = self
+            .user_repository
             .find_by_id(command.user_id)
             .await?
             .ok_or(UserError::UserNotFound(command.user_id))?;

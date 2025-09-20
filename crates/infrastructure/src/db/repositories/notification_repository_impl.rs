@@ -4,14 +4,16 @@ use crate::db::DbPool;
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use domain::{
-    Notification,
     errors::{DomainError, DomainResult},
-    repositories::{NotificationRepository, NotificationSearchParams, NotificationStatistics, Pagination, PaginatedResult, SortConfig},
+    repositories::{
+        NotificationRepository, NotificationSearchParams, NotificationStatistics, PaginatedResult,
+        Pagination, SortConfig,
+    },
+    Notification,
 };
 use sqlx::{query, query_as, FromRow, Row};
 use std::sync::Arc;
 use uuid::Uuid;
-
 
 /// 数据库通知模型
 #[derive(Debug, Clone, FromRow)]
@@ -147,7 +149,12 @@ impl NotificationRepository for PostgresNotificationRepository {
         Ok(result.map(|r| r.into()))
     }
 
-    async fn find_by_user(&self, user_id: Uuid, pagination: Pagination, unread_only: bool) -> DomainResult<PaginatedResult<Notification>> {
+    async fn find_by_user(
+        &self,
+        user_id: Uuid,
+        pagination: Pagination,
+        unread_only: bool,
+    ) -> DomainResult<PaginatedResult<Notification>> {
         let where_clause = if unread_only {
             "WHERE user_id = $1 AND is_read = false AND (expires_at IS NULL OR expires_at > NOW())"
         } else {
@@ -182,8 +189,13 @@ impl NotificationRepository for PostgresNotificationRepository {
             .await
             .map_err(|e| DomainError::database_error(e.to_string()))?;
 
-        let notifications: Vec<Notification> = notifications.into_iter().map(|n| n.into()).collect();
-        Ok(PaginatedResult::new(notifications, total_count as u64, pagination))
+        let notifications: Vec<Notification> =
+            notifications.into_iter().map(|n| n.into()).collect();
+        Ok(PaginatedResult::new(
+            notifications,
+            total_count as u64,
+            pagination,
+        ))
     }
 
     async fn mark_as_read(&self, notification_id: Uuid) -> DomainResult<()> {
@@ -265,7 +277,11 @@ impl NotificationRepository for PostgresNotificationRepository {
         Ok(count as u64)
     }
 
-    async fn count_unread_by_type(&self, user_id: Uuid, notification_type: &str) -> DomainResult<u64> {
+    async fn count_unread_by_type(
+        &self,
+        user_id: Uuid,
+        notification_type: &str,
+    ) -> DomainResult<u64> {
         let count: i64 = query("SELECT COUNT(*) FROM notifications WHERE user_id = $1 AND notification_type = $2 AND is_read = false AND (expires_at IS NULL OR expires_at > NOW())")
             .bind(user_id)
             .bind(notification_type)
@@ -311,16 +327,17 @@ impl NotificationRepository for PostgresNotificationRepository {
             notifications_by_type: std::collections::HashMap::new(), // 简化实现，返回空 HashMap
             notifications_by_priority: std::collections::HashMap::new(), // 简化实现，返回空 HashMap
             notifications_today: row.get::<i64, _>("notifications_today") as u64,
-            read_rate: 0.0, // 简化实现
+            read_rate: 0.0,             // 简化实现
             avg_read_time_minutes: 0.0, // 简化实现
         })
     }
 
     async fn cleanup_expired(&self) -> DomainResult<u64> {
-        let result = query("DELETE FROM notifications WHERE expires_at IS NOT NULL AND expires_at < NOW()")
-            .execute(&*self.pool)
-            .await
-            .map_err(|e| DomainError::database_error(e.to_string()))?;
+        let result =
+            query("DELETE FROM notifications WHERE expires_at IS NOT NULL AND expires_at < NOW()")
+                .execute(&*self.pool)
+                .await
+                .map_err(|e| DomainError::database_error(e.to_string()))?;
 
         Ok(result.rows_affected())
     }
@@ -338,7 +355,11 @@ impl NotificationRepository for PostgresNotificationRepository {
         Ok(None)
     }
 
-    async fn find_high_priority_unread(&self, user_id: Uuid, limit: u32) -> DomainResult<Vec<Notification>> {
+    async fn find_high_priority_unread(
+        &self,
+        user_id: Uuid,
+        limit: u32,
+    ) -> DomainResult<Vec<Notification>> {
         let notifications: Vec<DbNotification> = query_as(
             r#"
             SELECT id, user_id, notification_type, title, content, priority,
@@ -360,7 +381,10 @@ impl NotificationRepository for PostgresNotificationRepository {
         Ok(notifications.into_iter().map(|n| n.into()).collect())
     }
 
-    async fn create_batch(&self, notifications: &[Notification]) -> DomainResult<Vec<Notification>> {
+    async fn create_batch(
+        &self,
+        notifications: &[Notification],
+    ) -> DomainResult<Vec<Notification>> {
         let mut created_notifications = Vec::new();
 
         for notification in notifications {

@@ -4,29 +4,33 @@
 
 use crate::errors::DomainResult;
 use async_trait::async_trait;
-use std::collections::HashMap;
 use chrono::{DateTime, Utc};
+use std::collections::HashMap;
 use uuid::Uuid;
 
 // 重新导出所有Repository特征
-pub use user_repository::{UserRepository, UserSearchParams, UserStatistics};
-pub use chatroom_repository::{ChatRoomRepository, ChatRoomSearchParams, ChatRoomStatistics, RoomActivityStats};
-pub use message_repository::{MessageRepository, MessageSearchParams, MessageStatistics};
-pub use room_member_repository::{RoomMemberRepository, RoomMemberSearchParams, RoomMemberStatistics, MemberPermissions};
-pub use session_repository::{SessionRepository};
+pub use chatroom_repository::{
+    ChatRoomRepository, ChatRoomSearchParams, ChatRoomStatistics, RoomActivityStats,
+};
 pub use file_upload_repository::{
-    FileUploadRepository, FileSearchParams, FileStatistics,
-    FileShare, FileShareRepository, FileAccessLog, FileAccessLogRepository
+    FileAccessLog, FileAccessLogRepository, FileSearchParams, FileShare, FileShareRepository,
+    FileStatistics, FileUploadRepository,
 };
+pub use message_repository::{MessageRepository, MessageSearchParams, MessageStatistics};
 pub use notification_repository::{
-    NotificationRepository, NotificationSearchParams, NotificationStatistics
+    NotificationRepository, NotificationSearchParams, NotificationStatistics,
 };
+pub use room_member_repository::{
+    MemberPermissions, RoomMemberRepository, RoomMemberSearchParams, RoomMemberStatistics,
+};
+pub use session_repository::SessionRepository;
 pub use statistics_repository::{
-    DailyStats, DailyStatsRepository, SystemMetric, SystemMetricRepository,
-    OnlineUser, OnlineUserRepository, RoomActivityStats as StatisticsRoomActivityStats,
-    RoomActivityStatsRepository, ErrorLog, ErrorLogRepository,
-    SystemHealthStatus, RealtimeStats, SystemHealthRepository
+    DailyStats, DailyStatsRepository, ErrorLog, ErrorLogRepository, OnlineUser,
+    OnlineUserRepository, RealtimeStats, RoomActivityStats as StatisticsRoomActivityStats,
+    RoomActivityStatsRepository, SystemHealthRepository, SystemHealthStatus, SystemMetric,
+    SystemMetricRepository,
 };
+pub use user_repository::{UserRepository, UserSearchParams, UserStatistics};
 
 /// 简化的统计Repository接口 - 用于基础统计功能
 #[async_trait]
@@ -35,13 +39,27 @@ pub trait StatisticsRepository: Send + Sync {
     async fn get_system_statistics(&self) -> DomainResult<HashMap<String, u64>>;
 
     /// 获取用户活动统计
-    async fn get_user_activity_stats(&self, user_id: Uuid, date_from: DateTime<Utc>, date_to: DateTime<Utc>) -> DomainResult<HashMap<String, u64>>;
+    async fn get_user_activity_stats(
+        &self,
+        user_id: Uuid,
+        date_from: DateTime<Utc>,
+        date_to: DateTime<Utc>,
+    ) -> DomainResult<HashMap<String, u64>>;
 
     /// 获取房间活动统计
-    async fn get_room_activity_stats(&self, room_id: Uuid, date_from: DateTime<Utc>, date_to: DateTime<Utc>) -> DomainResult<HashMap<String, u64>>;
+    async fn get_room_activity_stats(
+        &self,
+        room_id: Uuid,
+        date_from: DateTime<Utc>,
+        date_to: DateTime<Utc>,
+    ) -> DomainResult<HashMap<String, u64>>;
 
     /// 记录用户在线时长
-    async fn record_user_online_time(&self, user_id: Uuid, duration_minutes: u64) -> DomainResult<()>;
+    async fn record_user_online_time(
+        &self,
+        user_id: Uuid,
+        duration_minutes: u64,
+    ) -> DomainResult<()>;
 
     /// 获取热门房间
     async fn get_popular_rooms(&self, limit: u32) -> DomainResult<Vec<(Uuid, String, u64)>>;
@@ -55,14 +73,14 @@ pub trait StatisticsRepository: Send + Sync {
 
 // RoomActivityStats 已在上面导出
 
-pub mod user_repository;
 pub mod chatroom_repository;
+pub mod file_upload_repository;
 pub mod message_repository;
+pub mod notification_repository;
 pub mod room_member_repository;
 pub mod session_repository;
-pub mod file_upload_repository;
-pub mod notification_repository;
 pub mod statistics_repository;
+pub mod user_repository;
 
 /// 分页参数
 #[derive(Debug, Clone)]
@@ -77,7 +95,12 @@ impl Pagination {
     pub fn new(page: u32, page_size: u32) -> Self {
         let offset = ((page.saturating_sub(1)) * page_size) as u64;
         let limit = page_size as u64;
-        Self { page, page_size, offset, limit }
+        Self {
+            page,
+            page_size,
+            offset,
+            limit,
+        }
     }
 
     pub fn default_page() -> Self {
@@ -153,12 +176,14 @@ impl QueryFilter {
     }
 
     pub fn equals(mut self, field: impl Into<String>, value: impl Into<String>) -> Self {
-        self.conditions.insert(field.into(), QueryCondition::Equals(value.into()));
+        self.conditions
+            .insert(field.into(), QueryCondition::Equals(value.into()));
         self
     }
 
     pub fn contains(mut self, field: impl Into<String>, value: impl Into<String>) -> Self {
-        self.conditions.insert(field.into(), QueryCondition::Contains(value.into()));
+        self.conditions
+            .insert(field.into(), QueryCondition::Contains(value.into()));
         self
     }
 }

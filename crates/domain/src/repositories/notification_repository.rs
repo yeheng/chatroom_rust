@@ -2,7 +2,7 @@
 
 use crate::entities::Notification;
 use crate::errors::DomainResult;
-use crate::repositories::{Pagination, PaginatedResult, SortConfig};
+use crate::repositories::{PaginatedResult, Pagination, SortConfig};
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use serde_json::Value as JsonValue;
@@ -115,7 +115,11 @@ pub trait NotificationRepository: Send + Sync {
     async fn count_unread(&self, user_id: Uuid) -> DomainResult<u64>;
 
     /// 根据类型获取未读通知数量
-    async fn count_unread_by_type(&self, user_id: Uuid, notification_type: &str) -> DomainResult<u64>;
+    async fn count_unread_by_type(
+        &self,
+        user_id: Uuid,
+        notification_type: &str,
+    ) -> DomainResult<u64>;
 
     /// 根据条件搜索通知
     async fn search(
@@ -143,10 +147,15 @@ pub trait NotificationRepository: Send + Sync {
     ) -> DomainResult<Option<Notification>>;
 
     /// 获取高优先级未读通知
-    async fn find_high_priority_unread(&self, user_id: Uuid, limit: u32) -> DomainResult<Vec<Notification>>;
+    async fn find_high_priority_unread(
+        &self,
+        user_id: Uuid,
+        limit: u32,
+    ) -> DomainResult<Vec<Notification>>;
 
     /// 批量创建通知
-    async fn create_batch(&self, notifications: &[Notification]) -> DomainResult<Vec<Notification>>;
+    async fn create_batch(&self, notifications: &[Notification])
+        -> DomainResult<Vec<Notification>>;
 }
 
 /// 通知设置Repository接口
@@ -159,10 +168,19 @@ pub trait NotificationSettingsRepository: Send + Sync {
     async fn find_by_user(&self, user_id: Uuid) -> DomainResult<Vec<NotificationSettings>>;
 
     /// 获取用户特定类型的通知设置
-    async fn find_by_user_and_type(&self, user_id: Uuid, notification_type: &str) -> DomainResult<Option<NotificationSettings>>;
+    async fn find_by_user_and_type(
+        &self,
+        user_id: Uuid,
+        notification_type: &str,
+    ) -> DomainResult<Option<NotificationSettings>>;
 
     /// 检查是否应该发送通知
-    async fn should_send_notification(&self, user_id: Uuid, notification_type: &str, priority: &str) -> DomainResult<bool>;
+    async fn should_send_notification(
+        &self,
+        user_id: Uuid,
+        notification_type: &str,
+        priority: &str,
+    ) -> DomainResult<bool>;
 
     /// 删除通知设置
     async fn delete(&self, user_id: Uuid, notification_type: &str) -> DomainResult<bool>;
@@ -178,7 +196,10 @@ pub trait NotificationTemplateRepository: Send + Sync {
     async fn create(&self, template: &NotificationTemplate) -> DomainResult<NotificationTemplate>;
 
     /// 根据类型查找模板
-    async fn find_by_type(&self, notification_type: &str) -> DomainResult<Option<NotificationTemplate>>;
+    async fn find_by_type(
+        &self,
+        notification_type: &str,
+    ) -> DomainResult<Option<NotificationTemplate>>;
 
     /// 获取所有活跃模板
     async fn find_active(&self) -> DomainResult<Vec<NotificationTemplate>>;
@@ -197,16 +218,31 @@ pub trait NotificationTemplateRepository: Send + Sync {
 #[async_trait]
 pub trait NotificationDeliveryLogRepository: Send + Sync {
     /// 记录发送日志
-    async fn log_delivery(&self, log: &NotificationDeliveryLog) -> DomainResult<NotificationDeliveryLog>;
+    async fn log_delivery(
+        &self,
+        log: &NotificationDeliveryLog,
+    ) -> DomainResult<NotificationDeliveryLog>;
 
     /// 更新发送状态
-    async fn update_status(&self, log_id: Uuid, status: &str, error_message: Option<&str>) -> DomainResult<()>;
+    async fn update_status(
+        &self,
+        log_id: Uuid,
+        status: &str,
+        error_message: Option<&str>,
+    ) -> DomainResult<()>;
 
     /// 获取通知的发送日志
-    async fn find_by_notification(&self, notification_id: Uuid) -> DomainResult<Vec<NotificationDeliveryLog>>;
+    async fn find_by_notification(
+        &self,
+        notification_id: Uuid,
+    ) -> DomainResult<Vec<NotificationDeliveryLog>>;
 
     /// 获取发送统计
-    async fn get_delivery_stats(&self, start_date: DateTime<Utc>, end_date: DateTime<Utc>) -> DomainResult<std::collections::HashMap<String, u64>>;
+    async fn get_delivery_stats(
+        &self,
+        start_date: DateTime<Utc>,
+        end_date: DateTime<Utc>,
+    ) -> DomainResult<std::collections::HashMap<String, u64>>;
 
     /// 清理旧的发送日志
     async fn cleanup_old_logs(&self, older_than: DateTime<Utc>) -> DomainResult<u64>;

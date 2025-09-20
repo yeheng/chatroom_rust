@@ -1,7 +1,7 @@
 //! 系统统计和监控Repository接口定义
 
 use crate::errors::DomainResult;
-use crate::repositories::{Pagination, PaginatedResult};
+use crate::repositories::{PaginatedResult, Pagination};
 use async_trait::async_trait;
 use chrono::{DateTime, NaiveDate, Utc};
 use serde_json::Value as JsonValue;
@@ -128,7 +128,11 @@ pub trait DailyStatsRepository: Send + Sync {
     async fn find_by_date(&self, date: NaiveDate) -> DomainResult<Option<DailyStats>>;
 
     /// 获取日期范围内的统计
-    async fn find_by_date_range(&self, start_date: NaiveDate, end_date: NaiveDate) -> DomainResult<Vec<DailyStats>>;
+    async fn find_by_date_range(
+        &self,
+        start_date: NaiveDate,
+        end_date: NaiveDate,
+    ) -> DomainResult<Vec<DailyStats>>;
 
     /// 获取最近的统计数据
     async fn find_recent(&self, days: u32) -> DomainResult<Vec<DailyStats>>;
@@ -150,10 +154,17 @@ pub trait SystemMetricRepository: Send + Sync {
     async fn record_metric(&self, metric: &SystemMetric) -> DomainResult<SystemMetric>;
 
     /// 批量记录指标
-    async fn record_metrics_batch(&self, metrics: &[SystemMetric]) -> DomainResult<Vec<SystemMetric>>;
+    async fn record_metrics_batch(
+        &self,
+        metrics: &[SystemMetric],
+    ) -> DomainResult<Vec<SystemMetric>>;
 
     /// 获取指定指标的最新值
-    async fn get_latest_metric(&self, metric_name: &str, server_id: Option<&str>) -> DomainResult<Option<SystemMetric>>;
+    async fn get_latest_metric(
+        &self,
+        metric_name: &str,
+        server_id: Option<&str>,
+    ) -> DomainResult<Option<SystemMetric>>;
 
     /// 获取指标时间序列数据
     async fn get_metric_timeseries(
@@ -205,13 +216,20 @@ pub trait OnlineUserRepository: Send + Sync {
     async fn update_status(&self, user_id: Uuid, status: &str) -> DomainResult<()>;
 
     /// 更新最后在线时间
-    async fn update_last_seen(&self, user_id: Uuid, last_seen_at: DateTime<Utc>) -> DomainResult<()>;
+    async fn update_last_seen(
+        &self,
+        user_id: Uuid,
+        last_seen_at: DateTime<Utc>,
+    ) -> DomainResult<()>;
 
     /// 设置用户所在房间
     async fn set_user_room(&self, user_id: Uuid, room_id: Option<Uuid>) -> DomainResult<()>;
 
     /// 获取在线用户列表
-    async fn find_online_users(&self, pagination: Pagination) -> DomainResult<PaginatedResult<OnlineUser>>;
+    async fn find_online_users(
+        &self,
+        pagination: Pagination,
+    ) -> DomainResult<PaginatedResult<OnlineUser>>;
 
     /// 获取房间在线用户
     async fn find_online_in_room(&self, room_id: Uuid) -> DomainResult<Vec<OnlineUser>>;
@@ -233,10 +251,17 @@ pub trait OnlineUserRepository: Send + Sync {
 #[async_trait]
 pub trait RoomActivityStatsRepository: Send + Sync {
     /// 更新房间活动统计
-    async fn update_room_activity(&self, stats: &RoomActivityStats) -> DomainResult<RoomActivityStats>;
+    async fn update_room_activity(
+        &self,
+        stats: &RoomActivityStats,
+    ) -> DomainResult<RoomActivityStats>;
 
     /// 获取房间活动统计
-    async fn find_by_room_and_date(&self, room_id: Uuid, date: NaiveDate) -> DomainResult<Option<RoomActivityStats>>;
+    async fn find_by_room_and_date(
+        &self,
+        room_id: Uuid,
+        date: NaiveDate,
+    ) -> DomainResult<Option<RoomActivityStats>>;
 
     /// 获取房间活动统计历史
     async fn find_by_room(
@@ -247,13 +272,27 @@ pub trait RoomActivityStatsRepository: Send + Sync {
     ) -> DomainResult<Vec<RoomActivityStats>>;
 
     /// 获取最活跃的房间
-    async fn find_most_active_rooms(&self, date: NaiveDate, limit: u32) -> DomainResult<Vec<RoomActivityStats>>;
+    async fn find_most_active_rooms(
+        &self,
+        date: NaiveDate,
+        limit: u32,
+    ) -> DomainResult<Vec<RoomActivityStats>>;
 
     /// 增加房间消息计数
-    async fn increment_message_count(&self, room_id: Uuid, date: NaiveDate, count: i32) -> DomainResult<()>;
+    async fn increment_message_count(
+        &self,
+        room_id: Uuid,
+        date: NaiveDate,
+        count: i32,
+    ) -> DomainResult<()>;
 
     /// 更新房间峰值在线用户数
-    async fn update_peak_users(&self, room_id: Uuid, date: NaiveDate, peak_users: i32) -> DomainResult<()>;
+    async fn update_peak_users(
+        &self,
+        room_id: Uuid,
+        date: NaiveDate,
+        peak_users: i32,
+    ) -> DomainResult<()>;
 }
 
 /// 错误日志Repository接口
@@ -299,7 +338,11 @@ pub trait ErrorLogRepository: Send + Sync {
     async fn cleanup_old_logs(&self, older_than: DateTime<Utc>) -> DomainResult<u64>;
 
     /// 根据服务器ID查找错误
-    async fn find_by_server(&self, server_id: &str, pagination: Pagination) -> DomainResult<PaginatedResult<ErrorLog>>;
+    async fn find_by_server(
+        &self,
+        server_id: &str,
+        pagination: Pagination,
+    ) -> DomainResult<PaginatedResult<ErrorLog>>;
 }
 
 /// 系统健康监控Repository接口

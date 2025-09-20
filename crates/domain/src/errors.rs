@@ -58,7 +58,6 @@ pub enum DomainError {
 }
 
 impl DomainError {
-
     /// 创建用户错误
     pub fn database_error(message: impl Into<String>) -> Self {
         Self::DatabaseError {

@@ -1,8 +1,8 @@
 //! 房间成员Repository接口定义
 
-use crate::entities::room_member::{RoomMember, MemberRole};
+use crate::entities::room_member::{MemberRole, RoomMember};
 use crate::errors::DomainResult;
-use crate::repositories::{Pagination, PaginatedResult, SortConfig};
+use crate::repositories::{PaginatedResult, Pagination, SortConfig};
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use serde_json::Value as JsonValue;
@@ -52,31 +52,54 @@ pub trait RoomMemberRepository: Send + Sync {
     async fn add_member(&self, member: &RoomMember) -> DomainResult<RoomMember>;
 
     /// 根据房间ID和用户ID查找成员
-    async fn find_by_room_and_user(&self, room_id: Uuid, user_id: Uuid) -> DomainResult<Option<RoomMember>>;
+    async fn find_by_room_and_user(
+        &self,
+        room_id: Uuid,
+        user_id: Uuid,
+    ) -> DomainResult<Option<RoomMember>>;
 
     /// 更新成员信息
     async fn update(&self, member: &RoomMember) -> DomainResult<RoomMember>;
 
     /// 更新成员角色
-    async fn update_role(&self, room_id: Uuid, user_id: Uuid, role: MemberRole) -> DomainResult<()>;
+    async fn update_role(&self, room_id: Uuid, user_id: Uuid, role: MemberRole)
+        -> DomainResult<()>;
 
     /// 设置成员静音状态
     async fn set_muted(&self, room_id: Uuid, user_id: Uuid, is_muted: bool) -> DomainResult<()>;
 
     /// 设置通知状态
-    async fn set_notifications(&self, room_id: Uuid, user_id: Uuid, enabled: bool) -> DomainResult<()>;
+    async fn set_notifications(
+        &self,
+        room_id: Uuid,
+        user_id: Uuid,
+        enabled: bool,
+    ) -> DomainResult<()>;
 
     /// 更新最后已读消息
-    async fn update_last_read(&self, room_id: Uuid, user_id: Uuid, message_id: Uuid) -> DomainResult<()>;
+    async fn update_last_read(
+        &self,
+        room_id: Uuid,
+        user_id: Uuid,
+        message_id: Uuid,
+    ) -> DomainResult<()>;
 
     /// 移除房间成员
     async fn remove_member(&self, room_id: Uuid, user_id: Uuid) -> DomainResult<bool>;
 
     /// 获取房间所有成员
-    async fn find_by_room(&self, room_id: Uuid, pagination: Pagination) -> DomainResult<PaginatedResult<RoomMember>>;
+    async fn find_by_room(
+        &self,
+        room_id: Uuid,
+        pagination: Pagination,
+    ) -> DomainResult<PaginatedResult<RoomMember>>;
 
     /// 获取用户参与的房间
-    async fn find_by_user(&self, user_id: Uuid, pagination: Pagination) -> DomainResult<PaginatedResult<RoomMember>>;
+    async fn find_by_user(
+        &self,
+        user_id: Uuid,
+        pagination: Pagination,
+    ) -> DomainResult<PaginatedResult<RoomMember>>;
 
     /// 根据角色查找成员
     async fn find_by_room_and_role(
@@ -98,7 +121,11 @@ pub trait RoomMemberRepository: Send + Sync {
     ) -> DomainResult<bool>;
 
     /// 获取成员权限列表
-    async fn get_member_permissions(&self, room_id: Uuid, user_id: Uuid) -> DomainResult<MemberPermissions>;
+    async fn get_member_permissions(
+        &self,
+        room_id: Uuid,
+        user_id: Uuid,
+    ) -> DomainResult<MemberPermissions>;
 
     /// 统计房间成员数量
     async fn count_by_room(&self, room_id: Uuid) -> DomainResult<u64>;
@@ -141,10 +168,19 @@ pub trait RoomMemberRepository: Send + Sync {
     ) -> DomainResult<Vec<RoomMember>>;
 
     /// 更新成员权限
-    async fn update_permissions(&self, room_id: Uuid, user_id: Uuid, permissions: &JsonValue) -> DomainResult<()>;
+    async fn update_permissions(
+        &self,
+        room_id: Uuid,
+        user_id: Uuid,
+        permissions: &JsonValue,
+    ) -> DomainResult<()>;
 
     /// 获取静音成员列表
-    async fn find_muted_members(&self, room_id: Uuid, pagination: Pagination) -> DomainResult<PaginatedResult<RoomMember>>;
+    async fn find_muted_members(
+        &self,
+        room_id: Uuid,
+        pagination: Pagination,
+    ) -> DomainResult<PaginatedResult<RoomMember>>;
 
     /// 清理不活跃的成员记录
     async fn cleanup_inactive_members(&self, inactive_days: u32) -> DomainResult<u64>;

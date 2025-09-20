@@ -21,4 +21,4 @@ pub mod websocket;
 
 // 重新导出核心实体
 pub use file_upload::FileUpload;
-pub use notification::{Notification, NotificationPriority, notification_types};
+pub use notification::{notification_types, Notification, NotificationPriority};

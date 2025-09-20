@@ -2,23 +2,25 @@
 //!
 //! 包含基于 Kafka 的命令总线、查询总线、事件总线的具体实现
 
-use crate::errors::ApplicationResult;
-use crate::cqrs::{Command, Query, CommandBus, QueryBus, EventBus, CommandHandler, QueryHandler, EventHandler, DomainEvent};
-use async_trait::async_trait;
-use std::sync::Arc;
-use std::collections::HashMap;
-use tokio::sync::{RwLock, oneshot};
-use rdkafka::{
-    producer::{FutureProducer, FutureRecord},
-    consumer::{StreamConsumer, Consumer},
-    ClientConfig,
-    Message
+use crate::cqrs::{
+    Command, CommandBus, CommandHandler, DomainEvent, EventBus, EventHandler, Query, QueryBus,
+    QueryHandler,
 };
-use serde_json;
-use tracing::{info, error, warn};
-use uuid::Uuid;
+use crate::errors::ApplicationResult;
+use async_trait::async_trait;
 use chrono;
 use futures_util;
+use rdkafka::{
+    consumer::{Consumer, StreamConsumer},
+    producer::{FutureProducer, FutureRecord},
+    ClientConfig, Message,
+};
+use serde_json;
+use std::collections::HashMap;
+use std::sync::Arc;
+use tokio::sync::{oneshot, RwLock};
+use tracing::{error, info, warn};
+use uuid::Uuid;
 
 /// 从 Kafka 消息重构的事件包装器
 pub struct KafkaEvent {
@@ -56,13 +58,13 @@ impl DomainEvent for KafkaEvent {
     }
 
     fn timestamp(&self) -> chrono::DateTime<chrono::Utc> {
-        let timestamp_ms = self.data
+        let timestamp_ms = self
+            .data
             .get("timestamp")
             .and_then(|v| v.as_i64())
             .unwrap_or_else(|| chrono::Utc::now().timestamp_millis());
 
-        chrono::DateTime::from_timestamp_millis(timestamp_ms)
-            .unwrap_or_else(chrono::Utc::now)
+        chrono::DateTime::from_timestamp_millis(timestamp_ms).unwrap_or_else(chrono::Utc::now)
     }
 }
 
@@ -82,9 +84,12 @@ impl KafkaCommandBus {
             .set("message.timeout.ms", "5000")
             .set("queue.buffering.max.messages", "10000")
             .create()
-            .map_err(|e| crate::errors::ApplicationError::Infrastructure(
-                format!("创建 Kafka 生产者失败: {}", e)
-            ))?;
+            .map_err(|e| {
+                crate::errors::ApplicationError::Infrastructure(format!(
+                    "创建 Kafka 生产者失败: {}",
+                    e
+                ))
+            })?;
 
         Ok(Self {
             producer: Arc::new(producer),
@@ -104,21 +109,26 @@ impl KafkaCommandBus {
     /// 启动响应消费者，处理命令执行结果
     pub async fn start_response_consumer(&self, group_id: &str) -> ApplicationResult<()> {
         let consumer: StreamConsumer = ClientConfig::new()
-            .set("group.id", &format!("{}_response", group_id))
+            .set("group.id", format!("{}_response", group_id))
             .set("bootstrap.servers", "localhost:9092") // 这里应该从配置获取
             .set("enable.partition.eof", "false")
             .set("session.timeout.ms", "6000")
             .set("enable.auto.commit", "true")
             .create()
-            .map_err(|e| crate::errors::ApplicationError::Infrastructure(
-                format!("创建 Kafka 响应消费者失败: {}", e)
-            ))?;
+            .map_err(|e| {
+                crate::errors::ApplicationError::Infrastructure(format!(
+                    "创建 Kafka 响应消费者失败: {}",
+                    e
+                ))
+            })?;
 
         let response_topic = format!("{}_response", self.topic_prefix);
-        consumer.subscribe(&[&response_topic])
-            .map_err(|e| crate::errors::ApplicationError::Infrastructure(
-                format!("订阅 Kafka 响应主题失败: {}", e)
-            ))?;
+        consumer.subscribe(&[&response_topic]).map_err(|e| {
+            crate::errors::ApplicationError::Infrastructure(format!(
+                "订阅 Kafka 响应主题失败: {}",
+                e
+            ))
+        })?;
 
         let pending_commands = self.pending_commands.clone();
         tokio::spawn(async move {
@@ -151,13 +161,14 @@ impl KafkaCommandBus {
                         // 查找等待的命令
                         let mut pending = pending_commands.write().await;
                         if let Some(sender) = pending.remove(command_id) {
-                            let response_data: serde_json::Value = match serde_json::from_str(payload) {
-                                Ok(data) => data,
-                                Err(e) => {
-                                    error!("响应数据解析失败: {}", e);
-                                    continue;
-                                }
-                            };
+                            let response_data: serde_json::Value =
+                                match serde_json::from_str(payload) {
+                                    Ok(data) => data,
+                                    Err(e) => {
+                                        error!("响应数据解析失败: {}", e);
+                                        continue;
+                                    }
+                                };
 
                             let _ = sender.send(response_data);
                         } else {
@@ -181,15 +192,17 @@ impl KafkaCommandBus {
             .set("session.timeout.ms", "6000")
             .set("enable.auto.commit", "true")
             .create()
-            .map_err(|e| crate::errors::ApplicationError::Infrastructure(
-                format!("创建 Kafka 消费者失败: {}", e)
-            ))?;
+            .map_err(|e| {
+                crate::errors::ApplicationError::Infrastructure(format!(
+                    "创建 Kafka 消费者失败: {}",
+                    e
+                ))
+            })?;
 
         let topic_pattern = format!("{}.*", self.topic_prefix);
-        consumer.subscribe(&[&topic_pattern])
-            .map_err(|e| crate::errors::ApplicationError::Infrastructure(
-                format!("订阅 Kafka 主题失败: {}", e)
-            ))?;
+        consumer.subscribe(&[&topic_pattern]).map_err(|e| {
+            crate::errors::ApplicationError::Infrastructure(format!("订阅 Kafka 主题失败: {}", e))
+        })?;
 
         let handlers = self.handlers.clone();
         tokio::spawn(async move {
@@ -232,21 +245,22 @@ impl KafkaCommandBus {
 
     async fn process_command_message(
         payload: &str,
-        handlers: &Arc<RwLock<HashMap<String, Box<dyn std::any::Any + Send + Sync>>>>
+        handlers: &Arc<RwLock<HashMap<String, Box<dyn std::any::Any + Send + Sync>>>>,
     ) -> ApplicationResult<()> {
         // 解析命令数据
-        let command_data: serde_json::Value = serde_json::from_str(payload)
-            .map_err(|e| crate::errors::ApplicationError::Serialization(
-                format!("命令反序列化失败: {}", e)
-            ))?;
+        let command_data: serde_json::Value = serde_json::from_str(payload).map_err(|e| {
+            crate::errors::ApplicationError::Serialization(format!("命令反序列化失败: {}", e))
+        })?;
 
-        let command_type = command_data.get("command_type")
+        let command_type = command_data
+            .get("command_type")
             .and_then(|v| v.as_str())
-            .ok_or_else(|| crate::errors::ApplicationError::Validation(
-                "命令类型缺失".to_string()
-            ))?;
+            .ok_or_else(|| {
+                crate::errors::ApplicationError::Validation("命令类型缺失".to_string())
+            })?;
 
-        let command_id = command_data.get("command_id")
+        let command_id = command_data
+            .get("command_id")
             .and_then(|v| v.as_str())
             .unwrap_or("unknown");
 
@@ -254,11 +268,10 @@ impl KafkaCommandBus {
 
         // 找到对应的处理器
         let handlers_lock = handlers.read().await;
-        let _handler = handlers_lock.get(command_type)
-            .ok_or_else(|| {
-                error!("未找到命令处理器: {}", command_type);
-                crate::errors::ApplicationError::CommandHandlerNotFound(command_type.to_string())
-            })?;
+        let _handler = handlers_lock.get(command_type).ok_or_else(|| {
+            error!("未找到命令处理器: {}", command_type);
+            crate::errors::ApplicationError::CommandHandlerNotFound(command_type.to_string())
+        })?;
         drop(handlers_lock);
 
         // 注意：由于 Rust 的类型系统限制，这里无法直接调用泛型处理器
@@ -299,17 +312,20 @@ impl CommandBus for KafkaCommandBus {
             "data": serde_json::json!({})
         });
 
-        let command_data = serde_json::to_string(&command_message)
-            .map_err(|e| crate::errors::ApplicationError::Serialization(
-                format!("命令序列化失败: {}", e)
-            ))?;
+        let command_data = serde_json::to_string(&command_message).map_err(|e| {
+            crate::errors::ApplicationError::Serialization(format!("命令序列化失败: {}", e))
+        })?;
 
         // 发送到 Kafka
         let record = FutureRecord::to(&topic)
             .key(&command_id)
             .payload(&command_data);
 
-        match self.producer.send(record, std::time::Duration::from_secs(5)).await {
+        match self
+            .producer
+            .send(record, std::time::Duration::from_secs(5))
+            .await
+        {
             Ok(delivery) => {
                 info!("命令已发送到 Kafka: {:?}", delivery);
             }
@@ -319,9 +335,10 @@ impl CommandBus for KafkaCommandBus {
                 pending.remove(&command_id);
 
                 error!("发送命令到 Kafka 失败: {}", e);
-                return Err(crate::errors::ApplicationError::Infrastructure(
-                    format!("Kafka 发送失败: {}", e)
-                ));
+                return Err(crate::errors::ApplicationError::Infrastructure(format!(
+                    "Kafka 发送失败: {}",
+                    e
+                )));
             }
         }
 
@@ -333,12 +350,12 @@ impl CommandBus for KafkaCommandBus {
                 // 在实际实现中，需要使用更复杂的模式来处理类型转换
                 // 目前返回一个默认值或错误
                 return Err(crate::errors::ApplicationError::Infrastructure(
-                    "异步响应处理暂未完全实现".to_string()
+                    "异步响应处理暂未完全实现".to_string(),
                 ));
             }
             Ok(Err(_)) => {
                 return Err(crate::errors::ApplicationError::Infrastructure(
-                    "命令响应通道错误".to_string()
+                    "命令响应通道错误".to_string(),
                 ));
             }
             Err(_) => {
@@ -346,9 +363,10 @@ impl CommandBus for KafkaCommandBus {
                 let mut pending = self.pending_commands.write().await;
                 pending.remove(&command_id);
 
-                return Err(crate::errors::ApplicationError::Infrastructure(
-                    format!("命令执行超时: {}", command_id)
-                ));
+                return Err(crate::errors::ApplicationError::Infrastructure(format!(
+                    "命令执行超时: {}",
+                    command_id
+                )));
             }
         }
     }
@@ -366,15 +384,18 @@ impl KafkaQueryBus {
     pub fn new(
         kafka_brokers: &str,
         topic_prefix: String,
-        cache_enabled: bool
+        cache_enabled: bool,
     ) -> ApplicationResult<Self> {
         let producer: FutureProducer = ClientConfig::new()
             .set("bootstrap.servers", kafka_brokers)
             .set("message.timeout.ms", "5000")
             .create()
-            .map_err(|e| crate::errors::ApplicationError::Infrastructure(
-                format!("创建 Kafka 生产者失败: {}", e)
-            ))?;
+            .map_err(|e| {
+                crate::errors::ApplicationError::Infrastructure(format!(
+                    "创建 Kafka 生产者失败: {}",
+                    e
+                ))
+            })?;
 
         Ok(Self {
             producer: Arc::new(producer),
@@ -401,7 +422,8 @@ impl QueryBus for KafkaQueryBus {
         // 对于查询，通常直接执行本地处理器，而不通过 Kafka
         // 因为查询需要立即返回结果，而不是异步处理
         let handlers = self.handlers.read().await;
-        let handler = handlers.get(type_name)
+        let handler = handlers
+            .get(type_name)
             .and_then(|h| h.downcast_ref::<Arc<dyn QueryHandler<Q>>>())
             .ok_or_else(|| {
                 error!("未找到查询处理器: {}", type_name);
@@ -435,7 +457,10 @@ impl QueryBus for KafkaQueryBus {
                 .key(&record_key)
                 .payload(&log_data);
 
-            let _ = self.producer.send(record, std::time::Duration::from_secs(1)).await;
+            let _ = self
+                .producer
+                .send(record, std::time::Duration::from_secs(1))
+                .await;
         }
 
         Ok(result)
@@ -454,7 +479,7 @@ impl KafkaEventBus {
     pub fn new(
         kafka_brokers: &str,
         topic_prefix: String,
-        enable_event_sourcing: bool
+        enable_event_sourcing: bool,
     ) -> ApplicationResult<Self> {
         let producer: FutureProducer = ClientConfig::new()
             .set("bootstrap.servers", kafka_brokers)
@@ -463,9 +488,12 @@ impl KafkaEventBus {
             .set("batch.size", "16384")
             .set("linger.ms", "5")
             .create()
-            .map_err(|e| crate::errors::ApplicationError::Infrastructure(
-                format!("创建 Kafka 事件生产者失败: {}", e)
-            ))?;
+            .map_err(|e| {
+                crate::errors::ApplicationError::Infrastructure(format!(
+                    "创建 Kafka 事件生产者失败: {}",
+                    e
+                ))
+            })?;
 
         Ok(Self {
             producer: Arc::new(producer),
@@ -485,16 +513,21 @@ impl KafkaEventBus {
             .set("enable.auto.commit", "true")
             .set("auto.offset.reset", "earliest") // 确保不丢失事件
             .create()
-            .map_err(|e| crate::errors::ApplicationError::Infrastructure(
-                format!("创建 Kafka 事件消费者失败: {}", e)
-            ))?;
+            .map_err(|e| {
+                crate::errors::ApplicationError::Infrastructure(format!(
+                    "创建 Kafka 事件消费者失败: {}",
+                    e
+                ))
+            })?;
 
         // 订阅所有事件主题
         let topic_pattern = format!("{}:event:*", self.topic_prefix);
-        consumer.subscribe(&[&topic_pattern])
-            .map_err(|e| crate::errors::ApplicationError::Infrastructure(
-                format!("订阅 Kafka 事件主题失败: {}", e)
-            ))?;
+        consumer.subscribe(&[&topic_pattern]).map_err(|e| {
+            crate::errors::ApplicationError::Infrastructure(format!(
+                "订阅 Kafka 事件主题失败: {}",
+                e
+            ))
+        })?;
 
         let handlers = self.handlers.clone();
         tokio::spawn(async move {
@@ -538,19 +571,19 @@ impl KafkaEventBus {
 
     async fn process_event_message(
         payload: &str,
-        handlers: &Arc<RwLock<Vec<Arc<dyn EventHandler>>>>
+        handlers: &Arc<RwLock<Vec<Arc<dyn EventHandler>>>>,
     ) -> ApplicationResult<()> {
         // 解析事件数据
-        let event_data: serde_json::Value = serde_json::from_str(payload)
-            .map_err(|e| crate::errors::ApplicationError::Serialization(
-                format!("事件反序列化失败: {}", e)
-            ))?;
+        let event_data: serde_json::Value = serde_json::from_str(payload).map_err(|e| {
+            crate::errors::ApplicationError::Serialization(format!("事件反序列化失败: {}", e))
+        })?;
 
-        let event_type = event_data.get("event_type")
+        let event_type = event_data
+            .get("event_type")
             .and_then(|v| v.as_str())
-            .ok_or_else(|| crate::errors::ApplicationError::Validation(
-                "事件类型缺失".to_string()
-            ))?;
+            .ok_or_else(|| {
+                crate::errors::ApplicationError::Validation("事件类型缺失".to_string())
+            })?;
 
         // 找到所有可以处理此事件的处理器
         let handlers_lock = handlers.read().await;
@@ -562,14 +595,12 @@ impl KafkaEventBus {
         drop(handlers_lock);
 
         // 并发处理事件
-        let mut tasks: Vec<tokio::task::JoinHandle<Result<(), crate::errors::ApplicationError>>> = Vec::new();
+        let mut tasks: Vec<tokio::task::JoinHandle<Result<(), crate::errors::ApplicationError>>> =
+            Vec::new();
 
         for handler in matching_handlers {
             // 从事件数据重构事件对象
-            let event = Arc::new(KafkaEvent::new(
-                event_data.clone(),
-                event_type.to_string()
-            ));
+            let event = Arc::new(KafkaEvent::new(event_data.clone(), event_type.to_string()));
 
             // 为每个处理器创建异步任务
             let task = tokio::spawn(async move {
@@ -633,10 +664,9 @@ impl EventBus for KafkaEventBus {
             "data": serde_json::json!({})
         });
 
-        let message_data = serde_json::to_string(&event_message)
-            .map_err(|e| crate::errors::ApplicationError::Serialization(
-                format!("事件序列化失败: {}", e)
-            ))?;
+        let message_data = serde_json::to_string(&event_message).map_err(|e| {
+            crate::errors::ApplicationError::Serialization(format!("事件序列化失败: {}", e))
+        })?;
 
         // 使用聚合ID作为分区键，确保同一聚合的事件有序
         let aggregate_id = event.aggregate_id();
@@ -644,7 +674,11 @@ impl EventBus for KafkaEventBus {
             .key(&aggregate_id)
             .payload(&message_data);
 
-        match self.producer.send(record, std::time::Duration::from_secs(10)).await {
+        match self
+            .producer
+            .send(record, std::time::Duration::from_secs(10))
+            .await
+        {
             Ok(delivery) => {
                 info!("事件已发布到 Kafka: {:?}", delivery);
 
@@ -656,16 +690,21 @@ impl EventBus for KafkaEventBus {
                         .key(&store_key)
                         .payload(&message_data);
 
-                    if let Err((e, _)) = self.producer.send(store_record, std::time::Duration::from_secs(5)).await {
+                    if let Err((e, _)) = self
+                        .producer
+                        .send(store_record, std::time::Duration::from_secs(5))
+                        .await
+                    {
                         warn!("发送事件到事件存储失败: {}", e);
                     }
                 }
             }
             Err((e, _)) => {
                 error!("发布事件到 Kafka 失败: {}", e);
-                return Err(crate::errors::ApplicationError::Infrastructure(
-                    format!("Kafka 事件发布失败: {}", e)
-                ));
+                return Err(crate::errors::ApplicationError::Infrastructure(format!(
+                    "Kafka 事件发布失败: {}",
+                    e
+                )));
             }
         }
 

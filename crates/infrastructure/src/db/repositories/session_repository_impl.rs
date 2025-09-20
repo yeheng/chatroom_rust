@@ -6,8 +6,8 @@ use chrono::{DateTime, Utc};
 use domain::{
     errors::{DomainError, DomainResult},
     repositories::{
-        session_repository::{SessionRepository, Session, SessionStatistics},
-        Pagination, PaginatedResult
+        session_repository::{Session, SessionRepository, SessionStatistics},
+        PaginatedResult, Pagination,
     },
 };
 use sqlx::{query, query_as, FromRow, Row};
@@ -201,7 +201,11 @@ impl SessionRepository for PostgresSessionRepository {
         Ok(result.into())
     }
 
-    async fn update_last_accessed(&self, session_id: Uuid, last_accessed_at: DateTime<Utc>) -> DomainResult<()> {
+    async fn update_last_accessed(
+        &self,
+        session_id: Uuid,
+        last_accessed_at: DateTime<Utc>,
+    ) -> DomainResult<()> {
         query("UPDATE sessions SET last_accessed_at = $2, updated_at = NOW() WHERE id = $1")
             .bind(session_id)
             .bind(last_accessed_at)
@@ -212,7 +216,12 @@ impl SessionRepository for PostgresSessionRepository {
         Ok(())
     }
 
-    async fn refresh_token(&self, session_id: Uuid, new_token_hash: &str, new_refresh_token: Option<&str>) -> DomainResult<()> {
+    async fn refresh_token(
+        &self,
+        session_id: Uuid,
+        new_token_hash: &str,
+        new_refresh_token: Option<&str>,
+    ) -> DomainResult<()> {
         query("UPDATE sessions SET token_hash = $2, refresh_token = $3, updated_at = NOW() WHERE id = $1")
             .bind(session_id)
             .bind(new_token_hash)
@@ -244,14 +253,19 @@ impl SessionRepository for PostgresSessionRepository {
         Ok(result.rows_affected() > 0)
     }
 
-    async fn find_active_by_user(&self, user_id: Uuid, pagination: Pagination) -> DomainResult<PaginatedResult<Session>> {
+    async fn find_active_by_user(
+        &self,
+        user_id: Uuid,
+        pagination: Pagination,
+    ) -> DomainResult<PaginatedResult<Session>> {
         // 获取总数
-        let total_count: i64 = query("SELECT COUNT(*) FROM sessions WHERE user_id = $1 AND is_active = true")
-            .bind(user_id)
-            .fetch_one(&*self.pool)
-            .await
-            .map_err(|e| DomainError::database_error(e.to_string()))?
-            .get(0);
+        let total_count: i64 =
+            query("SELECT COUNT(*) FROM sessions WHERE user_id = $1 AND is_active = true")
+                .bind(user_id)
+                .fetch_one(&*self.pool)
+                .await
+                .map_err(|e| DomainError::database_error(e.to_string()))?
+                .get(0);
 
         // 获取会话
         let sessions: Vec<DbSession> = query_as(
@@ -273,10 +287,18 @@ impl SessionRepository for PostgresSessionRepository {
         .map_err(|e| DomainError::database_error(e.to_string()))?;
 
         let sessions: Vec<Session> = sessions.into_iter().map(|s| s.into()).collect();
-        Ok(PaginatedResult::new(sessions, total_count as u64, pagination))
+        Ok(PaginatedResult::new(
+            sessions,
+            total_count as u64,
+            pagination,
+        ))
     }
 
-    async fn find_all_by_user(&self, user_id: Uuid, pagination: Pagination) -> DomainResult<PaginatedResult<Session>> {
+    async fn find_all_by_user(
+        &self,
+        user_id: Uuid,
+        pagination: Pagination,
+    ) -> DomainResult<PaginatedResult<Session>> {
         // 获取总数
         let total_count: i64 = query("SELECT COUNT(*) FROM sessions WHERE user_id = $1")
             .bind(user_id)
@@ -305,7 +327,11 @@ impl SessionRepository for PostgresSessionRepository {
         .map_err(|e| DomainError::database_error(e.to_string()))?;
 
         let sessions: Vec<Session> = sessions.into_iter().map(|s| s.into()).collect();
-        Ok(PaginatedResult::new(sessions, total_count as u64, pagination))
+        Ok(PaginatedResult::new(
+            sessions,
+            total_count as u64,
+            pagination,
+        ))
     }
 
     async fn cleanup_expired(&self) -> DomainResult<u64> {
@@ -318,11 +344,12 @@ impl SessionRepository for PostgresSessionRepository {
     }
 
     async fn count_active(&self) -> DomainResult<u64> {
-        let count: i64 = query("SELECT COUNT(*) FROM sessions WHERE is_active = true AND expires_at > NOW()")
-            .fetch_one(&*self.pool)
-            .await
-            .map_err(|e| DomainError::database_error(e.to_string()))?
-            .get(0);
+        let count: i64 =
+            query("SELECT COUNT(*) FROM sessions WHERE is_active = true AND expires_at > NOW()")
+                .fetch_one(&*self.pool)
+                .await
+                .map_err(|e| DomainError::database_error(e.to_string()))?
+                .get(0);
 
         Ok(count as u64)
     }
@@ -364,7 +391,11 @@ impl SessionRepository for PostgresSessionRepository {
         })
     }
 
-    async fn find_by_ip(&self, ip_address: &str, pagination: Pagination) -> DomainResult<PaginatedResult<Session>> {
+    async fn find_by_ip(
+        &self,
+        ip_address: &str,
+        pagination: Pagination,
+    ) -> DomainResult<PaginatedResult<Session>> {
         // 获取总数
         let total_count: i64 = query("SELECT COUNT(*) FROM sessions WHERE ip_address = $1")
             .bind(ip_address)
@@ -393,10 +424,18 @@ impl SessionRepository for PostgresSessionRepository {
         .map_err(|e| DomainError::database_error(e.to_string()))?;
 
         let sessions: Vec<Session> = sessions.into_iter().map(|s| s.into()).collect();
-        Ok(PaginatedResult::new(sessions, total_count as u64, pagination))
+        Ok(PaginatedResult::new(
+            sessions,
+            total_count as u64,
+            pagination,
+        ))
     }
 
-    async fn find_by_device_type(&self, device_type: &str, pagination: Pagination) -> DomainResult<PaginatedResult<Session>> {
+    async fn find_by_device_type(
+        &self,
+        device_type: &str,
+        pagination: Pagination,
+    ) -> DomainResult<PaginatedResult<Session>> {
         // 获取总数
         let total_count: i64 = query("SELECT COUNT(*) FROM sessions WHERE device_type = $1")
             .bind(device_type)
@@ -425,7 +464,11 @@ impl SessionRepository for PostgresSessionRepository {
         .map_err(|e| DomainError::database_error(e.to_string()))?;
 
         let sessions: Vec<Session> = sessions.into_iter().map(|s| s.into()).collect();
-        Ok(PaginatedResult::new(sessions, total_count as u64, pagination))
+        Ok(PaginatedResult::new(
+            sessions,
+            total_count as u64,
+            pagination,
+        ))
     }
 
     async fn invalidate_all_user_sessions(&self, user_id: Uuid) -> DomainResult<u64> {
@@ -438,7 +481,11 @@ impl SessionRepository for PostgresSessionRepository {
         Ok(result.rows_affected())
     }
 
-    async fn invalidate_other_user_sessions(&self, user_id: Uuid, current_session_id: Uuid) -> DomainResult<u64> {
+    async fn invalidate_other_user_sessions(
+        &self,
+        user_id: Uuid,
+        current_session_id: Uuid,
+    ) -> DomainResult<u64> {
         let result = query("UPDATE sessions SET is_active = false, updated_at = NOW() WHERE user_id = $1 AND id != $2 AND is_active = true")
             .bind(user_id)
             .bind(current_session_id)

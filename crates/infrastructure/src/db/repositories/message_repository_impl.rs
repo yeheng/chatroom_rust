@@ -7,14 +7,16 @@ use domain::{
     entities::message::{Message, MessageStatus, MessageType},
     errors::{DomainError, DomainResult},
     repositories::{
-        message_repository::{MessageRepository, MessageSearchParams, MessageStatistics, ReplyChain},
-        Pagination, PaginatedResult, SortConfig,
+        message_repository::{
+            MessageRepository, MessageSearchParams, MessageStatistics, ReplyChain,
+        },
+        PaginatedResult, Pagination, SortConfig,
     },
 };
+use serde_json::Value as JsonValue;
 use sqlx::{query, query_as, FromRow, Row};
 use std::sync::Arc;
 use uuid::Uuid;
-use serde_json::Value as JsonValue;
 
 /// 数据库消息模型
 #[derive(Debug, Clone, FromRow)]
@@ -61,7 +63,8 @@ impl From<DbMessage> for Message {
             status,
             db_message.created_at,
             db_message.updated_at,
-        ).unwrap() // 从数据库加载的数据应该是有效的
+        )
+        .unwrap() // 从数据库加载的数据应该是有效的
     }
 }
 
@@ -131,9 +134,9 @@ impl PostgresMessageRepository {
 
         if let Some(is_deleted) = params.is_deleted {
             if is_deleted {
-                conditions.push(format!("status = 'deleted'"));
+                conditions.push("status = 'deleted'".to_string());
             } else {
-                conditions.push(format!("status != 'deleted'"));
+                conditions.push("status != 'deleted'".to_string());
             }
         }
 
@@ -246,7 +249,11 @@ impl MessageRepository for PostgresMessageRepository {
 
         let messages: Vec<Message> = messages.into_iter().map(|m| m.into()).collect();
 
-        Ok(PaginatedResult::new(messages, total_count as u64, pagination))
+        Ok(PaginatedResult::new(
+            messages,
+            total_count as u64,
+            pagination,
+        ))
     }
 
     async fn find_by_user(
@@ -292,7 +299,11 @@ impl MessageRepository for PostgresMessageRepository {
 
         let messages: Vec<Message> = messages.into_iter().map(|m| m.into()).collect();
 
-        Ok(PaginatedResult::new(messages, total_count as u64, pagination))
+        Ok(PaginatedResult::new(
+            messages,
+            total_count as u64,
+            pagination,
+        ))
     }
 
     async fn update(&self, message: &Message) -> DomainResult<Message> {
@@ -344,7 +355,11 @@ impl MessageRepository for PostgresMessageRepository {
 
         let base_query = format!(
             "FROM messages {} AND status != 'deleted'",
-            if where_clause.is_empty() { "WHERE 1=1".to_string() } else { where_clause }
+            if where_clause.is_empty() {
+                "WHERE 1=1".to_string()
+            } else {
+                where_clause
+            }
         );
 
         // 获取总数
@@ -371,7 +386,11 @@ impl MessageRepository for PostgresMessageRepository {
 
         let messages: Vec<Message> = messages.into_iter().map(|m| m.into()).collect();
 
-        Ok(PaginatedResult::new(messages, total_count as u64, pagination))
+        Ok(PaginatedResult::new(
+            messages,
+            total_count as u64,
+            pagination,
+        ))
     }
 
     async fn get_statistics(&self) -> DomainResult<MessageStatistics> {
@@ -421,16 +440,19 @@ impl MessageRepository for PostgresMessageRepository {
         Ok(count as u64)
     }
 
-    async fn find_replies(&self, message_id: Uuid, pagination: Pagination) -> DomainResult<PaginatedResult<Message>> {
+    async fn find_replies(
+        &self,
+        message_id: Uuid,
+        pagination: Pagination,
+    ) -> DomainResult<PaginatedResult<Message>> {
         // 获取总数
-        let total_count: i64 = query(
-            "SELECT COUNT(*) FROM messages WHERE reply_to_id = $1 AND status != 'deleted'"
-        )
-        .bind(message_id)
-        .fetch_one(&*self.pool)
-        .await
-        .map_err(|e| DomainError::database_error(e.to_string()))?
-        .get(0);
+        let total_count: i64 =
+            query("SELECT COUNT(*) FROM messages WHERE reply_to_id = $1 AND status != 'deleted'")
+                .bind(message_id)
+                .fetch_one(&*self.pool)
+                .await
+                .map_err(|e| DomainError::database_error(e.to_string()))?
+                .get(0);
 
         // 获取回复
         let messages: Vec<DbMessage> = query_as(
@@ -451,18 +473,24 @@ impl MessageRepository for PostgresMessageRepository {
 
         let messages: Vec<Message> = messages.into_iter().map(|m| m.into()).collect();
 
-        Ok(PaginatedResult::new(messages, total_count as u64, pagination))
+        Ok(PaginatedResult::new(
+            messages,
+            total_count as u64,
+            pagination,
+        ))
     }
 
     // TODO: 实现缺失的方法 - 当前为基本实现，需要后续完善
 
     async fn mark_as_edited(&self, message_id: Uuid, new_content: &str) -> DomainResult<()> {
-        query("UPDATE messages SET content = $2, status = 'edited', updated_at = NOW() WHERE id = $1")
-            .bind(message_id)
-            .bind(new_content)
-            .execute(&*self.pool)
-            .await
-            .map_err(|e| DomainError::database_error(e.to_string()))?;
+        query(
+            "UPDATE messages SET content = $2, status = 'edited', updated_at = NOW() WHERE id = $1",
+        )
+        .bind(message_id)
+        .bind(new_content)
+        .execute(&*self.pool)
+        .await
+        .map_err(|e| DomainError::database_error(e.to_string()))?;
         Ok(())
     }
 
@@ -597,13 +625,11 @@ impl MessageRepository for PostgresMessageRepository {
     }
 
     async fn cleanup_deleted_messages(&self, older_than: DateTime<Utc>) -> DomainResult<u64> {
-        let result = query(
-            "DELETE FROM messages WHERE status = 'deleted' AND updated_at < $1"
-        )
-        .bind(older_than)
-        .execute(&*self.pool)
-        .await
-        .map_err(|e| DomainError::database_error(e.to_string()))?;
+        let result = query("DELETE FROM messages WHERE status = 'deleted' AND updated_at < $1")
+            .bind(older_than)
+            .execute(&*self.pool)
+            .await
+            .map_err(|e| DomainError::database_error(e.to_string()))?;
 
         Ok(result.rows_affected())
     }
@@ -618,7 +644,12 @@ impl MessageRepository for PostgresMessageRepository {
         Ok(())
     }
 
-    async fn get_room_message_stats_by_day(&self, room_id: Uuid, start_date: DateTime<Utc>, end_date: DateTime<Utc>) -> DomainResult<Vec<(DateTime<Utc>, u64)>> {
+    async fn get_room_message_stats_by_day(
+        &self,
+        room_id: Uuid,
+        start_date: DateTime<Utc>,
+        end_date: DateTime<Utc>,
+    ) -> DomainResult<Vec<(DateTime<Utc>, u64)>> {
         // 简化实现，返回空结果
         Ok(Vec::new())
     }
@@ -644,4 +675,3 @@ impl MessageRepository for PostgresMessageRepository {
         Ok(messages.into_iter().map(|m| m.into()).collect())
     }
 }
-

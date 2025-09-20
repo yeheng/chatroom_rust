@@ -4,9 +4,10 @@ use crate::db::DbPool;
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use domain::{
-    entities::user::{User, UserStatus}, errors::{DomainError, DomainResult}, repositories::{
-        PaginatedResult, Pagination, SortConfig
-    }, UserRepository, UserSearchParams, UserStatistics
+    entities::user::{User, UserStatus},
+    errors::{DomainError, DomainResult},
+    repositories::{PaginatedResult, Pagination, SortConfig},
+    UserRepository, UserSearchParams, UserStatistics,
 };
 use sqlx::{query, query_as, FromRow, Row};
 use std::sync::Arc;
@@ -250,7 +251,11 @@ impl UserRepository for PostgresUserRepository {
         Ok(())
     }
 
-    async fn update_last_active(&self, user_id: Uuid, last_active_at: DateTime<Utc>) -> DomainResult<()> {
+    async fn update_last_active(
+        &self,
+        user_id: Uuid,
+        last_active_at: DateTime<Utc>,
+    ) -> DomainResult<()> {
         query("UPDATE users SET last_active_at = $2, updated_at = NOW() WHERE id = $1")
             .bind(user_id)
             .bind(last_active_at)
@@ -287,10 +292,7 @@ impl UserRepository for PostgresUserRepository {
             None => "ORDER BY created_at DESC".to_string(),
         };
 
-        let base_query = format!(
-            "FROM users {} AND status != 'deleted'",
-            where_clause
-        );
+        let base_query = format!("FROM users {} AND status != 'deleted'", where_clause);
 
         // 获取总数
         let count_query = format!("SELECT COUNT(*) {}", base_query);
@@ -347,23 +349,25 @@ impl UserRepository for PostgresUserRepository {
     }
 
     async fn username_exists(&self, username: &str) -> DomainResult<bool> {
-        let count: i64 = query("SELECT COUNT(*) FROM users WHERE username = $1 AND status != 'deleted'")
-            .bind(username)
-            .fetch_one(&*self.pool)
-            .await
-            .map_err(|e| DomainError::database_error(e.to_string()))?
-            .get(0);
+        let count: i64 =
+            query("SELECT COUNT(*) FROM users WHERE username = $1 AND status != 'deleted'")
+                .bind(username)
+                .fetch_one(&*self.pool)
+                .await
+                .map_err(|e| DomainError::database_error(e.to_string()))?
+                .get(0);
 
         Ok(count > 0)
     }
 
     async fn email_exists(&self, email: &str) -> DomainResult<bool> {
-        let count: i64 = query("SELECT COUNT(*) FROM users WHERE email = $1 AND status != 'deleted'")
-            .bind(email)
-            .fetch_one(&*self.pool)
-            .await
-            .map_err(|e| DomainError::database_error(e.to_string()))?
-            .get(0);
+        let count: i64 =
+            query("SELECT COUNT(*) FROM users WHERE email = $1 AND status != 'deleted'")
+                .bind(email)
+                .fetch_one(&*self.pool)
+                .await
+                .map_err(|e| DomainError::database_error(e.to_string()))?
+                .get(0);
 
         Ok(count > 0)
     }
@@ -407,7 +411,10 @@ impl UserRepository for PostgresUserRepository {
         Ok(users.into_iter().map(|u| u.into()).collect())
     }
 
-    async fn find_online_users(&self, pagination: Pagination) -> DomainResult<PaginatedResult<User>> {
+    async fn find_online_users(
+        &self,
+        pagination: Pagination,
+    ) -> DomainResult<PaginatedResult<User>> {
         // 获取总数
         let total_count: i64 = query(
             "SELECT COUNT(*) FROM users WHERE last_active_at > NOW() - INTERVAL '15 minutes' AND status = 'active'"
@@ -439,14 +446,22 @@ impl UserRepository for PostgresUserRepository {
     }
 
     #[cfg(feature = "enterprise")]
-    async fn find_by_role(&self, role_id: Uuid, pagination: Pagination) -> DomainResult<PaginatedResult<User>> {
+    async fn find_by_role(
+        &self,
+        role_id: Uuid,
+        pagination: Pagination,
+    ) -> DomainResult<PaginatedResult<User>> {
         // 这里需要与用户角色表关联查询
         // 由于暂时没有实现企业功能，返回空结果
         Ok(PaginatedResult::new(Vec::new(), 0, pagination))
     }
 
     #[cfg(feature = "enterprise")]
-    async fn find_by_organization(&self, org_id: Uuid, pagination: Pagination) -> DomainResult<PaginatedResult<User>> {
+    async fn find_by_organization(
+        &self,
+        org_id: Uuid,
+        pagination: Pagination,
+    ) -> DomainResult<PaginatedResult<User>> {
         // 这里需要与组织表关联查询
         // 由于暂时没有实现企业功能，返回空结果
         Ok(PaginatedResult::new(Vec::new(), 0, pagination))

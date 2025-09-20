@@ -2,12 +2,12 @@
 //!
 //! 包含应用层与外界交互的所有数据传输对象
 
+use chrono::{DateTime, Utc};
+use domain::entities::room_member::MemberRole;
+use domain::message::MessageType;
+use domain::user::UserStatus;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
-use chrono::{DateTime, Utc};
-use domain::user::UserStatus;
-use domain::message::MessageType;
-use domain::entities::room_member::MemberRole;
 // use domain::organization::OrganizationSettings;
 
 // ============================================================================

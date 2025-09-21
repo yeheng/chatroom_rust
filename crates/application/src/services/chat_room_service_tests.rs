@@ -6,7 +6,7 @@
 mod chat_room_service_tests {
     use crate::errors::*;
     use crate::services::chat_room_service::*;
-    use crate::MemberRole;
+    use crate::services::MemberRole;
     use domain::chatroom::ChatRoomStatus;
     use infrastructure;
     use uuid::Uuid;

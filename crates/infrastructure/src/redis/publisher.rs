@@ -2,7 +2,8 @@
 //!
 //! 使用连接池避免连接创建开销，支持房间频道和全局频道。
 
-use crate::{ChatEvent, RedisConfig, RedisError, RedisMessageType, RedisResult, RedisRoomMessage};
+use crate::{ChatEvent, RedisConfig, RedisMessageType, RedisRoomMessage};
+use crate::redis::{RedisError, RedisResult};
 use redis::{Client, Connection};
 use std::collections::HashMap;
 use std::sync::Arc;

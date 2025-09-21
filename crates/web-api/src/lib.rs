@@ -26,9 +26,10 @@ use tower_http::{compression::CompressionLayer, cors::CorsLayer};
 use tracing::{error, info, warn};
 use uuid::Uuid;
 
-use application::{
-    ChatRoomService, ChatRoomServiceImpl, CreateRoomRequest, CreateUserRequest, UserSearchRequest,
-    UserService, UserServiceImpl,
+use application::services::{
+    ChatRoomService, ChatRoomServiceImpl, CreateRoomRequest, CreateUserRequest,
+    UpdateRoomRequest as AppUpdateRoomRequest, UpdateUserRequest as AppUpdateUserRequest,
+    UserSearchRequest, UserService, UserServiceImpl,
 };
 use domain::entities::auth::{LoginCredentials, RefreshTokenRequest, UserRole};
 use domain::services::auth_service::JwtEncoder;
@@ -540,7 +541,7 @@ async fn update_current_user(
         .user_service
         .update_user(
             user_id,
-            application::UpdateUserRequest {
+            AppUpdateUserRequest {
                 username: request.username,
                 email: request.email,
                 display_name: request.display_name,
@@ -660,7 +661,7 @@ async fn update_room_handler(
         .chat_service
         .update_room(
             room_id,
-            application::UpdateRoomRequest {
+            AppUpdateRoomRequest {
                 name: request.name,
                 description: request.description,
                 max_members: None,

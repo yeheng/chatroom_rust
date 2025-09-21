@@ -2,7 +2,8 @@
 //!
 //! 支持动态订阅房间频道和自动重连的订阅者实现。
 
-use crate::{RedisConfig, RedisError, RedisResult, RedisRoomMessage};
+use crate::redis::{RedisError, RedisResult};
+use crate::{RedisConfig, RedisRoomMessage};
 use futures_util::stream::StreamExt;
 use redis::{Client, ConnectionLike};
 use std::collections::HashMap;

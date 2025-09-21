@@ -2,7 +2,8 @@
 //!
 //! 支持优雅关闭和错误恢复的 Kafka 消费者实现。
 
-use crate::{ChatEvent, KafkaConfig, KafkaError, KafkaResult};
+use crate::{ChatEvent, KafkaConfig};
+use crate::kafka::{KafkaError, KafkaResult};
 use rdkafka::config::ClientConfig;
 use rdkafka::consumer::{Consumer, StreamConsumer};
 use rdkafka::message::{BorrowedMessage, Message};

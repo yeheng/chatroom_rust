@@ -2,7 +2,8 @@
 //!
 //! 使用 room_id 作为分区键，确保同一房间消息的有序性。
 
-use crate::{ChatEvent, KafkaConfig, KafkaError, KafkaResult};
+use crate::{ChatEvent, KafkaConfig};
+use crate::kafka::{KafkaError, KafkaResult};
 use rdkafka::config::ClientConfig;
 use rdkafka::producer::{FutureProducer, FutureRecord, Producer};
 use rdkafka::util::Timeout;

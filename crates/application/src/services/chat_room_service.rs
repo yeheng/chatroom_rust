@@ -537,15 +537,12 @@ impl ChatRoomService for ChatRoomServiceImpl {
 
             ChatRoomServiceImpl::validate_password_strength(&password)?;
 
-            // 使用bcrypt哈希密码
-            let password_hash = bcrypt::hash(&password, bcrypt::DEFAULT_COST)
-                .map_err(|e| ChatRoomError::Internal(format!("密码哈希失败: {}", e)))?;
-
+            // 传入明文密码，由 Domain 统一哈希，避免双重哈希
             ChatRoom::new_private(
                 request.name,
                 request.description,
                 request.owner_id,
-                password_hash.as_str(),
+                &password,
             )
             .map_err(ApplicationError::from)?
         } else {

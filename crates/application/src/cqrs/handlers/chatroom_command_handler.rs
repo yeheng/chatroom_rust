@@ -404,23 +404,10 @@ impl CommandHandler<CreateChatRoomCommand> for ChatRoomCommandHandler {
             .await?
             .ok_or(UserError::UserNotFound(command.owner_id))?;
 
-        // 哈希密码（如果是私密房间）
-        let password_hash = if command.is_private {
-            if let Some(ref password) = command.password {
-                Some(self.hash_password(password).await?)
-            } else {
-                return Err(crate::errors::ApplicationError::Validation(
-                    "私密房间必须设置密码".to_string(),
-                ));
-            }
-        } else {
-            None
-        };
-
         // 创建聊天室
         let room = if command.is_private {
-            // 私密房间需要密码哈希
-            let password = password_hash.as_ref().ok_or_else(|| {
+            // 直接将明文密码交给 Domain 进行哈希
+            let password = command.password.as_ref().ok_or_else(|| {
                 crate::errors::ApplicationError::Validation("私密房间需要密码".to_string())
             })?;
             ChatRoom::new_private(
@@ -486,11 +473,12 @@ impl CommandHandler<JoinChatRoomCommand> for ChatRoomCommandHandler {
             ));
         }
 
-        // 检查用户是否已在房间中
+        // 检查用户是否已在房间中（以成员仓储为准）
         if self
-            .room_repository
-            .is_user_in_room(command.room_id, command.user_id)
+            .member_repository
+            .find_by_room_and_user(command.room_id, command.user_id)
             .await?
+            .is_some()
         {
             return Err(crate::errors::ApplicationError::Validation(
                 "用户已在房间中".to_string(),
@@ -547,11 +535,12 @@ impl CommandHandler<LeaveChatRoomCommand> for ChatRoomCommandHandler {
             command.user_id, command.room_id
         );
 
-        // 验证用户在房间中
-        if !self
-            .room_repository
-            .is_user_in_room(command.room_id, command.user_id)
+        // 验证用户在房间中（以成员仓储为准）
+        if self
+            .member_repository
+            .find_by_room_and_user(command.room_id, command.user_id)
             .await?
+            .is_none()
         {
             return Err(crate::errors::ApplicationError::Validation(
                 "用户不在房间中".to_string(),
@@ -605,11 +594,12 @@ impl CommandHandler<SendMessageCommand> for ChatRoomCommandHandler {
         // 验证消息内容
         Self::validate_message_content(&command.content)?;
 
-        // 验证用户在房间中
-        if !self
-            .room_repository
-            .is_user_in_room(command.room_id, command.user_id)
+        // 验证用户在房间中（以成员仓储为准）
+        if self
+            .member_repository
+            .find_by_room_and_user(command.room_id, command.user_id)
             .await?
+            .is_none()
         {
             return Err(crate::errors::ApplicationError::Validation(
                 "用户不在房间中".to_string(),

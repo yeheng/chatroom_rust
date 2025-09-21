@@ -448,9 +448,17 @@ mod user_service_tests {
             user_ids.push(user.id);
         }
 
-        // 将一个用户设置为忙碌状态
+        // 设置不同的账户状态：仅一个 Active，其余非 Active
         service
             .update_user_status(user_ids[0], UserStatus::Active)
+            .await
+            .unwrap();
+        service
+            .update_user_status(user_ids[1], UserStatus::Inactive)
+            .await
+            .unwrap();
+        service
+            .update_user_status(user_ids[2], UserStatus::Suspended)
             .await
             .unwrap();
 
@@ -467,7 +475,7 @@ mod user_service_tests {
         assert!(result.is_ok());
         let response = result.unwrap();
 
-        // 应该只找到1个忙碌的用户
+        // 仅有1个 Active 用户
         assert_eq!(response.users.len(), 1);
         assert_eq!(response.total, 1);
         assert_eq!(response.users[0].status, UserStatus::Active);
@@ -628,7 +636,7 @@ mod user_service_tests {
             user_ids.push(user.id);
         }
 
-        // 设置不同的用户状态
+        // 设置不同的用户状态（账户状态）
         service
             .update_user_status(user_ids[0], UserStatus::Active)
             .await
@@ -647,14 +655,29 @@ mod user_service_tests {
             .unwrap();
         // user_ids[4] 保持默认Active状态
 
+        // 设置在线状态（Presence）：3个在线（Online/Busy/Away）
+        use domain::entities::websocket::UserStatus as PresenceStatus;
+        service
+            .update_user_presence(user_ids[0], PresenceStatus::Online)
+            .await
+            .unwrap();
+        service
+            .update_user_presence(user_ids[1], PresenceStatus::Busy)
+            .await
+            .unwrap();
+        service
+            .update_user_presence(user_ids[4], PresenceStatus::Away)
+            .await
+            .unwrap();
+
         let result = service.get_user_stats().await;
 
         assert!(result.is_ok());
         let stats = result.unwrap();
 
         assert_eq!(stats.total_users, 5);
-        assert_eq!(stats.active_users, 4); // Active + Busy
-        assert_eq!(stats.online_users, 3); // Active 用户数
+        assert_eq!(stats.active_users, 4);
+        assert_eq!(stats.online_users, 3); // Online/Busy/Away 共3人在线
         assert_eq!(stats.busy_users, 1);
         assert_eq!(stats.away_users, 1);
         assert_eq!(stats.today_new_users, 5); // 今天创建的用户

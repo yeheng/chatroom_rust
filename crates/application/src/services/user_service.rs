@@ -257,8 +257,8 @@ impl InMemoryUserStore {
         let mut users = self.users.write().await;
 
         if let Some(user) = users.get_mut(&user_id) {
-            // 软删除
-            user.status = UserStatus::Inactive;
+            // 软删除：标记为 Deleted
+            user.status = UserStatus::Deleted;
             user.updated_at = chrono::Utc::now();
             Ok(())
         } else {
@@ -320,6 +320,8 @@ pub struct UserServiceImpl {
     status_cache: Arc<RwLock<HashMap<Uuid, (UserStatus, Instant)>>>,
     /// 搜索缓存（缓存搜索结果）
     search_cache: Arc<RwLock<HashMap<String, (Vec<User>, Instant)>>>,
+    /// 在线状态（Presence）缓存：独立于账户状态
+    presence_cache: Arc<RwLock<HashMap<Uuid, domain::entities::websocket::UserStatus>>>,
 }
 
 impl Default for UserServiceImpl {
@@ -338,6 +340,7 @@ impl UserServiceImpl {
             redis_client: None,
             status_cache: Arc::new(RwLock::new(HashMap::new())),
             search_cache: Arc::new(RwLock::new(HashMap::new())),
+            presence_cache: Arc::new(RwLock::new(HashMap::new())),
         }
     }
 
@@ -374,6 +377,7 @@ impl UserServiceImpl {
             redis_client,
             status_cache: Arc::new(RwLock::new(HashMap::new())),
             search_cache: Arc::new(RwLock::new(HashMap::new())),
+            presence_cache: Arc::new(RwLock::new(HashMap::new())),
         })
     }
 
@@ -633,7 +637,7 @@ impl UserService for UserServiceImpl {
             .ok_or(UserError::UserNotFound(user_id))?;
 
         // 检查用户是否已删除
-        if user.status == UserStatus::Inactive {
+        if user.status == UserStatus::Deleted {
             return Err(UserError::UserNotFound(user_id).into());
         }
 
@@ -648,7 +652,7 @@ impl UserService for UserServiceImpl {
             .ok_or_else(|| UserError::UserNotFoundByUsername(username.to_string()))?;
 
         // 检查用户是否已删除
-        if user.status == UserStatus::Inactive {
+        if user.status == UserStatus::Deleted {
             return Err(UserError::UserNotFoundByUsername(username.to_string()).into());
         }
 
@@ -663,7 +667,7 @@ impl UserService for UserServiceImpl {
             .ok_or_else(|| UserError::UserNotFoundByEmail(email.to_string()))?;
 
         // 检查用户是否已删除
-        if user.status == UserStatus::Inactive {
+        if user.status == UserStatus::Deleted {
             return Err(UserError::UserNotFoundByEmail(email.to_string()).into());
         }
 
@@ -899,7 +903,7 @@ impl UserService for UserServiceImpl {
     async fn delete_user(&self, user_id: Uuid) -> ApplicationResult<()> {
         info!("删除用户: {}", user_id);
 
-        // 软删除用户
+        // 软删除用户（标记为 Deleted）
         self.user_store.delete_user(user_id).await?;
 
         // 清理缓存
@@ -939,28 +943,39 @@ impl UserService for UserServiceImpl {
         let today_start = now.date_naive().and_hms_opt(0, 0, 0).unwrap().and_utc();
 
         for user in &all_users {
-            if user.status != UserStatus::Inactive {
-                total_users += 1;
+            // 剔除已删除用户
+            if user.status == UserStatus::Deleted {
+                continue;
+            }
 
-                match user.status {
-                    UserStatus::Active => {
-                        active_users += 1;
-                        online_users += 1;
-                    }
-                    UserStatus::Deleted => {
-                        active_users += 1;
-                        busy_users += 1;
-                    }
-                    UserStatus::Suspended => {
-                        away_users += 1;
-                    }
-                    _ => {}
-                }
+            total_users += 1;
 
-                // 统计今日新增用户
-                if user.created_at >= today_start {
-                    today_new_users += 1;
+            if user.status == UserStatus::Active {
+                active_users += 1;
+            }
+
+            // 按 Presence 统计在线/忙碌/离开（缺省视为 Offline）
+            let presence = {
+                let map = self.presence_cache.read().await;
+                map.get(&user.id).cloned()
+            };
+            use domain::entities::websocket::UserStatus as PresenceStatus;
+            match presence.unwrap_or(PresenceStatus::Offline) {
+                PresenceStatus::Online => online_users += 1,
+                PresenceStatus::Busy => {
+                    online_users += 1;
+                    busy_users += 1;
                 }
+                PresenceStatus::Away => {
+                    online_users += 1;
+                    away_users += 1;
+                }
+                PresenceStatus::Offline => {}
+            }
+
+            // 统计今日新增用户
+            if user.created_at >= today_start {
+                today_new_users += 1;
             }
         }
 
@@ -1040,6 +1055,19 @@ impl UserServiceImpl {
 
         let mut password_cache = self.password_cache.write().await;
         password_cache.clear();
+    }
+
+    /// 更新用户在线状态（Presence）
+    pub async fn update_user_presence(
+        &self,
+        user_id: Uuid,
+        presence: domain::entities::websocket::UserStatus,
+    ) -> ApplicationResult<()> {
+        // 确认用户存在
+        let _ = self.get_user_by_id(user_id).await?;
+        let mut map = self.presence_cache.write().await;
+        map.insert(user_id, presence);
+        Ok(())
     }
 }
 

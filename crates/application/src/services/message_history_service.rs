@@ -240,8 +240,8 @@ impl MessageHistoryServiceImpl {
 
     /// 测试辅助：创建私密房间
     pub async fn create_private_room(&self, name: &str, owner_id: Uuid, password: &str) -> Uuid {
-        let hash = bcrypt::hash(password, bcrypt::DEFAULT_COST).unwrap();
-        let room = ChatRoom::new_private(name.to_string(), None, owner_id, hash.as_str())
+        // 重要：将明文密码传入 Domain，由 Domain 统一负责哈希，避免双重哈希
+        let room = ChatRoom::new_private(name.to_string(), None, owner_id, password)
             .map_err(ApplicationError::from)
             .unwrap();
         let id = room.id;

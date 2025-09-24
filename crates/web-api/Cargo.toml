@@ -25,7 +25,6 @@ notify = { workspace = true }
 toml = {workspace = true}
 validator = { workspace = true }
 reqwest = { workspace = true }
-serde_yaml = {workspace = true}
 futures-util = { workspace = true }
 
 [dev-dependencies]

@@ -13,7 +13,6 @@ anyhow = { workspace = true }
 bcrypt = { workspace = true }
 jsonwebtoken = { workspace = true }
 ring = { workspace = true }
-data-encoding = { workspace = true }
 async-trait = { workspace = true }
 validator = { workspace = true }
 tokio = { workspace = true }

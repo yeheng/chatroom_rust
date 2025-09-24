@@ -18,5 +18,3 @@ thiserror = { workspace = true }
 bcrypt = { workspace = true }
 redis = { workspace = true }
 futures-util = { workspace = true }
-data-encoding = { workspace = true }
-rdkafka = { workspace = true }

@@ -186,26 +186,31 @@ export ENABLE_ONLINE_STATISTICS=true
 ### 企业级功能
 
 #### 组织管理 (Feature Flag: enable_organizations)
+
 - 支持层级组织结构（最多5层）
 - 部门和职位管理
 - 用户组织关联
 
 #### 用户角色和权限系统 (Feature Flag: enable_user_roles)
+
 - 细粒度权限控制
 - 系统、组织、自定义角色
 - 权限继承和动态分配
 
 #### 代理关系管理 (Feature Flag: enable_proxy_system)
+
 - 支持临时和长期代理
 - 权限委托和活动记录
 - 代理操作审计
 
 #### 机器人消息系统 (Feature Flag: enable_bot_messages)
+
 - 多种机器人类型（系统、聊天、通知等）
 - 触发器和自动化流程
 - 消息限流和权限控制
 
 #### 用户在线统计 (Feature Flag: enable_online_statistics)
+
 - 会话管理和时长统计
 - 每日/月度活动报告
 - 设备使用分析

@@ -5,7 +5,7 @@ use axum::{
     },
     http::{HeaderMap, StatusCode},
     response::Response,
-    routing::{get, post, put, delete},
+    routing::{delete, get, post, put},
     Json, Router,
 };
 use futures_util::{SinkExt, StreamExt};
@@ -13,11 +13,11 @@ use serde::Deserialize;
 use uuid::Uuid;
 
 use application::services::{
-    AuthenticateUserRequest, CreateRoomRequest, InviteMemberRequest, LeaveRoomRequest,
-    RemoveMemberRequest, UpdateRoomRequest, DeleteRoomRequest,
-    RegisterUserRequest, SendMessageRequest,
+    AuthenticateUserRequest, CreateRoomRequest, DeleteRoomRequest, InviteMemberRequest,
+    LeaveRoomRequest, RegisterUserRequest, RemoveMemberRequest, SendMessageRequest,
+    UpdateRoomRequest,
 };
-use domain::{ChatRoomVisibility, MessageType, User, ChatRoom, Message};
+use domain::{ChatRoom, ChatRoomVisibility, Message, MessageType, User};
 
 use crate::{error::ApiError, state::AppState, LoginResponse};
 
@@ -61,13 +61,13 @@ struct HistoryQuery {
 
 #[derive(Debug, Deserialize)]
 struct InviteMemberPayload {
-    invitee_id: Uuid,  // 被邀请用户的ID
+    invitee_id: Uuid, // 被邀请用户的ID
     password: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
 struct RemoveMemberPayload {
-    _user_id: Uuid,  // 要踢出的用户ID
+    _user_id: Uuid, // 要踢出的用户ID
 }
 
 #[derive(Debug, Deserialize)]
@@ -145,7 +145,7 @@ async fn login_user(
 }
 
 async fn create_room(
-    headers: HeaderMap,  // 从请求头获取JWT
+    headers: HeaderMap, // 从请求头获取JWT
     State(state): State<AppState>,
     Json(payload): Json<CreateRoomPayload>,
 ) -> Result<(StatusCode, Json<ChatRoom>), ApiError> {
@@ -155,7 +155,7 @@ async fn create_room(
         .chat_service
         .create_room(CreateRoomRequest {
             name: payload.name,
-            owner_id: user_id,  // 使用JWT中的用户ID
+            owner_id: user_id, // 使用JWT中的用户ID
             visibility: payload.visibility,
             password: payload.password,
         })
@@ -166,7 +166,7 @@ async fn create_room(
 
 // 邀请用户加入房间（替代join_room）
 async fn invite_member(
-    headers: HeaderMap,  // 从请求头获取JWT
+    headers: HeaderMap, // 从请求头获取JWT
     State(state): State<AppState>,
     Path(room_id): Path<Uuid>,
     Json(payload): Json<InviteMemberPayload>,
@@ -177,8 +177,8 @@ async fn invite_member(
         .chat_service
         .invite_member(InviteMemberRequest {
             room_id,
-            inviter_id,  // 邀请人（从JWT获取）
-            invitee_id: payload.invitee_id,  // 被邀请人
+            inviter_id,                     // 邀请人（从JWT获取）
+            invitee_id: payload.invitee_id, // 被邀请人
             password: payload.password,
         })
         .await?;
@@ -187,7 +187,7 @@ async fn invite_member(
 }
 
 async fn leave_room(
-    headers: HeaderMap,  // 从请求头获取JWT
+    headers: HeaderMap, // 从请求头获取JWT
     State(state): State<AppState>,
     Path(room_id): Path<Uuid>,
 ) -> Result<StatusCode, ApiError> {
@@ -197,7 +197,7 @@ async fn leave_room(
         .chat_service
         .leave_room(LeaveRoomRequest {
             room_id,
-            user_id,  // 使用JWT中的用户ID
+            user_id, // 使用JWT中的用户ID
         })
         .await?;
 
@@ -205,7 +205,7 @@ async fn leave_room(
 }
 
 async fn send_message(
-    headers: HeaderMap,  // 从请求头获取JWT
+    headers: HeaderMap, // 从请求头获取JWT
     State(state): State<AppState>,
     Path(room_id): Path<Uuid>,
     Json(payload): Json<SendMessagePayload>,
@@ -216,7 +216,7 @@ async fn send_message(
         .chat_service
         .send_message(SendMessageRequest {
             room_id,
-            sender_id: user_id,  // 使用JWT中的用户ID
+            sender_id: user_id, // 使用JWT中的用户ID
             content: payload.content,
             message_type: payload.message_type,
             reply_to: payload.reply_to,
@@ -227,12 +227,12 @@ async fn send_message(
 }
 
 async fn get_history(
-    headers: HeaderMap,  // 需要身份验证才能查看历史
+    headers: HeaderMap, // 需要身份验证才能查看历史
     State(state): State<AppState>,
     Path(room_id): Path<Uuid>,
     Query(query): Query<HistoryQuery>,
 ) -> Result<Json<Vec<Message>>, ApiError> {
-    let _user_id = state.jwt_service.extract_user_from_headers(&headers)?;  // 验证身份但不使用
+    let _user_id = state.jwt_service.extract_user_from_headers(&headers)?; // 验证身份但不使用
 
     let limit = query.limit.unwrap_or(50).min(100);
     let items = state
@@ -246,7 +246,7 @@ async fn get_history(
 #[derive(Debug, Deserialize)]
 struct WsQuery {
     room_id: Uuid,
-    token: Option<String>,  // 通过查询参数传递JWT token
+    token: Option<String>, // 通过查询参数传递JWT token
 }
 
 async fn websocket_upgrade(
@@ -259,7 +259,9 @@ async fn websocket_upgrade(
         // 从查询参数中的token验证用户
         state.jwt_service.verify_token(&token)?.user_id
     } else {
-        return Err(ApiError::unauthorized("Missing JWT token in query parameter"));
+        return Err(ApiError::unauthorized(
+            "Missing JWT token in query parameter",
+        ));
     };
 
     Ok(ws.on_upgrade(move |socket| websocket_handler(socket, state, user_id, query.room_id)))
@@ -272,18 +274,29 @@ async fn websocket_handler(socket: WebSocket, state: AppState, user_id: Uuid, ro
     tracing::info!(user_id = %user_id, room_id = %room_id, "WebSocket 连接已建立");
 
     // 用户连接到房间 - 更新在线状态
-    if let Err(err) = state.presence_manager.user_connected(room_id_domain, user_id_domain).await {
+    if let Err(err) = state
+        .presence_manager
+        .user_connected(room_id_domain, user_id_domain)
+        .await
+    {
         tracing::error!(error = %err, "Failed to update user presence");
         return;
     }
 
     // 创建消息流
-    let mut message_stream = match state.broadcaster.create_message_stream(room_id_domain).await {
+    let mut message_stream = match state
+        .broadcaster
+        .create_message_stream(room_id_domain)
+        .await
+    {
         Ok(stream) => stream,
         Err(err) => {
             tracing::error!(error = %err, "Failed to create message stream");
             // 连接失败时也要清理在线状态
-            let _ = state.presence_manager.user_disconnected(room_id_domain, user_id_domain).await;
+            let _ = state
+                .presence_manager
+                .user_disconnected(room_id_domain, user_id_domain)
+                .await;
             return;
         }
     };
@@ -295,7 +308,7 @@ async fn websocket_handler(socket: WebSocket, state: AppState, user_id: Uuid, ro
 
     // 发送任务：将广播消息发送给WebSocket客户端
     let send_task = {
-        let presence_manager = state.presence_manager.clone();
+        let _presence_manager = state.presence_manager.clone();
         tokio::spawn(async move {
             while let Some(broadcast) = message_stream.recv().await {
                 let payload = match serde_json::to_string(&broadcast.message) {
@@ -359,7 +372,11 @@ async fn websocket_handler(socket: WebSocket, state: AppState, user_id: Uuid, ro
     }
 
     // 连接断开时清理在线状态
-    if let Err(err) = state.presence_manager.user_disconnected(room_id_domain, user_id_domain).await {
+    if let Err(err) = state
+        .presence_manager
+        .user_disconnected(room_id_domain, user_id_domain)
+        .await
+    {
         tracing::error!(error = %err, user_id = %user_id, room_id = %room_id, "Failed to cleanup user presence");
     }
 
@@ -443,10 +460,15 @@ async fn get_online_users(
         .presence_manager
         .get_online_users(room_id_domain)
         .await
-        .map_err(|err| ApiError::internal_server_error(format!("Failed to get online users: {}", err)))?;
+        .map_err(|err| {
+            ApiError::internal_server_error(format!("Failed to get online users: {}", err))
+        })?;
 
     // 转换为UUID列表返回
-    let user_ids: Vec<Uuid> = online_users.into_iter().map(|user_id| user_id.into()).collect();
+    let user_ids: Vec<Uuid> = online_users
+        .into_iter()
+        .map(|user_id| user_id.into())
+        .collect();
 
     Ok(Json(user_ids))
 }

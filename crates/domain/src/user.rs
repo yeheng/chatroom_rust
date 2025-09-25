@@ -13,7 +13,7 @@ pub struct User {
     pub id: UserId,
     pub username: Username,
     pub email: UserEmail,
-    #[serde(skip_serializing)]  // 密码字段不暴露给客户端
+    #[serde(skip_serializing)] // 密码字段不暴露给客户端
     pub password: PasswordHash,
     pub status: UserStatus,
     pub created_at: Timestamp,

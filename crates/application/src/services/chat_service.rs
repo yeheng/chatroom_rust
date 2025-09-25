@@ -38,22 +38,22 @@ pub struct LeaveRoomRequest {
 #[derive(Debug, Clone)]
 pub struct InviteMemberRequest {
     pub room_id: Uuid,
-    pub inviter_id: Uuid,  // 邀请人（从JWT获取）
-    pub invitee_id: Uuid,  // 被邀请人
+    pub inviter_id: Uuid, // 邀请人（从JWT获取）
+    pub invitee_id: Uuid, // 被邀请人
     pub password: Option<String>,
 }
 
 #[derive(Debug, Clone)]
 pub struct RemoveMemberRequest {
     pub room_id: Uuid,
-    pub operator_id: Uuid,  // 操作者（从JWT获取）
-    pub target_user_id: Uuid,  // 被踢的用户
+    pub operator_id: Uuid,    // 操作者（从JWT获取）
+    pub target_user_id: Uuid, // 被踢的用户
 }
 
 #[derive(Debug, Clone)]
 pub struct UpdateRoomRequest {
     pub room_id: Uuid,
-    pub operator_id: Uuid,  // 操作者（从JWT获取）
+    pub operator_id: Uuid, // 操作者（从JWT获取）
     pub name: Option<String>,
     pub visibility: Option<ChatRoomVisibility>,
     pub password: Option<String>,
@@ -62,7 +62,7 @@ pub struct UpdateRoomRequest {
 #[derive(Debug, Clone)]
 pub struct DeleteRoomRequest {
     pub room_id: Uuid,
-    pub operator_id: Uuid,  // 操作者（从JWT获取）
+    pub operator_id: Uuid, // 操作者（从JWT获取）
 }
 
 #[derive(Debug, Clone)]
@@ -282,7 +282,10 @@ impl ChatService {
     }
 
     // 邀请用户加入房间（替代join_room）
-    pub async fn invite_member(&self, request: InviteMemberRequest) -> Result<(), ApplicationError> {
+    pub async fn invite_member(
+        &self,
+        request: InviteMemberRequest,
+    ) -> Result<(), ApplicationError> {
         let room_id = RoomId::from(request.room_id);
         let inviter_id = UserId::from(request.inviter_id);
         let invitee_id = UserId::from(request.invitee_id);
@@ -329,7 +332,10 @@ impl ChatService {
     }
 
     // 踢出用户（只有owner和admin可以）
-    pub async fn remove_member(&self, request: RemoveMemberRequest) -> Result<(), ApplicationError> {
+    pub async fn remove_member(
+        &self,
+        request: RemoveMemberRequest,
+    ) -> Result<(), ApplicationError> {
         let room_id = RoomId::from(request.room_id);
         let operator_id = UserId::from(request.operator_id);
         let target_user_id = UserId::from(request.target_user_id);
@@ -351,7 +357,8 @@ impl ChatService {
         }
 
         // admin不能踢admin，只有owner可以踢admin
-        if matches!(target_member.role, RoomRole::Admin) && matches!(operator.role, RoomRole::Admin) {
+        if matches!(target_member.role, RoomRole::Admin) && matches!(operator.role, RoomRole::Admin)
+        {
             return Err(DomainError::OperationNotAllowed.into());
         }
 
@@ -360,12 +367,18 @@ impl ChatService {
             return Err(DomainError::OperationNotAllowed.into());
         }
 
-        self.deps.member_repository.remove(room_id, target_user_id).await?;
+        self.deps
+            .member_repository
+            .remove(room_id, target_user_id)
+            .await?;
         Ok(())
     }
 
     // 更新房间信息（只有owner和admin可以）
-    pub async fn update_room(&self, request: UpdateRoomRequest) -> Result<ChatRoom, ApplicationError> {
+    pub async fn update_room(
+        &self,
+        request: UpdateRoomRequest,
+    ) -> Result<ChatRoom, ApplicationError> {
         let room_id = RoomId::from(request.room_id);
         let operator_id = UserId::from(request.operator_id);
 

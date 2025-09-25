@@ -33,10 +33,7 @@ impl UserService {
         Self { deps }
     }
 
-    pub async fn register(
-        &self,
-        request: RegisterUserRequest,
-    ) -> Result<User, ApplicationError> {
+    pub async fn register(&self, request: RegisterUserRequest) -> Result<User, ApplicationError> {
         let username = Username::parse(request.username)?;
         let email = UserEmail::parse(request.email.clone())?;
 

@@ -1,12 +1,12 @@
 use application::{broadcaster::BroadcastError, MessageBroadcast, MessageBroadcaster};
 use async_trait::async_trait;
+use domain::RoomId;
 use redis::{aio::PubSub, AsyncCommands, Client as RedisClient, Msg};
+use std::{pin::Pin, sync::Arc};
+use thiserror::Error;
 use tokio::sync::broadcast;
 use tokio_stream::{Stream, StreamExt};
 use uuid::Uuid;
-use std::{pin::Pin, sync::Arc};
-use domain::RoomId;
-use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum WebSocketError {
@@ -60,7 +60,15 @@ impl MessageBroadcaster for BroadcasterType {
 // 统一的消息流枚举
 pub enum MessageStream {
     Local(broadcast::Receiver<MessageBroadcast>, RoomId),
-    Redis(Pin<Box<dyn Stream<Item = Result<MessageBroadcast, application::broadcaster::BroadcastError>> + Send>>),
+    Redis(
+        Pin<
+            Box<
+                dyn Stream<
+                        Item = Result<MessageBroadcast, application::broadcaster::BroadcastError>,
+                    > + Send,
+            >,
+        >,
+    ),
 }
 
 impl MessageStream {
@@ -82,16 +90,14 @@ impl MessageStream {
                     }
                 }
             }
-            MessageStream::Redis(stream) => {
-                match stream.next().await {
-                    Some(Ok(broadcast)) => Some(broadcast),
-                    Some(Err(err)) => {
-                        tracing::warn!(error = %err, "Redis stream error");
-                        None
-                    }
-                    None => None,
+            MessageStream::Redis(stream) => match stream.next().await {
+                Some(Ok(broadcast)) => Some(broadcast),
+                Some(Err(err)) => {
+                    tracing::warn!(error = %err, "Redis stream error");
+                    None
                 }
-            }
+                None => None,
+            },
         }
     }
 }
@@ -143,16 +149,16 @@ impl RedisMessageStream {
             .map_err(|err| BroadcastError::failed(format!("Failed to create pubsub: {}", err)))?;
 
         let channel = RedisMessageBroadcaster::channel_name(room_id);
-        pubsub
-            .subscribe(&channel)
-            .await
-            .map_err(|err| {
-                BroadcastError::failed(format!("Failed to subscribe to {}: {}", channel, err))
-            })?;
+        pubsub.subscribe(&channel).await.map_err(|err| {
+            BroadcastError::failed(format!("Failed to subscribe to {}: {}", channel, err))
+        })?;
 
         tracing::debug!(channel = %channel, "Subscribed to Redis channel");
 
-        Ok(Self { pubsub, _room_id: room_id })
+        Ok(Self {
+            pubsub,
+            _room_id: room_id,
+        })
     }
 
     // 将 Redis PubSub 转换为异步流

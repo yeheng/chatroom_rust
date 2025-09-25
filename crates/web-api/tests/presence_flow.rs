@@ -194,7 +194,10 @@ async fn presence_management_flow() {
 
     assert_eq!(online_users.len(), 1, "user1断开后应该只有1个在线用户");
     assert!(online_users.contains(&user2_id), "在线用户应该只包含user2");
-    assert!(!online_users.contains(&user1_id), "user1应该不在在线用户列表中");
+    assert!(
+        !online_users.contains(&user1_id),
+        "user1应该不在在线用户列表中"
+    );
 
     // 关闭user2的WebSocket连接
     ws2.close(None).await.expect("close ws2");

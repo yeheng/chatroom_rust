@@ -20,7 +20,7 @@ impl Default for JwtConfig {
     fn default() -> Self {
         Self {
             secret: "your-256-bit-secret".to_string(), // 生产环境应该从环境变量读取
-            expiration_hours: 24, // token 24小时过期
+            expiration_hours: 24,                      // token 24小时过期
         }
     }
 }

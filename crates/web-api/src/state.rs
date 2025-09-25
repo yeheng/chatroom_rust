@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use application::{ChatService, UserService, PresenceManager};
+use application::{ChatService, PresenceManager, UserService};
 use infrastructure::BroadcasterType;
 
 use crate::JwtService;
@@ -10,7 +10,7 @@ pub struct AppState {
     pub user_service: Arc<UserService>,
     pub chat_service: Arc<ChatService>,
     pub broadcaster: BroadcasterType,
-    pub jwt_service: Arc<JwtService>,  // JWT 服务
+    pub jwt_service: Arc<JwtService>,               // JWT 服务
     pub presence_manager: Arc<dyn PresenceManager>, // 在线状态管理器
 }
 
@@ -19,7 +19,7 @@ impl AppState {
         user_service: Arc<UserService>,
         chat_service: Arc<ChatService>,
         broadcaster: BroadcasterType,
-        jwt_service: Arc<JwtService>,  // JWT 服务参数
+        jwt_service: Arc<JwtService>,               // JWT 服务参数
         presence_manager: Arc<dyn PresenceManager>, // 在线状态管理器参数
     ) -> Self {
         Self {

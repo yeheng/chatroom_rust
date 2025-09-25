@@ -16,7 +16,7 @@ pub struct InfrastructureConfig {
     pub max_connections: u32,
     pub bcrypt_cost: Option<u32>,
     pub broadcast_capacity: usize,
-    pub redis_url: Option<String>,  // Redis 配置，None 表示使用本地广播器
+    pub redis_url: Option<String>, // Redis 配置，None 表示使用本地广播器
 }
 
 impl Default for InfrastructureConfig {
@@ -26,7 +26,7 @@ impl Default for InfrastructureConfig {
             max_connections: 5,
             bcrypt_cost: None,
             broadcast_capacity: 256,
-            redis_url: None,  // 默认使用本地广播器
+            redis_url: None, // 默认使用本地广播器
         }
     }
 }
@@ -47,7 +47,7 @@ use crate::broadcast::BroadcasterType;
 pub struct Infrastructure {
     pub storage: Arc<PgStorage>,
     pub password_hasher: Arc<BcryptPasswordHasher>,
-    pub broadcaster: BroadcasterType,  // 使用枚举支持多种广播器
+    pub broadcaster: BroadcasterType, // 使用枚举支持多种广播器
 }
 
 impl Infrastructure {
@@ -64,9 +64,9 @@ impl Infrastructure {
                 let client = redis::Client::open(redis_url)?;
                 BroadcasterType::Redis(Arc::new(RedisMessageBroadcaster::new(client)))
             }
-            None => {
-                BroadcasterType::Local(Arc::new(LocalMessageBroadcaster::new(config.broadcast_capacity)))
-            }
+            None => BroadcasterType::Local(Arc::new(LocalMessageBroadcaster::new(
+                config.broadcast_capacity,
+            ))),
         };
 
         Ok(Self {

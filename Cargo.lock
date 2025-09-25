@@ -59,7 +59,7 @@ version = "0.1.0"
 dependencies = [
  "async-trait",
  "domain",
- "redis 0.25.4",
+ "redis",
  "serde",
  "thiserror",
  "time",
@@ -1517,7 +1517,7 @@ dependencies = [
  "async-trait",
  "bcrypt",
  "domain",
- "redis 0.32.5",
+ "redis",
  "serde_json",
  "sqlx",
  "testcontainers",
@@ -2374,27 +2374,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "99d9a13982dcf210057a8a78572b2217b667c3beacbf3a0d8b454f6f82837d38"
 dependencies = [
  "getrandom 0.3.3",
-]
-
-[[package]]
-name = "redis"
-version = "0.25.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e0d7a6955c7511f60f3ba9e86c6d02b3c3f144f8c24b288d1f4e18074ab8bbec"
-dependencies = [
- "async-trait",
- "bytes",
- "combine",
- "futures-util",
- "itoa",
- "percent-encoding",
- "pin-project-lite",
- "ryu",
- "sha1_smol",
- "socket2 0.5.10",
- "tokio",
- "tokio-util",
- "url",
 ]
 
 [[package]]

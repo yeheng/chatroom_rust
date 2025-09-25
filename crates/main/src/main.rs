@@ -2,11 +2,13 @@
 //!
 //! 启动 Axum Web API 服务。
 
+use application::clock::SystemClock;
+use application::services::{
+    ChatService, ChatServiceDependencies, UserService, UserServiceDependencies,
+};
+use infrastructure::{Infrastructure, InfrastructureConfig};
 use std::env;
 use tracing_subscriber::EnvFilter;
-use application::services::{ChatService, ChatServiceDependencies, UserService, UserServiceDependencies};
-use application::clock::SystemClock;
-use infrastructure::{Infrastructure, InfrastructureConfig};
 use web_api::{router, AppState, JwtConfig, JwtService};
 
 #[tokio::main]
@@ -44,7 +46,9 @@ async fn main() -> anyhow::Result<()> {
 
     // 创建 JWT 服务
     let jwt_config = JwtConfig {
-        secret: env::var("JWT_SECRET").unwrap_or_else(|_| "your-256-bit-secret-key-here-please-change-in-production".to_string()),
+        secret: env::var("JWT_SECRET").unwrap_or_else(|_| {
+            "your-256-bit-secret-key-here-please-change-in-production".to_string()
+        }),
         expiration_hours: 24,
     };
     let jwt_service = std::sync::Arc::new(JwtService::new(jwt_config));
@@ -64,21 +68,22 @@ async fn main() -> anyhow::Result<()> {
         message_repository: infrastructure.storage.message_repository.clone(),
         password_hasher: infrastructure.password_hasher_trait(),
         clock,
-        broadcaster: std::sync::Arc::new(infrastructure.broadcaster.clone()) as std::sync::Arc<dyn application::MessageBroadcaster>,
+        broadcaster: std::sync::Arc::new(infrastructure.broadcaster.clone())
+            as std::sync::Arc<dyn application::MessageBroadcaster>,
     });
 
     // 创建 PresenceManager（暂时使用内存版本，生产环境应该使用Redis版本）
-    let presence_manager = std::sync::Arc::new(
-        application::presence::memory::MemoryPresenceManager::new()
-    ) as std::sync::Arc<dyn application::PresenceManager>;
+    let presence_manager =
+        std::sync::Arc::new(application::presence::memory::MemoryPresenceManager::new())
+            as std::sync::Arc<dyn application::PresenceManager>;
 
     // 创建应用状态
     let state = AppState::new(
         std::sync::Arc::new(user_service),
         std::sync::Arc::new(chat_service),
         infrastructure.broadcaster,
-        jwt_service,  // 传递 JWT 服务
-        presence_manager,  // 传递在线状态管理器
+        jwt_service,      // 传递 JWT 服务
+        presence_manager, // 传递在线状态管理器
     );
 
     // 启动 Web 服务器

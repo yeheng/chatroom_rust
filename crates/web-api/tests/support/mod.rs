@@ -3,7 +3,7 @@ use std::{collections::HashMap, sync::Arc};
 use application::{
     password::PasswordHasher,
     services::{ChatService, ChatServiceDependencies, UserService, UserServiceDependencies},
-    MessageBroadcaster, PasswordHasherError, SystemClock, PresenceManager,
+    MessageBroadcaster, PasswordHasherError, PresenceManager, SystemClock,
 };
 use async_trait::async_trait;
 use axum::Router;
@@ -320,7 +320,8 @@ pub fn build_router() -> Router {
     let jwt_service = Arc::new(web_api::JwtService::new(web_api::JwtConfig::default()));
 
     // 创建测试用的PresenceManager（使用内存实现）
-    let presence_manager = Arc::new(application::presence::memory::MemoryPresenceManager::new()) as Arc<dyn PresenceManager>;
+    let presence_manager = Arc::new(application::presence::memory::MemoryPresenceManager::new())
+        as Arc<dyn PresenceManager>;
 
     let state = AppState::new(
         user_service,

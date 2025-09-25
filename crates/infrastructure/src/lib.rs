@@ -8,7 +8,10 @@ pub mod migrations;
 pub mod password;
 pub mod repository;
 
-pub use broadcast::{BroadcasterType, LocalMessageBroadcaster, MessageStream, RedisMessageBroadcaster, RedisMessageStream, WebSocketError};
+pub use broadcast::{
+    BroadcasterType, LocalMessageBroadcaster, MessageStream, RedisMessageBroadcaster,
+    RedisMessageStream, WebSocketError,
+};
 pub use builder::{Infrastructure, InfrastructureConfig, InfrastructureError};
 pub use migrations::MIGRATOR;
 pub use password::BcryptPasswordHasher;

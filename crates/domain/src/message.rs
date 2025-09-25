@@ -25,7 +25,7 @@ pub struct Message {
     pub reply_to: Option<MessageId>,
     pub created_at: Timestamp,
     pub last_revision: Option<MessageRevision>,
-    #[serde(skip_serializing)]  // 删除标记不暴露给客户端
+    #[serde(skip_serializing)] // 删除标记不暴露给客户端
     pub is_deleted: bool,
 }
 

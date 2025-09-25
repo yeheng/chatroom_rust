@@ -13,7 +13,7 @@ pub struct ChatRoom {
     pub name: String,
     pub owner_id: UserId,
     pub visibility: ChatRoomVisibility,
-    #[serde(skip_serializing)]  // 房间密码不暴露给客户端
+    #[serde(skip_serializing)] // 房间密码不暴露给客户端
     pub password: Option<PasswordHash>,
     pub created_at: Timestamp,
     pub updated_at: Timestamp,

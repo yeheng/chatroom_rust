@@ -9,16 +9,28 @@ use domain::{RoomId, UserId};
 #[async_trait::async_trait]
 pub trait PresenceManager: Send + Sync {
     /// 用户连接到房间时调用
-    async fn user_connected(&self, room_id: RoomId, user_id: UserId) -> Result<(), ApplicationError>;
+    async fn user_connected(
+        &self,
+        room_id: RoomId,
+        user_id: UserId,
+    ) -> Result<(), ApplicationError>;
 
     /// 用户从房间断开时调用
-    async fn user_disconnected(&self, room_id: RoomId, user_id: UserId) -> Result<(), ApplicationError>;
+    async fn user_disconnected(
+        &self,
+        room_id: RoomId,
+        user_id: UserId,
+    ) -> Result<(), ApplicationError>;
 
     /// 获取房间内所有在线用户
     async fn get_online_users(&self, room_id: RoomId) -> Result<Vec<UserId>, ApplicationError>;
 
     /// 检查用户是否在线
-    async fn is_user_online(&self, room_id: RoomId, user_id: UserId) -> Result<bool, ApplicationError>;
+    async fn is_user_online(
+        &self,
+        room_id: RoomId,
+        user_id: UserId,
+    ) -> Result<bool, ApplicationError>;
 
     /// 获取用户在线的房间列表
     async fn get_user_rooms(&self, user_id: UserId) -> Result<Vec<RoomId>, ApplicationError>;
@@ -52,13 +64,19 @@ impl RedisPresenceManager {
         self.redis_client
             .get_multiplexed_async_connection()
             .await
-            .map_err(|e| ApplicationError::infrastructure(format!("Redis connection failed: {}", e)))
+            .map_err(|e| {
+                ApplicationError::infrastructure(format!("Redis connection failed: {}", e))
+            })
     }
 }
 
 #[async_trait::async_trait]
 impl PresenceManager for RedisPresenceManager {
-    async fn user_connected(&self, room_id: RoomId, user_id: UserId) -> Result<(), ApplicationError> {
+    async fn user_connected(
+        &self,
+        room_id: RoomId,
+        user_id: UserId,
+    ) -> Result<(), ApplicationError> {
         let mut conn = self.get_connection().await?;
         let room_key = self.room_online_key(room_id);
         let user_key = self.user_rooms_key(user_id);
@@ -71,7 +89,9 @@ impl PresenceManager for RedisPresenceManager {
             .expire(&user_key, 86400)
             .query_async(&mut conn)
             .await
-            .map_err(|e| ApplicationError::infrastructure(format!("Redis operation failed: {}", e)))?;
+            .map_err(|e| {
+                ApplicationError::infrastructure(format!("Redis operation failed: {}", e))
+            })?;
 
         tracing::info!(
             room_id = %room_id,
@@ -82,7 +102,11 @@ impl PresenceManager for RedisPresenceManager {
         Ok(())
     }
 
-    async fn user_disconnected(&self, room_id: RoomId, user_id: UserId) -> Result<(), ApplicationError> {
+    async fn user_disconnected(
+        &self,
+        room_id: RoomId,
+        user_id: UserId,
+    ) -> Result<(), ApplicationError> {
         let mut conn = self.get_connection().await?;
         let room_key = self.room_online_key(room_id);
         let user_key = self.user_rooms_key(user_id);
@@ -93,7 +117,9 @@ impl PresenceManager for RedisPresenceManager {
             .srem(&user_key, room_id.to_string()) // 从用户在线房间集合中移除房间
             .query_async(&mut conn)
             .await
-            .map_err(|e| ApplicationError::infrastructure(format!("Redis operation failed: {}", e)))?;
+            .map_err(|e| {
+                ApplicationError::infrastructure(format!("Redis operation failed: {}", e))
+            })?;
 
         tracing::info!(
             room_id = %room_id,
@@ -112,7 +138,9 @@ impl PresenceManager for RedisPresenceManager {
             .arg(&room_key)
             .query_async(&mut conn)
             .await
-            .map_err(|e| ApplicationError::infrastructure(format!("Redis operation failed: {}", e)))?;
+            .map_err(|e| {
+                ApplicationError::infrastructure(format!("Redis operation failed: {}", e))
+            })?;
 
         // 将字符串转换为UserId
         let user_ids: Result<Vec<UserId>, _> = members
@@ -120,13 +148,18 @@ impl PresenceManager for RedisPresenceManager {
             .map(|s| s.parse::<Uuid>().map(UserId::from))
             .collect();
 
-        let user_ids = user_ids
-            .map_err(|e| ApplicationError::infrastructure(format!("Invalid UUID in Redis: {}", e)))?;
+        let user_ids = user_ids.map_err(|e| {
+            ApplicationError::infrastructure(format!("Invalid UUID in Redis: {}", e))
+        })?;
 
         Ok(user_ids)
     }
 
-    async fn is_user_online(&self, room_id: RoomId, user_id: UserId) -> Result<bool, ApplicationError> {
+    async fn is_user_online(
+        &self,
+        room_id: RoomId,
+        user_id: UserId,
+    ) -> Result<bool, ApplicationError> {
         let mut conn = self.get_connection().await?;
         let room_key = self.room_online_key(room_id);
 
@@ -135,7 +168,9 @@ impl PresenceManager for RedisPresenceManager {
             .arg(user_id.to_string())
             .query_async(&mut conn)
             .await
-            .map_err(|e| ApplicationError::infrastructure(format!("Redis operation failed: {}", e)))?;
+            .map_err(|e| {
+                ApplicationError::infrastructure(format!("Redis operation failed: {}", e))
+            })?;
 
         Ok(is_member)
     }
@@ -148,7 +183,9 @@ impl PresenceManager for RedisPresenceManager {
             .arg(&user_key)
             .query_async(&mut conn)
             .await
-            .map_err(|e| ApplicationError::infrastructure(format!("Redis operation failed: {}", e)))?;
+            .map_err(|e| {
+                ApplicationError::infrastructure(format!("Redis operation failed: {}", e))
+            })?;
 
         // 将字符串转换为RoomId
         let room_ids: Result<Vec<RoomId>, _> = members
@@ -156,8 +193,9 @@ impl PresenceManager for RedisPresenceManager {
             .map(|s| s.parse::<Uuid>().map(RoomId::from))
             .collect();
 
-        let room_ids = room_ids
-            .map_err(|e| ApplicationError::infrastructure(format!("Invalid UUID in Redis: {}", e)))?;
+        let room_ids = room_ids.map_err(|e| {
+            ApplicationError::infrastructure(format!("Invalid UUID in Redis: {}", e))
+        })?;
 
         Ok(room_ids)
     }
@@ -185,10 +223,9 @@ impl PresenceManager for RedisPresenceManager {
         // 删除用户的在线房间集合
         pipe.del(&user_key);
 
-        let _: () = pipe
-            .query_async(&mut conn)
-            .await
-            .map_err(|e| ApplicationError::infrastructure(format!("Redis operation failed: {}", e)))?;
+        let _: () = pipe.query_async(&mut conn).await.map_err(|e| {
+            ApplicationError::infrastructure(format!("Redis operation failed: {}", e))
+        })?;
 
         tracing::info!(
             user_id = %user_id,
@@ -210,6 +247,12 @@ pub mod memory {
         user_rooms: RwLock<HashMap<UserId, HashSet<RoomId>>>,
     }
 
+    impl Default for MemoryPresenceManager {
+        fn default() -> Self {
+            Self::new()
+        }
+    }
+
     impl MemoryPresenceManager {
         pub fn new() -> Self {
             Self {
@@ -221,17 +264,31 @@ pub mod memory {
 
     #[async_trait::async_trait]
     impl PresenceManager for MemoryPresenceManager {
-        async fn user_connected(&self, room_id: RoomId, user_id: UserId) -> Result<(), ApplicationError> {
+        async fn user_connected(
+            &self,
+            room_id: RoomId,
+            user_id: UserId,
+        ) -> Result<(), ApplicationError> {
             let mut room_users = self.room_users.write().await;
             let mut user_rooms = self.user_rooms.write().await;
 
-            room_users.entry(room_id).or_insert_with(HashSet::new).insert(user_id);
-            user_rooms.entry(user_id).or_insert_with(HashSet::new).insert(room_id);
+            room_users
+                .entry(room_id)
+                .or_insert_with(HashSet::new)
+                .insert(user_id);
+            user_rooms
+                .entry(user_id)
+                .or_insert_with(HashSet::new)
+                .insert(room_id);
 
             Ok(())
         }
 
-        async fn user_disconnected(&self, room_id: RoomId, user_id: UserId) -> Result<(), ApplicationError> {
+        async fn user_disconnected(
+            &self,
+            room_id: RoomId,
+            user_id: UserId,
+        ) -> Result<(), ApplicationError> {
             let mut room_users = self.room_users.write().await;
             let mut user_rooms = self.user_rooms.write().await;
 
@@ -258,7 +315,11 @@ pub mod memory {
             Ok(users.into_iter().collect())
         }
 
-        async fn is_user_online(&self, room_id: RoomId, user_id: UserId) -> Result<bool, ApplicationError> {
+        async fn is_user_online(
+            &self,
+            room_id: RoomId,
+            user_id: UserId,
+        ) -> Result<bool, ApplicationError> {
             let room_users = self.room_users.read().await;
             let is_online = room_users
                 .get(&room_id)

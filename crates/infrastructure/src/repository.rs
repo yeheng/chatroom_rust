@@ -24,7 +24,7 @@ struct UserRecord {
     username: String,
     email: String,
     password_hash: String,
-    status: UserStatus,  // 直接使用枚举类型
+    status: UserStatus, // 直接使用枚举类型
     created_at: OffsetDateTime,
     updated_at: OffsetDateTime,
 }
@@ -45,7 +45,7 @@ impl TryFrom<UserRecord> for User {
             username,
             email,
             password,
-            status: value.status,  // 直接使用，不需要转换
+            status: value.status, // 直接使用，不需要转换
             created_at: value.created_at,
             updated_at: value.updated_at,
         })
@@ -96,7 +96,7 @@ impl TryFrom<RoomRecord> for ChatRoom {
 struct MemberRecord {
     room_id: Uuid,
     user_id: Uuid,
-    role: RoomRole,  // 直接使用枚举类型
+    role: RoomRole, // 直接使用枚举类型
     joined_at: OffsetDateTime,
     last_read_message_id: Option<Uuid>,
 }
@@ -108,7 +108,7 @@ impl TryFrom<MemberRecord> for RoomMember {
         Ok(RoomMember {
             room_id: RoomId::from(value.room_id),
             user_id: UserId::from(value.user_id),
-            role: value.role,  // 直接使用，不需要转换
+            role: value.role, // 直接使用，不需要转换
             joined_at: value.joined_at,
             last_read_message: value.last_read_message_id.map(MessageId::from),
         })
@@ -121,7 +121,7 @@ struct MessageRecord {
     room_id: Uuid,
     user_id: Uuid,
     content: String,
-    message_type: MessageType,  // 直接使用枚举类型
+    message_type: MessageType, // 直接使用枚举类型
     reply_to_message_id: Option<Uuid>,
     created_at: OffsetDateTime,
     updated_at: Option<OffsetDateTime>,
@@ -139,7 +139,7 @@ impl TryFrom<MessageRecord> for Message {
             RoomId::from(value.room_id),
             UserId::from(value.user_id),
             content,
-            value.message_type,  // 直接使用，不需要转换
+            value.message_type, // 直接使用，不需要转换
             value.reply_to_message_id.map(MessageId::from),
             value.created_at,
         )?;
@@ -208,7 +208,7 @@ impl UserRepository for PgUserRepository {
             .bind(user.username.as_str())
             .bind(user.email.as_str())
             .bind(user.password.as_str())
-            .bind(&user.status)  // 直接绑定枚举
+            .bind(&user.status) // 直接绑定枚举
             .bind(user.updated_at)
             .fetch_one(&pool)
             .await

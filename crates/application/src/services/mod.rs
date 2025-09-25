@@ -2,7 +2,8 @@ mod chat_service;
 mod user_service;
 
 pub use chat_service::{
-    ChatService, ChatServiceDependencies, CreateRoomRequest, JoinRoomRequest, LeaveRoomRequest,
+    ChatService, ChatServiceDependencies, CreateRoomRequest, InviteMemberRequest,
+    LeaveRoomRequest, RemoveMemberRequest, UpdateRoomRequest, DeleteRoomRequest,
     SendMessageRequest,
 };
 pub use user_service::{

@@ -124,15 +124,18 @@ async fn user_to_message_flow() {
     assert_eq!(status, StatusCode::CREATED);
     let room_id = room_body["id"].as_str().unwrap().parse::<Uuid>().unwrap();
 
+    // Owner邀请member加入房间
     let (status, _) = send_request(
         &app,
         Request::builder()
             .method("POST")
-            .uri(format!("/api/v1/rooms/{room_id}/join"))
+            .uri(format!("/api/v1/rooms/{room_id}/members"))
             .header("content-type", "application/json")
-            .header("authorization", format!("Bearer {}", member_token))
+            .header("authorization", format!("Bearer {}", owner_token))
             .body(Body::from(
-                json!({})
+                json!({
+                    "invitee_id": member_id
+                })
                 .to_string(),
             ))
             .unwrap(),

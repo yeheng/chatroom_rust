@@ -20,6 +20,7 @@ pub trait UserRepository: Send + Sync {
 pub trait ChatRoomRepository: Send + Sync {
     fn create(&self, room: ChatRoom) -> RepositoryFuture<ChatRoom>;
     fn update(&self, room: ChatRoom) -> RepositoryFuture<ChatRoom>;
+    fn delete(&self, id: RoomId) -> RepositoryFuture<()>;
     fn find_by_id(&self, id: RoomId) -> RepositoryFuture<Option<ChatRoom>>;
     fn list_by_owner(&self, owner: UserId) -> RepositoryFuture<Vec<ChatRoom>>;
 }

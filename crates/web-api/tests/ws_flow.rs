@@ -103,13 +103,16 @@ async fn websocket_broadcast_flow() {
         .expect("room json");
     let room_id = room["id"].as_str().unwrap().parse::<Uuid>().unwrap();
 
+    // Owner邀请member加入房间
     client
-        .post(format!("{}/api/v1/rooms/{}/join", base_http, room_id))
-        .header("authorization", format!("Bearer {}", member_token))
-        .json(&json!({}))
+        .post(format!("{}/api/v1/rooms/{}/members", base_http, room_id))
+        .header("authorization", format!("Bearer {}", owner_token))
+        .json(&json!({
+            "invitee_id": member_id
+        }))
         .send()
         .await
-        .expect("join room");
+        .expect("invite member");
 
     // Connect WebSocket as member
     let ws_url = format!(

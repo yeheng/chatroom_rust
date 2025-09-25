@@ -67,12 +67,18 @@ async fn main() -> anyhow::Result<()> {
         broadcaster: std::sync::Arc::new(infrastructure.broadcaster.clone()) as std::sync::Arc<dyn application::MessageBroadcaster>,
     });
 
+    // 创建 PresenceManager（暂时使用内存版本，生产环境应该使用Redis版本）
+    let presence_manager = std::sync::Arc::new(
+        application::presence::memory::MemoryPresenceManager::new()
+    ) as std::sync::Arc<dyn application::PresenceManager>;
+
     // 创建应用状态
     let state = AppState::new(
         std::sync::Arc::new(user_service),
         std::sync::Arc::new(chat_service),
         infrastructure.broadcaster,
         jwt_service,  // 传递 JWT 服务
+        presence_manager,  // 传递在线状态管理器
     );
 
     // 启动 Web 服务器

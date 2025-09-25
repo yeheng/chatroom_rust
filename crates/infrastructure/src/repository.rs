@@ -313,6 +313,19 @@ impl ChatRoomRepository for PgChatRoomRepository {
         })
     }
 
+    fn delete(&self, id: RoomId) -> RepositoryFuture<()> {
+        let pool = self.pool.clone();
+        Box::pin(async move {
+            sqlx::query("DELETE FROM chat_rooms WHERE id = $1")
+                .bind(Uuid::from(id))
+                .execute(&pool)
+                .await
+                .map_err(map_sqlx_err)?;
+
+            Ok(())
+        })
+    }
+
     fn find_by_id(&self, id: RoomId) -> RepositoryFuture<Option<ChatRoom>> {
         let pool = self.pool.clone();
         Box::pin(async move {

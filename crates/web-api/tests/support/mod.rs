@@ -3,7 +3,7 @@ use std::{collections::HashMap, sync::Arc};
 use application::{
     password::PasswordHasher,
     services::{ChatService, ChatServiceDependencies, UserService, UserServiceDependencies},
-    MessageBroadcaster, PasswordHasherError, SystemClock,
+    MessageBroadcaster, PasswordHasherError, SystemClock, PresenceManager,
 };
 use async_trait::async_trait;
 use axum::Router;
@@ -115,6 +115,15 @@ impl ChatRoomRepository for InMemoryChatRoomRepository {
             let stored = room.clone();
             guard.insert(id, room);
             Ok(stored)
+        })
+    }
+
+    fn delete(&self, id: RoomId) -> domain::RepositoryFuture<()> {
+        let repo = self.rooms.clone();
+        Box::pin(async move {
+            let mut guard = repo.write().await;
+            guard.remove(&Uuid::from(id));
+            Ok(())
         })
     }
 
@@ -310,6 +319,15 @@ pub fn build_router() -> Router {
     // 创建测试用的JWT服务
     let jwt_service = Arc::new(web_api::JwtService::new(web_api::JwtConfig::default()));
 
-    let state = AppState::new(user_service, chat_service, infrastructure::BroadcasterType::Local(broadcaster), jwt_service);
+    // 创建测试用的PresenceManager（使用内存实现）
+    let presence_manager = Arc::new(application::presence::memory::MemoryPresenceManager::new()) as Arc<dyn PresenceManager>;
+
+    let state = AppState::new(
+        user_service,
+        chat_service,
+        infrastructure::BroadcasterType::Local(broadcaster),
+        jwt_service,
+        presence_manager,
+    );
     build_router_fn(state)
 }

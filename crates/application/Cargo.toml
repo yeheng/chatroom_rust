@@ -10,3 +10,6 @@ uuid = { workspace = true }
 time = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 thiserror = { workspace = true }
+redis = { version = "0.25", features = ["aio", "tokio-comp"] }
+tokio = { workspace = true }
+tracing = { workspace = true }

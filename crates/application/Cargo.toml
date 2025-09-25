@@ -5,16 +5,8 @@ edition.workspace = true
 
 [dependencies]
 domain = { path = "../domain" }
-infrastructure = { path = "../infrastructure" }
-tokio = { workspace = true }
 async-trait = { workspace = true }
 uuid = { workspace = true }
-chrono = { workspace = true }
-serde = { workspace = true }
-serde_json = { workspace = true }
-anyhow = { workspace = true }
-tracing = { workspace = true }
+time = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
 thiserror = { workspace = true }
-bcrypt = { workspace = true }
-redis = { workspace = true }
-futures-util = { workspace = true }

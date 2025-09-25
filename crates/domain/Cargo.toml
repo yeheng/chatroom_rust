@@ -3,22 +3,13 @@ name = "domain"
 version.workspace = true
 edition.workspace = true
 
-[dependencies]
-serde = { workspace = true }
-serde_json = { workspace = true }
-uuid = { workspace = true }
-chrono = { workspace = true }
-thiserror = { workspace = true }
-anyhow = { workspace = true }
-bcrypt = { workspace = true }
-jsonwebtoken = { workspace = true }
-ring = { workspace = true }
-async-trait = { workspace = true }
-validator = { workspace = true }
-tokio = { workspace = true }
-mockall = { workspace = true, optional = true }
 
-[features]
-default = []
-testing = ["mockall"]
-enterprise = []
+[dependencies]
+serde = { workspace = true, features = ["derive"] }
+uuid = { workspace = true }
+time = { workspace = true }
+thiserror = { workspace = true }
+futures = { workspace = true }
+
+[dev-dependencies]
+mockall = { workspace = true }

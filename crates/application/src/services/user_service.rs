@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use domain::{User, UserId, UserStatus, UserRepository, Username, UserEmail};
+use domain::{User, UserEmail, UserId, UserRepository, UserStatus, Username};
 use uuid::Uuid;
 
 use crate::{clock::Clock, dto::UserDto, error::ApplicationError, password::PasswordHasher};
@@ -33,7 +33,10 @@ impl UserService {
         Self { deps }
     }
 
-    pub async fn register(&self, request: RegisterUserRequest) -> Result<UserDto, ApplicationError> {
+    pub async fn register(
+        &self,
+        request: RegisterUserRequest,
+    ) -> Result<UserDto, ApplicationError> {
         let username = Username::parse(request.username)?;
         let email = UserEmail::parse(request.email.clone())?;
 
@@ -44,14 +47,12 @@ impl UserService {
             .await?
             .is_some()
         {
-            return Err(ApplicationError::Domain(domain::DomainError::UserAlreadyExists));
+            return Err(ApplicationError::Domain(
+                domain::DomainError::UserAlreadyExists,
+            ));
         }
 
-        let password_hash = self
-            .deps
-            .password_hasher
-            .hash(&request.password)
-            .await?;
+        let password_hash = self.deps.password_hasher.hash(&request.password).await?;
 
         let now = self.deps.clock.now();
         let mut user = User::register(

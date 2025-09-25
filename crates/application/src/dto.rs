@@ -1,4 +1,7 @@
-use domain::{ChatRoom, ChatRoomVisibility, Message, MessageType, RoomMember, RoomRole, Timestamp, User, UserStatus};
+use domain::{
+    ChatRoom, ChatRoomVisibility, Message, MessageType, RoomMember, RoomRole, Timestamp, User,
+    UserStatus,
+};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 

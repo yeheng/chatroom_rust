@@ -3,9 +3,16 @@
 //! 提供数据库仓储、密码哈希、消息广播等适配器，实现应用/领域层定义的接口。
 
 pub mod broadcast;
+pub mod builder;
+pub mod migrations;
 pub mod password;
 pub mod repository;
 
 pub use broadcast::LocalMessageBroadcaster;
+pub use builder::{Infrastructure, InfrastructureConfig, InfrastructureError};
+pub use migrations::MIGRATOR;
 pub use password::BcryptPasswordHasher;
-pub use repository::{create_pg_pool, PgChatRoomRepository, PgMessageRepository, PgRoomMemberRepository, PgStorage, PgUserRepository};
+pub use repository::{
+    create_pg_pool, PgChatRoomRepository, PgMessageRepository, PgRoomMemberRepository, PgStorage,
+    PgUserRepository,
+};

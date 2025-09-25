@@ -155,7 +155,10 @@ impl PasswordHash {
     pub fn new(value: impl Into<String>) -> Result<Self, DomainError> {
         let hash = value.into();
         if hash.trim().is_empty() {
-            return Err(DomainError::invalid_argument("password_hash", "cannot be empty"));
+            return Err(DomainError::invalid_argument(
+                "password_hash",
+                "cannot be empty",
+            ));
         }
         Ok(Self(hash))
     }
@@ -173,7 +176,10 @@ impl MessageContent {
     pub fn new(value: impl Into<String>) -> Result<Self, DomainError> {
         let value = value.into();
         if value.trim().is_empty() {
-            return Err(DomainError::invalid_argument("message_content", "cannot be empty"));
+            return Err(DomainError::invalid_argument(
+                "message_content",
+                "cannot be empty",
+            ));
         }
         Ok(Self(value))
     }

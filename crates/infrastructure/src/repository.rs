@@ -1,9 +1,10 @@
 use std::sync::Arc;
 
 use domain::{
-    ChatRoom, ChatRoomRepository, ChatRoomVisibility, Message, MessageContent, MessageId, MessageRepository, MessageRevision,
-    MessageType, RepositoryError, RepositoryFuture, RoomId, RoomMember, RoomMemberRepository, RoomRole, User,
-    UserEmail, UserId, UserRepository, UserStatus,
+    ChatRoom, ChatRoomRepository, ChatRoomVisibility, Message, MessageContent, MessageId,
+    MessageRepository, MessageRevision, MessageType, RepositoryError, RepositoryFuture, RoomId,
+    RoomMember, RoomMemberRepository, RoomRole, User, UserEmail, UserId, UserRepository,
+    UserStatus,
 };
 use sqlx::{postgres::PgPoolOptions, FromRow, PgPool};
 use time::OffsetDateTime;
@@ -83,10 +84,14 @@ impl TryFrom<UserRecord> for User {
     type Error = RepositoryError;
 
     fn try_from(value: UserRecord) -> Result<Self, Self::Error> {
-        let username = domain::Username::parse(value.username).map_err(|err| invalid_data(err.to_string()))?;
-        let email = domain::UserEmail::parse(value.email).map_err(|err| invalid_data(err.to_string()))?;
-        let password = domain::PasswordHash::new(value.password_hash).map_err(|err| invalid_data(err.to_string()))?;
-        let status = status_from_str(&value.status).ok_or_else(|| invalid_data("invalid user status"))?;
+        let username =
+            domain::Username::parse(value.username).map_err(|err| invalid_data(err.to_string()))?;
+        let email =
+            domain::UserEmail::parse(value.email).map_err(|err| invalid_data(err.to_string()))?;
+        let password = domain::PasswordHash::new(value.password_hash)
+            .map_err(|err| invalid_data(err.to_string()))?;
+        let status =
+            status_from_str(&value.status).ok_or_else(|| invalid_data("invalid user status"))?;
 
         Ok(User {
             id: UserId::from(value.id),
@@ -117,7 +122,9 @@ impl TryFrom<RoomRecord> for ChatRoom {
 
     fn try_from(value: RoomRecord) -> Result<Self, Self::Error> {
         let password = match value.password_hash {
-            Some(hash) => Some(domain::PasswordHash::new(hash).map_err(|err| invalid_data(err.to_string()))?),
+            Some(hash) => {
+                Some(domain::PasswordHash::new(hash).map_err(|err| invalid_data(err.to_string()))?)
+            }
             None => None,
         };
 
@@ -181,7 +188,8 @@ impl TryFrom<MessageRecord> for Message {
     fn try_from(value: MessageRecord) -> Result<Self, Self::Error> {
         let message_type = message_type_from_str(&value.message_type)
             .ok_or_else(|| invalid_data("invalid message type"))?;
-        let content = MessageContent::new(value.content).map_err(|err| invalid_data(err.to_string()))?;
+        let content =
+            MessageContent::new(value.content).map_err(|err| invalid_data(err.to_string()))?;
         let mut message = Message::new(
             MessageId::from(value.id),
             RoomId::from(value.room_id),
@@ -192,10 +200,14 @@ impl TryFrom<MessageRecord> for Message {
             value.created_at,
         )?;
         message.is_deleted = value.is_deleted;
-        message.last_revision = value.updated_at.filter(|ts| *ts > value.created_at).map(|updated_at| MessageRevision {
-            content: message.content.clone(),
-            updated_at,
-        });
+        message.last_revision =
+            value
+                .updated_at
+                .filter(|ts| *ts > value.created_at)
+                .map(|updated_at| MessageRevision {
+                    content: message.content.clone(),
+                    updated_at,
+                });
         Ok(message)
     }
 }
@@ -428,14 +440,12 @@ impl RoomMemberRepository for PgRoomMemberRepository {
     fn remove(&self, room_id: RoomId, user_id: UserId) -> RepositoryFuture<()> {
         let pool = self.pool.clone();
         Box::pin(async move {
-            sqlx::query(
-                r#"DELETE FROM room_members WHERE room_id = $1 AND user_id = $2"#,
-            )
-            .bind(Uuid::from(room_id))
-            .bind(Uuid::from(user_id))
-            .execute(&pool)
-            .await
-            .map_err(map_sqlx_err)?;
+            sqlx::query(r#"DELETE FROM room_members WHERE room_id = $1 AND user_id = $2"#)
+                .bind(Uuid::from(room_id))
+                .bind(Uuid::from(user_id))
+                .execute(&pool)
+                .await
+                .map_err(map_sqlx_err)?;
             Ok(())
         })
     }
@@ -526,17 +536,21 @@ impl MessageRepository for PgMessageRepository {
         })
     }
 
-    fn list_recent(&self, room_id: RoomId, limit: u32, before: Option<MessageId>) -> RepositoryFuture<Vec<Message>> {
+    fn list_recent(
+        &self,
+        room_id: RoomId,
+        limit: u32,
+        before: Option<MessageId>,
+    ) -> RepositoryFuture<Vec<Message>> {
         let pool = self.pool.clone();
         Box::pin(async move {
             let records = if let Some(before_id) = before {
-                let cutoff: Option<OffsetDateTime> = sqlx::query_scalar(
-                    r#"SELECT created_at FROM messages WHERE id = $1"#,
-                )
-                .bind(Uuid::from(before_id))
-                .fetch_optional(&pool)
-                .await
-                .map_err(map_sqlx_err)?;
+                let cutoff: Option<OffsetDateTime> =
+                    sqlx::query_scalar(r#"SELECT created_at FROM messages WHERE id = $1"#)
+                        .bind(Uuid::from(before_id))
+                        .fetch_optional(&pool)
+                        .await
+                        .map_err(map_sqlx_err)?;
 
                 if let Some(cutoff) = cutoff {
                     sqlx::query_as::<_, MessageRecord>(
@@ -570,7 +584,10 @@ impl MessageRepository for PgMessageRepository {
                 .map_err(map_sqlx_err)?
             };
 
-            let mut items: Vec<Message> = records.into_iter().map(Message::try_from).collect::<Result<_, _>>()?;
+            let mut items: Vec<Message> = records
+                .into_iter()
+                .map(Message::try_from)
+                .collect::<Result<_, _>>()?;
             items.reverse();
             Ok(items)
         })
@@ -598,7 +615,10 @@ impl PgStorage {
     }
 }
 
-pub async fn create_pg_pool(database_url: &str, max_connections: u32) -> Result<PgPool, sqlx::Error> {
+pub async fn create_pg_pool(
+    database_url: &str,
+    max_connections: u32,
+) -> Result<PgPool, sqlx::Error> {
     PgPoolOptions::new()
         .max_connections(max_connections)
         .connect(database_url)

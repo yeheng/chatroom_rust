@@ -23,5 +23,9 @@ impl PasswordHasherError {
 #[async_trait]
 pub trait PasswordHasher: Send + Sync {
     async fn hash(&self, plaintext: &str) -> Result<PasswordHash, PasswordHasherError>;
-    async fn verify(&self, plaintext: &str, hashed: &PasswordHash) -> Result<bool, PasswordHasherError>;
+    async fn verify(
+        &self,
+        plaintext: &str,
+        hashed: &PasswordHash,
+    ) -> Result<bool, PasswordHasherError>;
 }

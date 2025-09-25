@@ -1,5 +1,8 @@
 use axum::{
-    extract::{ws::{Message as WsMessage, WebSocket, WebSocketUpgrade}, Path, Query, State},
+    extract::{
+        ws::{Message as WsMessage, WebSocket, WebSocketUpgrade},
+        Path, Query, State,
+    },
     http::StatusCode,
     response::Response,
     routing::{get, post},
@@ -9,7 +12,10 @@ use futures_util::{SinkExt, StreamExt};
 use serde::Deserialize;
 use uuid::Uuid;
 
-use application::services::{AuthenticateUserRequest, CreateRoomRequest, JoinRoomRequest, LeaveRoomRequest, RegisterUserRequest, SendMessageRequest};
+use application::services::{
+    AuthenticateUserRequest, CreateRoomRequest, JoinRoomRequest, LeaveRoomRequest,
+    RegisterUserRequest, SendMessageRequest,
+};
 use domain::{ChatRoomVisibility, MessageType};
 
 use crate::{error::ApiError, state::AppState};
@@ -70,7 +76,10 @@ fn api_routes() -> Router<AppState> {
         .route("/rooms", post(create_room))
         .route("/rooms/{room_id}/join", post(join_room))
         .route("/rooms/{room_id}/leave", post(leave_room))
-        .route("/rooms/{room_id}/messages", post(send_message).get(get_history))
+        .route(
+            "/rooms/{room_id}/messages",
+            post(send_message).get(get_history),
+        )
         .route("/ws", get(websocket_upgrade))
 }
 
@@ -225,11 +234,7 @@ async fn websocket_handler(socket: WebSocket, state: AppState, query: WsQuery) {
                     continue;
                 }
             };
-            if sender
-                .send(WsMessage::Text(payload.into()))
-                .await
-                .is_err()
-            {
+            if sender.send(WsMessage::Text(payload.into())).await.is_err() {
                 break;
             }
         }

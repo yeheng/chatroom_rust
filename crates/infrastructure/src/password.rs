@@ -29,7 +29,11 @@ impl PasswordHasher for BcryptPasswordHasher {
         PasswordHash::new(hashed).map_err(|err| PasswordHasherError::hash_error(err.to_string()))
     }
 
-    async fn verify(&self, plaintext: &str, hashed: &PasswordHash) -> Result<bool, PasswordHasherError> {
+    async fn verify(
+        &self,
+        plaintext: &str,
+        hashed: &PasswordHash,
+    ) -> Result<bool, PasswordHasherError> {
         let plaintext = plaintext.to_owned();
         let hashed = hashed.as_str().to_owned();
         tokio::task::spawn_blocking(move || verify(plaintext, &hashed))

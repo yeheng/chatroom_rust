@@ -96,7 +96,10 @@ impl ChatRoom {
     fn validate_name(name: String) -> Result<String, DomainError> {
         let trimmed = name.trim();
         if trimmed.is_empty() {
-            return Err(DomainError::invalid_argument("room_name", "cannot be empty"));
+            return Err(DomainError::invalid_argument(
+                "room_name",
+                "cannot be empty",
+            ));
         }
         if trimmed.len() > 60 {
             return Err(DomainError::invalid_argument("room_name", "too long"));

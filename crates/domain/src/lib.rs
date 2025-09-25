@@ -14,7 +14,12 @@ mod value_objects;
 pub use chat_room::{ChatRoom, ChatRoomVisibility};
 pub use errors::{DomainError, RepositoryError};
 pub use message::{Message, MessageRevision, MessageType};
-pub use repository::{MessageRepository, RepositoryFuture, RepositoryResult, RoomMemberRepository, UserRepository, ChatRoomRepository};
+pub use repository::{
+    ChatRoomRepository, MessageRepository, RepositoryFuture, RepositoryResult,
+    RoomMemberRepository, UserRepository,
+};
 pub use room_member::{RoomMember, RoomRole};
 pub use user::{User, UserStatus};
-pub use value_objects::{MessageContent, MessageId, PasswordHash, RoomId, Timestamp, UserEmail, UserId, Username};
+pub use value_objects::{
+    MessageContent, MessageId, PasswordHash, RoomId, Timestamp, UserEmail, UserId, Username,
+};

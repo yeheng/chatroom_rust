@@ -1,9 +1,19 @@
 use std::sync::Arc;
 
-use domain::{self, ChatRoom, ChatRoomRepository, ChatRoomVisibility, DomainError, Message, MessageContent, MessageId, MessageRepository, MessageType, RoomId, RoomMember, RoomMemberRepository, RoomRole, UserId};
+use domain::{
+    self, ChatRoom, ChatRoomRepository, ChatRoomVisibility, DomainError, Message, MessageContent,
+    MessageId, MessageRepository, MessageType, RoomId, RoomMember, RoomMemberRepository, RoomRole,
+    UserId,
+};
 use uuid::Uuid;
 
-use crate::{broadcaster::{MessageBroadcast, MessageBroadcaster}, clock::Clock, dto::{MessageDto, RoomDto}, error::ApplicationError, password::PasswordHasher};
+use crate::{
+    broadcaster::{MessageBroadcast, MessageBroadcaster},
+    clock::Clock,
+    dto::{MessageDto, RoomDto},
+    error::ApplicationError,
+    password::PasswordHasher,
+};
 
 #[derive(Debug, Clone)]
 pub struct CreateRoomRequest {
@@ -53,17 +63,20 @@ impl ChatService {
         Self { deps }
     }
 
-    pub async fn create_room(&self, request: CreateRoomRequest) -> Result<RoomDto, ApplicationError> {
+    pub async fn create_room(
+        &self,
+        request: CreateRoomRequest,
+    ) -> Result<RoomDto, ApplicationError> {
         let owner_id = UserId::from(request.owner_id);
         let now = self.deps.clock.now();
         let room_id = RoomId::from(Uuid::new_v4());
 
         let room = match request.visibility {
-            ChatRoomVisibility::Public => ChatRoom::new_public(room_id, request.name, owner_id, now)?,
+            ChatRoomVisibility::Public => {
+                ChatRoom::new_public(room_id, request.name, owner_id, now)?
+            }
             ChatRoomVisibility::Private => {
-                let password = request
-                    .password
-                    .ok_or(DomainError::RoomIsPrivate)?;
+                let password = request.password.ok_or(DomainError::RoomIsPrivate)?;
                 let hashed = self.deps.password_hasher.hash(&password).await?;
                 ChatRoom::new_private(room_id, request.name, owner_id, hashed, now)?
             }
@@ -71,10 +84,7 @@ impl ChatService {
 
         let stored = self.deps.room_repository.create(room).await?;
         let owner_member = RoomMember::new(stored.id, stored.owner_id, RoomRole::Owner, now);
-        self.deps
-            .member_repository
-            .upsert(owner_member)
-            .await?;
+        self.deps.member_repository.upsert(owner_member).await?;
 
         Ok(RoomDto::from(&stored))
     }
@@ -106,15 +116,8 @@ impl ChatService {
 
         if matches!(room.visibility, ChatRoomVisibility::Private) {
             let password = request.password.ok_or(DomainError::RoomIsPrivate)?;
-            let hashed = room
-                .password
-                .as_ref()
-                .ok_or(DomainError::RoomIsPrivate)?;
-            let valid = self
-                .deps
-                .password_hasher
-                .verify(&password, hashed)
-                .await?;
+            let hashed = room.password.as_ref().ok_or(DomainError::RoomIsPrivate)?;
+            let valid = self.deps.password_hasher.verify(&password, hashed).await?;
             if !valid {
                 return Err(DomainError::RoomIsPrivate.into());
             }
@@ -139,10 +142,7 @@ impl ChatService {
             return Err(DomainError::UserNotInRoom.into());
         }
 
-        self.deps
-            .member_repository
-            .remove(room_id, user_id)
-            .await?;
+        self.deps.member_repository.remove(room_id, user_id).await?;
         Ok(())
     }
 
@@ -164,8 +164,7 @@ impl ChatService {
             return Err(DomainError::RoomClosed.into());
         }
 
-        self
-            .deps
+        self.deps
             .member_repository
             .find(room_id, sender_id)
             .await?

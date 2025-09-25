@@ -60,7 +60,9 @@ impl From<DomainError> for RepositoryError {
             | DomainError::RoomNotFound
             | DomainError::MessageNotFound
             | DomainError::UserNotInRoom => RepositoryError::NotFound,
-            DomainError::UserAlreadyExists | DomainError::UserAlreadyInRoom => RepositoryError::Conflict,
+            DomainError::UserAlreadyExists | DomainError::UserAlreadyInRoom => {
+                RepositoryError::Conflict
+            }
             other => RepositoryError::storage(other.to_string()),
         }
     }

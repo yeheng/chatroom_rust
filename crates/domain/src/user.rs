@@ -1,6 +1,7 @@
 use crate::value_objects::{PasswordHash, Timestamp, UserEmail, UserId, Username};
 
-#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize, sqlx::Type)]
+#[sqlx(type_name = "user_status")]
 pub enum UserStatus {
     Active,
     Inactive,
@@ -12,6 +13,7 @@ pub struct User {
     pub id: UserId,
     pub username: Username,
     pub email: UserEmail,
+    #[serde(skip_serializing)]  // 密码字段不暴露给客户端
     pub password: PasswordHash,
     pub status: UserStatus,
     pub created_at: Timestamp,

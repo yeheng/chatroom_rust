@@ -1,7 +1,8 @@
 use crate::errors::DomainError;
 use crate::value_objects::{MessageContent, MessageId, RoomId, Timestamp, UserId};
 
-#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize, sqlx::Type)]
+#[sqlx(type_name = "message_type")]
 pub enum MessageType {
     Text,
     Image,
@@ -24,6 +25,7 @@ pub struct Message {
     pub reply_to: Option<MessageId>,
     pub created_at: Timestamp,
     pub last_revision: Option<MessageRevision>,
+    #[serde(skip_serializing)]  // 删除标记不暴露给客户端
     pub is_deleted: bool,
 }
 

@@ -18,64 +18,13 @@ fn invalid_data(message: impl Into<String>) -> RepositoryError {
     RepositoryError::storage(message)
 }
 
-fn status_as_str(status: &UserStatus) -> &'static str {
-    match status {
-        UserStatus::Active => "active",
-        UserStatus::Inactive => "inactive",
-        UserStatus::Suspended => "suspended",
-    }
-}
-
-fn status_from_str(value: &str) -> Option<UserStatus> {
-    match value {
-        "active" => Some(UserStatus::Active),
-        "inactive" => Some(UserStatus::Inactive),
-        "suspended" => Some(UserStatus::Suspended),
-        _ => None,
-    }
-}
-
-fn role_as_str(role: &RoomRole) -> &'static str {
-    match role {
-        RoomRole::Owner => "owner",
-        RoomRole::Admin => "admin",
-        RoomRole::Member => "member",
-    }
-}
-
-fn role_from_str(value: &str) -> Option<RoomRole> {
-    match value {
-        "owner" => Some(RoomRole::Owner),
-        "admin" => Some(RoomRole::Admin),
-        "member" => Some(RoomRole::Member),
-        _ => None,
-    }
-}
-
-fn message_type_as_str(value: &MessageType) -> &'static str {
-    match value {
-        MessageType::Text => "text",
-        MessageType::Image => "image",
-        MessageType::File => "file",
-    }
-}
-
-fn message_type_from_str(value: &str) -> Option<MessageType> {
-    match value {
-        "text" => Some(MessageType::Text),
-        "image" => Some(MessageType::Image),
-        "file" => Some(MessageType::File),
-        _ => None,
-    }
-}
-
 #[derive(Debug, FromRow)]
 struct UserRecord {
     id: Uuid,
     username: String,
     email: String,
     password_hash: String,
-    status: String,
+    status: UserStatus,  // 直接使用枚举类型
     created_at: OffsetDateTime,
     updated_at: OffsetDateTime,
 }
@@ -90,15 +39,13 @@ impl TryFrom<UserRecord> for User {
             domain::UserEmail::parse(value.email).map_err(|err| invalid_data(err.to_string()))?;
         let password = domain::PasswordHash::new(value.password_hash)
             .map_err(|err| invalid_data(err.to_string()))?;
-        let status =
-            status_from_str(&value.status).ok_or_else(|| invalid_data("invalid user status"))?;
 
         Ok(User {
             id: UserId::from(value.id),
             username,
             email,
             password,
-            status,
+            status: value.status,  // 直接使用，不需要转换
             created_at: value.created_at,
             updated_at: value.updated_at,
         })
@@ -149,7 +96,7 @@ impl TryFrom<RoomRecord> for ChatRoom {
 struct MemberRecord {
     room_id: Uuid,
     user_id: Uuid,
-    role: String,
+    role: RoomRole,  // 直接使用枚举类型
     joined_at: OffsetDateTime,
     last_read_message_id: Option<Uuid>,
 }
@@ -158,11 +105,10 @@ impl TryFrom<MemberRecord> for RoomMember {
     type Error = RepositoryError;
 
     fn try_from(value: MemberRecord) -> Result<Self, Self::Error> {
-        let role = role_from_str(&value.role).ok_or_else(|| invalid_data("invalid room role"))?;
         Ok(RoomMember {
             room_id: RoomId::from(value.room_id),
             user_id: UserId::from(value.user_id),
-            role,
+            role: value.role,  // 直接使用，不需要转换
             joined_at: value.joined_at,
             last_read_message: value.last_read_message_id.map(MessageId::from),
         })
@@ -175,7 +121,7 @@ struct MessageRecord {
     room_id: Uuid,
     user_id: Uuid,
     content: String,
-    message_type: String,
+    message_type: MessageType,  // 直接使用枚举类型
     reply_to_message_id: Option<Uuid>,
     created_at: OffsetDateTime,
     updated_at: Option<OffsetDateTime>,
@@ -186,8 +132,6 @@ impl TryFrom<MessageRecord> for Message {
     type Error = RepositoryError;
 
     fn try_from(value: MessageRecord) -> Result<Self, Self::Error> {
-        let message_type = message_type_from_str(&value.message_type)
-            .ok_or_else(|| invalid_data("invalid message type"))?;
         let content =
             MessageContent::new(value.content).map_err(|err| invalid_data(err.to_string()))?;
         let mut message = Message::new(
@@ -195,7 +139,7 @@ impl TryFrom<MessageRecord> for Message {
             RoomId::from(value.room_id),
             UserId::from(value.user_id),
             content,
-            message_type,
+            value.message_type,  // 直接使用，不需要转换
             value.reply_to_message_id.map(MessageId::from),
             value.created_at,
         )?;
@@ -238,7 +182,7 @@ impl UserRepository for PgUserRepository {
             .bind(user.username.as_str())
             .bind(user.email.as_str())
             .bind(user.password.as_str())
-            .bind(status_as_str(&user.status))
+            .bind(&user.status)  // 直接绑定枚举
             .bind(user.created_at)
             .bind(user.updated_at)
             .fetch_one(&pool)
@@ -264,7 +208,7 @@ impl UserRepository for PgUserRepository {
             .bind(user.username.as_str())
             .bind(user.email.as_str())
             .bind(user.password.as_str())
-            .bind(status_as_str(&user.status))
+            .bind(&user.status)  // 直接绑定枚举
             .bind(user.updated_at)
             .fetch_one(&pool)
             .await
@@ -426,7 +370,7 @@ impl RoomMemberRepository for PgRoomMemberRepository {
             )
             .bind(Uuid::from(member.room_id))
             .bind(Uuid::from(member.user_id))
-            .bind(role_as_str(&member.role))
+            .bind(&member.role)  // 直接绑定枚举
             .bind(member.joined_at)
             .bind(member.last_read_message.map(Uuid::from))
             .fetch_one(&pool)
@@ -508,7 +452,7 @@ impl MessageRepository for PgMessageRepository {
             .bind(Uuid::from(message.room_id))
             .bind(Uuid::from(message.sender_id))
             .bind(message.content.as_str())
-            .bind(message_type_as_str(&message.message_type))
+            .bind(&message.message_type)  // 直接绑定枚举
             .bind(message.reply_to.map(Uuid::from))
             .bind(message.created_at)
             .bind(message.last_revision.as_ref().map(|rev| rev.updated_at))

@@ -307,6 +307,9 @@ pub fn build_router() -> Router {
         broadcaster: broadcaster.clone() as Arc<dyn MessageBroadcaster>,
     }));
 
-    let state = AppState::new(user_service, chat_service, broadcaster);
+    // 创建测试用的JWT服务
+    let jwt_service = Arc::new(web_api::JwtService::new(web_api::JwtConfig::default()));
+
+    let state = AppState::new(user_service, chat_service, infrastructure::BroadcasterType::Local(broadcaster), jwt_service);
     build_router_fn(state)
 }

@@ -10,6 +10,7 @@ uuid = { workspace = true }
 time = { workspace = true }
 thiserror = { workspace = true }
 futures = { workspace = true }
+sqlx = { workspace = true }  # 添加 sqlx 支持
 
 [dev-dependencies]
 mockall = { workspace = true }

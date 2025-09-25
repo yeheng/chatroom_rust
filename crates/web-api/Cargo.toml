@@ -26,6 +26,9 @@ toml = {workspace = true}
 validator = { workspace = true }
 reqwest = { workspace = true }
 futures-util = { workspace = true }
+tokio-stream = "0.1"  # 添加 tokio-stream 支持
+thiserror = { workspace = true }  # 添加 thiserror 支持
+jsonwebtoken = { workspace = true }  # 添加 JWT 支持
 
 [dev-dependencies]
 reqwest = { workspace = true }

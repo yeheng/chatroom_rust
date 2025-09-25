@@ -46,11 +46,11 @@ rdkafka = { version = "0.38", features = ["cmake-build", "ssl-vendored"] }
 # Redis 缓存和 Pub/Sub
 redis = { version = "0.32", features = ["tokio-comp", "connection-manager"] }
 
-# Futures 工具库
-futures-util = { version = "0.3", default-features = false }
-
 # JWT 认证
 jsonwebtoken = "9.3"
+
+# Futures 工具库
+futures-util = { version = "0.3", default-features = false }
 ring = "0.17"
 
 # WebSocket 支持

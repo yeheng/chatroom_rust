@@ -64,7 +64,8 @@ async fn user_to_message_flow() {
     assert_eq!(status, StatusCode::CREATED);
     let member_id = member_body["id"].as_str().unwrap().parse::<Uuid>().unwrap();
 
-    let (status, _) = send_request(
+    // Owner登录获取token
+    let (status, owner_login_body) = send_request(
         &app,
         Request::builder()
             .method("POST")
@@ -81,6 +82,27 @@ async fn user_to_message_flow() {
     )
     .await;
     assert_eq!(status, StatusCode::OK);
+    let owner_token = owner_login_body["token"].as_str().unwrap();
+
+    // Member登录获取token
+    let (status, member_login_body) = send_request(
+        &app,
+        Request::builder()
+            .method("POST")
+            .uri("/api/v1/auth/login")
+            .header("content-type", "application/json")
+            .body(Body::from(
+                json!({
+                    "email": "member@example.com",
+                    "password": "secret"
+                })
+                .to_string(),
+            ))
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let member_token = member_login_body["token"].as_str().unwrap();
 
     let (status, room_body) = send_request(
         &app,
@@ -88,10 +110,10 @@ async fn user_to_message_flow() {
             .method("POST")
             .uri("/api/v1/rooms")
             .header("content-type", "application/json")
+            .header("authorization", format!("Bearer {}", owner_token))
             .body(Body::from(
                 json!({
                     "name": "general",
-                    "owner_id": owner_id,
                     "visibility": "Public"
                 })
                 .to_string(),
@@ -108,10 +130,9 @@ async fn user_to_message_flow() {
             .method("POST")
             .uri(format!("/api/v1/rooms/{room_id}/join"))
             .header("content-type", "application/json")
+            .header("authorization", format!("Bearer {}", member_token))
             .body(Body::from(
-                json!({
-                    "user_id": member_id
-                })
+                json!({})
                 .to_string(),
             ))
             .unwrap(),
@@ -125,9 +146,9 @@ async fn user_to_message_flow() {
             .method("POST")
             .uri(format!("/api/v1/rooms/{room_id}/messages"))
             .header("content-type", "application/json")
+            .header("authorization", format!("Bearer {}", member_token))
             .body(Body::from(
                 json!({
-                    "sender_id": member_id,
                     "content": "hello",
                     "message_type": "Text"
                 })
@@ -144,6 +165,7 @@ async fn user_to_message_flow() {
         Request::builder()
             .method("GET")
             .uri(format!("/api/v1/rooms/{room_id}/messages"))
+            .header("authorization", format!("Bearer {}", member_token))
             .body(Body::empty())
             .unwrap(),
     )

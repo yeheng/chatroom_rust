@@ -28,6 +28,15 @@ impl ApiError {
             },
         }
     }
+
+    // 添加便利方法
+    pub fn unauthorized(message: impl Into<String>) -> Self {
+        Self::new(StatusCode::UNAUTHORIZED, "UNAUTHORIZED", message)
+    }
+
+    pub fn internal_server_error(message: impl Into<String>) -> Self {
+        Self::new(StatusCode::INTERNAL_SERVER_ERROR, "INTERNAL_ERROR", message)
+    }
 }
 
 impl From<ApplicationError> for ApiError {

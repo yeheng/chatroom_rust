@@ -2,7 +2,7 @@ use async_trait::async_trait;
 use domain::{Message, RoomId};
 use thiserror::Error;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct MessageBroadcast {
     pub room_id: RoomId,
     pub message: Message,

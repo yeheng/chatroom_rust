@@ -5,14 +5,12 @@
 
 pub mod broadcaster;
 pub mod clock;
-pub mod dto;
 pub mod error;
 pub mod password;
 pub mod services;
 
 pub use broadcaster::{MessageBroadcast, MessageBroadcaster};
 pub use clock::{Clock, SystemClock};
-pub use dto::{MessageDto, RoomDto, UserDto};
 pub use error::ApplicationError;
 pub use password::{PasswordHasher, PasswordHasherError};
 pub use services::{ChatService, ChatServiceDependencies, UserService, UserServiceDependencies};

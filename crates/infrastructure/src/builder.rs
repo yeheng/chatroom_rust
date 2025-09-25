@@ -4,7 +4,7 @@ use application::PasswordHasher;
 use thiserror::Error;
 
 use crate::{
-    broadcast::LocalMessageBroadcaster,
+    broadcast::{LocalMessageBroadcaster, RedisMessageBroadcaster},
     migrations::MIGRATOR,
     password::BcryptPasswordHasher,
     repository::{create_pg_pool, PgStorage},
@@ -16,6 +16,7 @@ pub struct InfrastructureConfig {
     pub max_connections: u32,
     pub bcrypt_cost: Option<u32>,
     pub broadcast_capacity: usize,
+    pub redis_url: Option<String>,  // Redis 配置，None 表示使用本地广播器
 }
 
 impl Default for InfrastructureConfig {
@@ -25,6 +26,7 @@ impl Default for InfrastructureConfig {
             max_connections: 5,
             bcrypt_cost: None,
             broadcast_capacity: 256,
+            redis_url: None,  // 默认使用本地广播器
         }
     }
 }
@@ -35,13 +37,17 @@ pub enum InfrastructureError {
     Database(#[from] sqlx::Error),
     #[error("migration error: {0}")]
     Migration(#[from] sqlx::migrate::MigrateError),
+    #[error("redis error: {0}")]
+    Redis(#[from] redis::RedisError),
 }
+
+use crate::broadcast::BroadcasterType;
 
 #[derive(Clone)]
 pub struct Infrastructure {
     pub storage: Arc<PgStorage>,
     pub password_hasher: Arc<BcryptPasswordHasher>,
-    pub broadcaster: Arc<LocalMessageBroadcaster>,
+    pub broadcaster: BroadcasterType,  // 使用枚举支持多种广播器
 }
 
 impl Infrastructure {
@@ -51,7 +57,17 @@ impl Infrastructure {
 
         let storage = Arc::new(PgStorage::new(pool));
         let password_hasher = Arc::new(BcryptPasswordHasher::new(config.bcrypt_cost));
-        let broadcaster = Arc::new(LocalMessageBroadcaster::new(config.broadcast_capacity));
+
+        // 根据配置选择广播器类型
+        let broadcaster = match config.redis_url {
+            Some(redis_url) => {
+                let client = redis::Client::open(redis_url)?;
+                BroadcasterType::Redis(Arc::new(RedisMessageBroadcaster::new(client)))
+            }
+            None => {
+                BroadcasterType::Local(Arc::new(LocalMessageBroadcaster::new(config.broadcast_capacity)))
+            }
+        };
 
         Ok(Self {
             storage,

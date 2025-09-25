@@ -64,18 +64,35 @@ async fn websocket_broadcast_flow() {
         .expect("member json");
     let member_id = member["id"].as_str().unwrap().parse::<Uuid>().unwrap();
 
-    client
+    // Owner登录获取token
+    let owner_login = client
         .post(format!("{}/api/v1/auth/login", base_http))
         .json(&json!({"email": "owner@example.com", "password": "secret"}))
         .send()
         .await
-        .expect("login owner");
+        .expect("login owner")
+        .json::<serde_json::Value>()
+        .await
+        .expect("owner login json");
+    let owner_token = owner_login["token"].as_str().unwrap();
+
+    // Member登录获取token
+    let member_login = client
+        .post(format!("{}/api/v1/auth/login", base_http))
+        .json(&json!({"email": "member@example.com", "password": "secret"}))
+        .send()
+        .await
+        .expect("login member")
+        .json::<serde_json::Value>()
+        .await
+        .expect("member login json");
+    let member_token = member_login["token"].as_str().unwrap();
 
     let room = client
         .post(format!("{}/api/v1/rooms", base_http))
+        .header("authorization", format!("Bearer {}", owner_token))
         .json(&json!({
             "name": "general",
-            "owner_id": owner_id,
             "visibility": "Public"
         }))
         .send()
@@ -88,23 +105,24 @@ async fn websocket_broadcast_flow() {
 
     client
         .post(format!("{}/api/v1/rooms/{}/join", base_http, room_id))
-        .json(&json!({"user_id": member_id}))
+        .header("authorization", format!("Bearer {}", member_token))
+        .json(&json!({}))
         .send()
         .await
         .expect("join room");
 
     // Connect WebSocket as member
     let ws_url = format!(
-        "ws://{}/api/v1/ws?user_id={}&room_id={}",
-        addr, member_id, room_id
+        "ws://{}/api/v1/ws?room_id={}&token={}",
+        addr, room_id, member_token
     );
     let (mut ws, _) = connect_async(ws_url).await.expect("ws connect");
 
     // Send message via HTTP and expect it via WS
     client
         .post(format!("{}/api/v1/rooms/{}/messages", base_http, room_id))
+        .header("authorization", format!("Bearer {}", member_token))
         .json(&json!({
-            "sender_id": member_id,
             "content": "hello",
             "message_type": "Text"
         }))

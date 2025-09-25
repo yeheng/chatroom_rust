@@ -10,7 +10,6 @@ use uuid::Uuid;
 use crate::{
     broadcaster::{MessageBroadcast, MessageBroadcaster},
     clock::Clock,
-    dto::{MessageDto, RoomDto},
     error::ApplicationError,
     password::PasswordHasher,
 };
@@ -66,7 +65,7 @@ impl ChatService {
     pub async fn create_room(
         &self,
         request: CreateRoomRequest,
-    ) -> Result<RoomDto, ApplicationError> {
+    ) -> Result<ChatRoom, ApplicationError> {
         let owner_id = UserId::from(request.owner_id);
         let now = self.deps.clock.now();
         let room_id = RoomId::from(Uuid::new_v4());
@@ -86,7 +85,7 @@ impl ChatService {
         let owner_member = RoomMember::new(stored.id, stored.owner_id, RoomRole::Owner, now);
         self.deps.member_repository.upsert(owner_member).await?;
 
-        Ok(RoomDto::from(&stored))
+        Ok(stored)
     }
 
     pub async fn join_room(&self, request: JoinRoomRequest) -> Result<(), ApplicationError> {
@@ -149,7 +148,7 @@ impl ChatService {
     pub async fn send_message(
         &self,
         request: SendMessageRequest,
-    ) -> Result<MessageDto, ApplicationError> {
+    ) -> Result<Message, ApplicationError> {
         let room_id = RoomId::from(request.room_id);
         let sender_id = UserId::from(request.sender_id);
 
@@ -194,7 +193,7 @@ impl ChatService {
             })
             .await?;
 
-        Ok(MessageDto::from(&stored))
+        Ok(stored)
     }
 
     pub async fn get_history(
@@ -202,7 +201,7 @@ impl ChatService {
         room_id: Uuid,
         limit: u32,
         before: Option<Uuid>,
-    ) -> Result<Vec<MessageDto>, ApplicationError> {
+    ) -> Result<Vec<Message>, ApplicationError> {
         let room_id = RoomId::from(room_id);
         let before = before.map(MessageId::from);
 
@@ -212,6 +211,6 @@ impl ChatService {
             .list_recent(room_id, limit, before)
             .await?;
 
-        Ok(records.iter().map(MessageDto::from).collect())
+        Ok(records)
     }
 }

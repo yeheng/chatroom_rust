@@ -3,7 +3,7 @@ use std::sync::Arc;
 use domain::{User, UserEmail, UserId, UserRepository, UserStatus, Username};
 use uuid::Uuid;
 
-use crate::{clock::Clock, dto::UserDto, error::ApplicationError, password::PasswordHasher};
+use crate::{clock::Clock, error::ApplicationError, password::PasswordHasher};
 
 #[derive(Debug, Clone)]
 pub struct RegisterUserRequest {
@@ -36,7 +36,7 @@ impl UserService {
     pub async fn register(
         &self,
         request: RegisterUserRequest,
-    ) -> Result<UserDto, ApplicationError> {
+    ) -> Result<User, ApplicationError> {
         let username = Username::parse(request.username)?;
         let email = UserEmail::parse(request.email.clone())?;
 
@@ -65,13 +65,13 @@ impl UserService {
         user.activate(now);
 
         let stored = self.deps.user_repository.create(user).await?;
-        Ok(UserDto::from(&stored))
+        Ok(stored)
     }
 
     pub async fn authenticate(
         &self,
         request: AuthenticateUserRequest,
-    ) -> Result<UserDto, ApplicationError> {
+    ) -> Result<User, ApplicationError> {
         let email = UserEmail::parse(request.email)?;
         let user = self
             .deps
@@ -93,6 +93,6 @@ impl UserService {
             return Err(ApplicationError::Authentication);
         }
 
-        Ok(UserDto::from(&user))
+        Ok(user)
     }
 }

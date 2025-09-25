@@ -129,7 +129,7 @@ impl MessageBroadcaster for LocalMessageBroadcaster {
 // Redis 消息流，用于 WebSocket 处理
 pub struct RedisMessageStream {
     pubsub: PubSub,
-    room_id: domain::RoomId,
+    _room_id: domain::RoomId,
 }
 
 impl RedisMessageStream {
@@ -152,7 +152,7 @@ impl RedisMessageStream {
 
         tracing::debug!(channel = %channel, "Subscribed to Redis channel");
 
-        Ok(Self { pubsub, room_id })
+        Ok(Self { pubsub, _room_id: room_id })
     }
 
     // 将 Redis PubSub 转换为异步流

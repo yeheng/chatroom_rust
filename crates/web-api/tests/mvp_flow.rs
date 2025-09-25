@@ -24,7 +24,7 @@ async fn send_request(app: &axum::Router, request: Request<Body>) -> (StatusCode
 async fn user_to_message_flow() {
     let app = build_router();
 
-    let (status, owner_body) = send_request(
+    let (status, _owner_body) = send_request(
         &app,
         Request::builder()
             .method("POST")
@@ -42,7 +42,6 @@ async fn user_to_message_flow() {
     )
     .await;
     assert_eq!(status, StatusCode::CREATED);
-    let owner_id = owner_body["id"].as_str().unwrap().parse::<Uuid>().unwrap();
 
     let (status, member_body) = send_request(
         &app,

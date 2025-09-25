@@ -43,7 +43,7 @@ struct CreateRoomPayload {
 
 #[derive(Debug, Deserialize)]
 struct JoinRoomPayload {
-    password: Option<String>,
+    _password: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -67,7 +67,7 @@ struct InviteMemberPayload {
 
 #[derive(Debug, Deserialize)]
 struct RemoveMemberPayload {
-    user_id: Uuid,  // 要踢出的用户ID
+    _user_id: Uuid,  // 要踢出的用户ID
 }
 
 #[derive(Debug, Deserialize)]
@@ -327,7 +327,7 @@ async fn websocket_handler(socket: WebSocket, state: AppState, user_id: Uuid, ro
                         }
                         break;
                     }
-                    WsMessage::Ping(data) => {
+                    WsMessage::Ping(_data) => {
                         // 回应ping消息
                         // 注意：这里无法发送pong，因为sender已经移动到发送任务中
                         tracing::debug!(user_id = %user_id, "收到ping消息");

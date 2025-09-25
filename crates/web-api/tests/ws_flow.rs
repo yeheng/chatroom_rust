@@ -34,7 +34,7 @@ async fn websocket_broadcast_flow() {
     let client = Client::new();
 
     // Register owner and member, create room, join, send message
-    let owner = client
+    let _owner = client
         .post(format!("{}/api/v1/auth/register", base_http))
         .json(&json!({
             "username": "owner",
@@ -47,7 +47,6 @@ async fn websocket_broadcast_flow() {
         .json::<serde_json::Value>()
         .await
         .expect("owner json");
-    let owner_id = owner["id"].as_str().unwrap().parse::<Uuid>().unwrap();
 
     let member = client
         .post(format!("{}/api/v1/auth/register", base_http))

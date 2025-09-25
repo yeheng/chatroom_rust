@@ -1,3 +1,11 @@
-//! 基础设施层
+//! 基础设施层实现。
 //!
-//! 处理外部依赖和技术细节，包括消息队列、缓存、数据库等。
+//! 提供数据库仓储、密码哈希、消息广播等适配器，实现应用/领域层定义的接口。
+
+pub mod broadcast;
+pub mod password;
+pub mod repository;
+
+pub use broadcast::LocalMessageBroadcaster;
+pub use password::BcryptPasswordHasher;
+pub use repository::{create_pg_pool, PgChatRoomRepository, PgMessageRepository, PgRoomMemberRepository, PgStorage, PgUserRepository};

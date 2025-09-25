@@ -4,25 +4,25 @@ version.workspace = true
 edition.workspace = true
 
 [dependencies]
+application = { path = "../application" }
 domain = { path = "../domain" }
 tokio = { workspace = true }
 async-trait = { workspace = true }
 sqlx = { workspace = true }
 uuid = { workspace = true }
-chrono = { workspace = true }
-serde = { workspace = true }
-serde_json = { workspace = true }
-anyhow = { workspace = true }
+time = { workspace = true }
 thiserror = { workspace = true }
-figment = { workspace = true }
 tracing = { workspace = true }
-futures-util = { workspace = true }
-jsonwebtoken = { workspace = true }
 bcrypt = { workspace = true }
-validator = { workspace = true }
-tokio-tungstenite = { workspace = true }
-tungstenite = { workspace = true }
 
 [features]
 default = []
 enterprise = []
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+testcontainers = { workspace = true }
+testcontainers-modules = { workspace = true, features = ["postgres"] }
+sqlx = { workspace = true, features = ["runtime-tokio-rustls", "postgres", "uuid", "chrono", "time"] }
+uuid = { workspace = true }
+time = { workspace = true }

@@ -2,7 +2,7 @@ use std::{collections::HashMap, sync::Arc};
 
 use application::{
     services::{ChatService, ChatServiceDependencies, UserService, UserServiceDependencies},
-    MessageBroadcaster, MessageBroadcast, PasswordHasher, PasswordHasherError, SystemClock,
+    MessageBroadcaster, PasswordHasher, PasswordHasherError, SystemClock,
 };
 use async_trait::async_trait;
 use axum::{
@@ -19,6 +19,7 @@ use tokio::sync::RwLock;
 use tower::ServiceExt;
 use uuid::Uuid;
 
+use infrastructure::LocalMessageBroadcaster;
 use web_api::{router, AppState};
 
 #[derive(Default)]
@@ -283,15 +284,6 @@ impl PasswordHasher for PlainPasswordHasher {
     }
 }
 
-struct NoopBroadcaster;
-
-#[async_trait]
-impl MessageBroadcaster for NoopBroadcaster {
-    async fn broadcast(&self, _payload: MessageBroadcast) -> Result<(), application::broadcaster::BroadcastError> {
-        Ok(())
-    }
-}
-
 fn test_router() -> Router {
     let user_repo = Arc::new(InMemoryUserRepository::new());
     let room_repo = Arc::new(InMemoryChatRoomRepository::new());
@@ -299,7 +291,7 @@ fn test_router() -> Router {
     let message_repo = Arc::new(InMemoryMessageRepository::new());
     let clock = Arc::new(SystemClock::default());
     let password_hasher = Arc::new(PlainPasswordHasher);
-    let broadcaster = Arc::new(NoopBroadcaster);
+    let broadcaster = Arc::new(LocalMessageBroadcaster::new(128));
 
     let user_service = Arc::new(UserService::new(UserServiceDependencies {
         user_repository: user_repo.clone(),
@@ -307,16 +299,17 @@ fn test_router() -> Router {
         clock: clock.clone(),
     }));
 
+    let broadcaster_trait: Arc<dyn MessageBroadcaster> = broadcaster.clone();
     let chat_service = Arc::new(ChatService::new(ChatServiceDependencies {
         room_repository: room_repo,
         member_repository: member_repo,
         message_repository: message_repo,
         password_hasher,
         clock,
-        broadcaster,
+        broadcaster: broadcaster_trait,
     }));
 
-    let state = AppState::new(user_service, chat_service);
+    let state = AppState::new(user_service, chat_service, broadcaster);
     router(state)
 }
 

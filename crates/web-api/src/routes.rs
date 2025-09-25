@@ -1,9 +1,11 @@
 use axum::{
-    extract::{Path, Query, State},
+    extract::{ws::{Message as WsMessage, WebSocket, WebSocketUpgrade}, Path, Query, State},
     http::StatusCode,
+    response::Response,
     routing::{get, post},
     Json, Router,
 };
+use futures_util::{SinkExt, StreamExt};
 use serde::Deserialize;
 use uuid::Uuid;
 
@@ -69,7 +71,7 @@ fn api_routes() -> Router<AppState> {
         .route("/rooms/{room_id}/join", post(join_room))
         .route("/rooms/{room_id}/leave", post(leave_room))
         .route("/rooms/{room_id}/messages", post(send_message).get(get_history))
-        .route("/ws", get(websocket_placeholder))
+        .route("/ws", get(websocket_upgrade))
 }
 
 async fn health() -> StatusCode {
@@ -190,6 +192,56 @@ async fn get_history(
     Ok(Json(items))
 }
 
-async fn websocket_placeholder() -> StatusCode {
-    StatusCode::NOT_IMPLEMENTED
+#[derive(Debug, Deserialize)]
+struct WsQuery {
+    #[allow(dead_code)]
+    user_id: Uuid,
+    room_id: Uuid,
+}
+
+async fn websocket_upgrade(
+    State(state): State<AppState>,
+    Query(query): Query<WsQuery>,
+    ws: WebSocketUpgrade,
+) -> Result<Response, ApiError> {
+    Ok(ws.on_upgrade(move |socket| websocket_handler(socket, state, query)))
+}
+
+async fn websocket_handler(socket: WebSocket, state: AppState, query: WsQuery) {
+    let mut receiver = state.broadcaster.subscribe();
+    let room_id = query.room_id;
+
+    let (mut sender, mut incoming) = socket.split();
+
+    let send_task = tokio::spawn(async move {
+        while let Ok(event) = receiver.recv().await {
+            if Uuid::from(event.room_id) != room_id {
+                continue;
+            }
+            let payload = match serde_json::to_string(&MessageDto::from(&event.message)) {
+                Ok(json) => json,
+                Err(err) => {
+                    tracing::warn!(error = %err, "failed to serialize websocket payload");
+                    continue;
+                }
+            };
+            if sender
+                .send(WsMessage::Text(payload.into()))
+                .await
+                .is_err()
+            {
+                break;
+            }
+        }
+    });
+
+    let recv_task = tokio::spawn(async move {
+        while let Some(Ok(message)) = incoming.next().await {
+            if matches!(message, WsMessage::Close(_)) {
+                break;
+            }
+        }
+    });
+
+    let _ = tokio::join!(send_task, recv_task);
 }

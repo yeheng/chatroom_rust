@@ -2,9 +2,13 @@ use crate::value_objects::{PasswordHash, Timestamp, UserEmail, UserId, Username}
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize, sqlx::Type)]
 #[sqlx(type_name = "user_status")]
+#[sqlx(rename_all = "lowercase")]
 pub enum UserStatus {
+    #[sqlx(rename = "active")]
     Active,
+    #[sqlx(rename = "inactive")]
     Inactive,
+    #[sqlx(rename = "suspended")]
     Suspended,
 }
 

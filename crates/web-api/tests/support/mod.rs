@@ -5,62 +5,25 @@ use application::{
     create_pg_pool,
     services::{ChatService, ChatServiceDependencies, UserService, UserServiceDependencies},
     PgChatRoomRepository, PgMessageRepository, PgRoomMemberRepository, PgUserRepository,
-    PresenceManager,
+    presence::memory::MemoryPresenceManager,
 };
+use sqlx::PgPool;
 use axum::Router;
+
+// 清理数据库中的所有数据，为测试提供干净的环境
+async fn cleanup_database(pool: &PgPool) -> Result<(), sqlx::Error> {
+    // 按照外键依赖关系的反序删除数据
+    sqlx::query("DELETE FROM room_members").execute(pool).await?;
+    sqlx::query("DELETE FROM messages").execute(pool).await?;
+    sqlx::query("DELETE FROM chat_rooms").execute(pool).await?;
+    sqlx::query("DELETE FROM users").execute(pool).await?;
+    Ok(())
+}
+
 use web_api::{router as build_router_fn, AppState, JwtConfig, JwtService};
 
-// 简单的内存在线状态管理器用于测试
-#[derive(Default)]
-pub struct TestPresenceManager;
-
-#[async_trait::async_trait]
-impl PresenceManager for TestPresenceManager {
-    async fn user_connected(
-        &self,
-        _room_id: domain::RoomId,
-        _user_id: domain::UserId,
-    ) -> Result<(), application::ApplicationError> {
-        Ok(())
-    }
-
-    async fn user_disconnected(
-        &self,
-        _room_id: domain::RoomId,
-        _user_id: domain::UserId,
-    ) -> Result<(), application::ApplicationError> {
-        Ok(())
-    }
-
-    async fn get_online_users(
-        &self,
-        _room_id: domain::RoomId,
-    ) -> Result<Vec<domain::UserId>, application::ApplicationError> {
-        Ok(Vec::new())
-    }
-
-    async fn is_user_online(
-        &self,
-        _room_id: domain::RoomId,
-        _user_id: domain::UserId,
-    ) -> Result<bool, application::ApplicationError> {
-        Ok(false)
-    }
-
-    async fn get_user_rooms(
-        &self,
-        _user_id: domain::UserId,
-    ) -> Result<Vec<domain::RoomId>, application::ApplicationError> {
-        Ok(Vec::new())
-    }
-
-    async fn cleanup_user_presence(
-        &self,
-        _user_id: domain::UserId,
-    ) -> Result<(), application::ApplicationError> {
-        Ok(())
-    }
-}
+// 使用内存实现的在线状态管理器进行测试
+pub type TestPresenceManager = MemoryPresenceManager;
 
 pub async fn build_router() -> Router {
     // 使用真实的 PostgreSQL 数据库进行测试
@@ -69,11 +32,12 @@ pub async fn build_router() -> Router {
 
     let pg_pool = create_pg_pool(&database_url).await.expect("Failed to create database pool");
 
-    // 运行迁移
-    // sqlx::migrate!("../../migrations")
-    //     .run(&pg_pool)
-    //     .await
-    //     .expect("Failed to run migrations");
+    // 清理数据库表中的所有数据
+    cleanup_database(&pg_pool).await.expect("Failed to cleanup database");
+
+    // 运行迁移确保表结构正确
+    // 注意：如果类型已存在，这个会失败，但我们可以忽略
+    let _ = sqlx::migrate!("../../migrations").run(&pg_pool).await;
 
     // 创建 repositories
     let user_repository = PgUserRepository::new(pg_pool.clone());
@@ -106,7 +70,7 @@ pub async fn build_router() -> Router {
         expiration_hours: 24,
     }));
 
-    let presence_manager: Arc<dyn PresenceManager> = Arc::new(TestPresenceManager);
+    let presence_manager: Arc<dyn application::PresenceManager> = Arc::new(TestPresenceManager::default());
 
     let state = AppState::new(
         Arc::new(user_service),

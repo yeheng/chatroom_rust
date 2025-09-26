@@ -2,9 +2,13 @@ use crate::value_objects::{MessageId, RoomId, Timestamp, UserId};
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize, sqlx::Type)]
 #[sqlx(type_name = "room_role")]
+#[sqlx(rename_all = "lowercase")]
 pub enum RoomRole {
+    #[sqlx(rename = "owner")]
     Owner,
+    #[sqlx(rename = "admin")]
     Admin,
+    #[sqlx(rename = "member")]
     Member,
 }
 

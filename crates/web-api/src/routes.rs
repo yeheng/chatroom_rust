@@ -289,6 +289,13 @@ async fn websocket_handler(socket: WebSocket, state: AppState, user_id: Uuid, ro
         room_id_domain,
     );
 
+    // 清空任何旧消息，只接收连接后发送的新消息
+    let mut cleared_count = 0;
+    while let Ok(Some(_)) = message_stream.try_recv() {
+        cleared_count += 1;
+    }
+    tracing::info!(cleared_count, "清空了旧消息");
+
     let (mut sender, mut incoming) = socket.split();
 
     // 创建 mpsc channel 来解耦对 sender 的访问

@@ -34,11 +34,16 @@ async fn websocket_broadcast_flow() {
     let client = Client::new();
 
     // Register owner and member, create room, join, send message
+    let timestamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_millis();
+
     let _owner = client
         .post(format!("{}/api/v1/auth/register", base_http))
         .json(&json!({
-            "username": "owner",
-            "email": "owner@example.com",
+            "username": format!("owner_{}", timestamp),
+            "email": format!("owner_{}@example.com", timestamp),
             "password": "secret"
         }))
         .send()
@@ -51,8 +56,8 @@ async fn websocket_broadcast_flow() {
     let member = client
         .post(format!("{}/api/v1/auth/register", base_http))
         .json(&json!({
-            "username": "member",
-            "email": "member@example.com",
+            "username": format!("member_{}", timestamp),
+            "email": format!("member_{}@example.com", timestamp),
             "password": "secret"
         }))
         .send()
@@ -61,24 +66,34 @@ async fn websocket_broadcast_flow() {
         .json::<serde_json::Value>()
         .await
         .expect("member json");
-    let member_id = member["id"].as_str().unwrap().parse::<Uuid>().unwrap();
+    let member_id = member["id"]
+        .as_str()
+        .unwrap_or_else(|| {
+            eprintln!("ERROR: Member registration failed. Response: {:?}", member);
+            panic!("Member registration failed - no id field in response")
+        })
+        .parse::<Uuid>()
+        .unwrap();
 
     // Owner登录获取token
     let owner_login = client
         .post(format!("{}/api/v1/auth/login", base_http))
-        .json(&json!({"email": "owner@example.com", "password": "secret"}))
+        .json(&json!({"email": format!("owner_{}@example.com", timestamp), "password": "secret"}))
         .send()
         .await
         .expect("login owner")
         .json::<serde_json::Value>()
         .await
         .expect("owner login json");
-    let owner_token = owner_login["token"].as_str().unwrap();
+    let owner_token = owner_login["token"].as_str().unwrap_or_else(|| {
+        eprintln!("ERROR: Owner login failed. Response: {:?}", owner_login);
+        panic!("Owner login failed - no token field in response")
+    });
 
     // Member登录获取token
     let member_login = client
         .post(format!("{}/api/v1/auth/login", base_http))
-        .json(&json!({"email": "member@example.com", "password": "secret"}))
+        .json(&json!({"email": format!("member_{}@example.com", timestamp), "password": "secret"}))
         .send()
         .await
         .expect("login member")
@@ -394,6 +409,7 @@ async fn websocket_multiple_users_broadcast() {
     let (mut ws2, _) = connect_async(ws_url2).await.expect("ws2 connect");
 
     // user1发送消息
+    println!("DEBUG: user1 准备发送消息 'Hello from user1'");
     client
         .post(format!("{}/api/v1/rooms/{}/messages", base_http, room_id))
         .header("authorization", format!("Bearer {}", user1_token))
@@ -404,17 +420,26 @@ async fn websocket_multiple_users_broadcast() {
         .send()
         .await
         .expect("send message from user1");
+    println!("DEBUG: user1 消息发送完成");
+
+    // 等待一下确保消息被处理
+    sleep(Duration::from_millis(100)).await;
 
     // user2应该收到消息
+    println!("DEBUG: 等待 user2 接收消息...");
     let msg2 = ws2.next().await.expect("ws2 message").expect("ws2 text");
     match msg2 {
         TungsteniteMessage::Text(payload) => {
             let json: serde_json::Value = serde_json::from_str(&payload).expect("json");
+            println!("DEBUG: user2 收到消息: {}", payload);
             assert_eq!(json["content"], "Hello from user1");
             assert_eq!(json["sender_id"], user1_id.to_string());
         }
         other => panic!("unexpected message {other:?}"),
     }
+
+    // 等待一下再发送下一条消息
+    sleep(Duration::from_millis(100)).await;
 
     // user2发送消息
     client
@@ -428,13 +453,27 @@ async fn websocket_multiple_users_broadcast() {
         .await
         .expect("send message from user2");
 
-    // user1应该收到消息
+    // user1应该收到消息 - 需要跳过自己发送的第一条消息
     let msg1 = ws1.next().await.expect("ws1 message").expect("ws1 text");
     match msg1 {
         TungsteniteMessage::Text(payload) => {
             let json: serde_json::Value = serde_json::from_str(&payload).expect("json");
-            assert_eq!(json["content"], "Hello from user2");
-            assert_eq!(json["sender_id"], user2_id.to_string());
+            // 如果这是user1自己发送的消息，跳过它，读取下一条
+            if json["content"] == "Hello from user1" && json["sender_id"] == user1_id.to_string() {
+                let msg2 = ws1.next().await.expect("ws1 message2").expect("ws1 text2");
+                match msg2 {
+                    TungsteniteMessage::Text(payload2) => {
+                        let json2: serde_json::Value = serde_json::from_str(&payload2).expect("json2");
+                        assert_eq!(json2["content"], "Hello from user2");
+                        assert_eq!(json2["sender_id"], user2_id.to_string());
+                    }
+                    other => panic!("unexpected second message {other:?}"),
+                }
+            } else {
+                // 如果第一条不是user1自己发送的消息，直接检查它
+                assert_eq!(json["content"], "Hello from user2");
+                assert_eq!(json["sender_id"], user2_id.to_string());
+            }
         }
         other => panic!("unexpected message {other:?}"),
     }
@@ -504,12 +543,17 @@ async fn websocket_private_room_flow() {
     let base_http = format!("http://{}", addr);
     let client = Client::new();
 
-    // 注册用户
+    // 注册用户 - 使用唯一用户名避免测试间冲突
+    let timestamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_millis();
+
     let owner = client
         .post(format!("{}/api/v1/auth/register", base_http))
         .json(&json!({
-            "username": "owner",
-            "email": "owner@private.com",
+            "username": format!("private_owner_{}", timestamp),
+            "email": format!("private_owner_{}@example.com", timestamp),
             "password": "secret"
         }))
         .send()
@@ -522,8 +566,8 @@ async fn websocket_private_room_flow() {
     let member = client
         .post(format!("{}/api/v1/auth/register", base_http))
         .json(&json!({
-            "username": "member",
-            "email": "member@private.com",
+            "username": format!("private_member_{}", timestamp),
+            "email": format!("private_member_{}@example.com", timestamp),
             "password": "secret"
         }))
         .send()
@@ -532,23 +576,33 @@ async fn websocket_private_room_flow() {
         .json::<serde_json::Value>()
         .await
         .expect("member json");
-    let member_id = member["id"].as_str().unwrap().parse::<Uuid>().unwrap();
+    let member_id = member["id"]
+        .as_str()
+        .unwrap_or_else(|| {
+            eprintln!("ERROR: Private room member registration failed. Response: {:?}", member);
+            panic!("Member registration failed - no id field in response")
+        })
+        .parse::<Uuid>()
+        .unwrap();
 
     // 登录
     let owner_login = client
         .post(format!("{}/api/v1/auth/login", base_http))
-        .json(&json!({"email": "owner@private.com", "password": "secret"}))
+        .json(&json!({"email": format!("private_owner_{}@example.com", timestamp), "password": "secret"}))
         .send()
         .await
         .expect("login owner")
         .json::<serde_json::Value>()
         .await
         .expect("owner login json");
-    let owner_token = owner_login["token"].as_str().unwrap();
+    let owner_token = owner_login["token"].as_str().unwrap_or_else(|| {
+        eprintln!("ERROR: Private room owner login failed. Response: {:?}", owner_login);
+        panic!("Private room owner login failed - no token field in response")
+    });
 
     let member_login = client
         .post(format!("{}/api/v1/auth/login", base_http))
-        .json(&json!({"email": "member@private.com", "password": "secret"}))
+        .json(&json!({"email": format!("private_member_{}@example.com", timestamp), "password": "secret"}))
         .send()
         .await
         .expect("login member")

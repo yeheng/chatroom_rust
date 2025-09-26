@@ -17,6 +17,7 @@ async fn send_request(app: &axum::Router, request: Request<Body>) -> (StatusCode
         .await
         .expect("body");
     let body = serde_json::from_slice(&body_bytes).unwrap_or(json!({}));
+    println!("{} {}", status, body);
     (status, body)
 }
 

@@ -85,10 +85,32 @@ impl From<ApplicationError> for ApiError {
                 "OPERATION_NOT_ALLOWED",
                 "operation not allowed",
             ),
-            AppErr::Repository(_) | AppErr::Password(_) | AppErr::Broadcast(_) => ApiError::new(
+            AppErr::Repository(repo_err) => match repo_err {
+                domain::RepositoryError::NotFound => ApiError::new(
+                    StatusCode::NOT_FOUND,
+                    "NOT_FOUND",
+                    "requested resource not found",
+                ),
+                domain::RepositoryError::Conflict => ApiError::new(
+                    StatusCode::CONFLICT,
+                    "CONFLICT",
+                    "resource already exists",
+                ),
+                domain::RepositoryError::Storage { message } => ApiError::new(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "DATABASE_ERROR",
+                    format!("database error: {}", message),
+                ),
+            },
+            AppErr::Password(err) => ApiError::new(
                 StatusCode::INTERNAL_SERVER_ERROR,
-                "INTERNAL_ERROR",
-                "internal server error",
+                "PASSWORD_ERROR",
+                format!("password error: {}", err),
+            ),
+            AppErr::Broadcast(err) => ApiError::new(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "BROADCAST_ERROR",
+                format!("broadcast error: {}", err),
             ),
             AppErr::Authentication => ApiError::new(
                 StatusCode::UNAUTHORIZED,

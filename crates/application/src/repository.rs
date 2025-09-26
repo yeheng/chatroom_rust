@@ -9,7 +9,19 @@ use uuid::Uuid;
 
 // 错误处理函数
 fn map_sqlx_err(err: sqlx::Error) -> RepositoryError {
-    RepositoryError::storage(err.to_string())
+    match err {
+        // 记录不存在 → NotFound
+        sqlx::Error::RowNotFound => RepositoryError::NotFound,
+        // 数据库唯一约束违反（如用户名/邮箱重复）→ Conflict
+        sqlx::Error::Database(ref db_err)
+            if db_err.code().map_or(false, |code| {
+                code == "23505" // PostgreSQL 唯一约束违反错误码
+            }) => {
+            RepositoryError::Conflict
+        }
+        // 其他数据库错误 → Storage（包含详细信息）
+        _ => RepositoryError::storage(format!("SQLx error: {}", err)),
+    }
 }
 
 fn invalid_data(message: impl Into<String>) -> RepositoryError {
@@ -118,7 +130,7 @@ struct MessageRecord {
     room_id: Uuid,
     user_id: Uuid,
     content: String,
-    message_type: String,
+    message_type: MessageType, // 直接使用枚举类型
     reply_to_message_id: Option<Uuid>,
     created_at: OffsetDateTime,
     is_deleted: bool,
@@ -130,19 +142,12 @@ impl TryFrom<MessageRecord> for Message {
     fn try_from(value: MessageRecord) -> Result<Self, Self::Error> {
         let content = MessageContent::new(value.content).map_err(|err| invalid_data(err.to_string()))?;
 
-        let message_type = match value.message_type.as_str() {
-            "text" => MessageType::Text,
-            "image" => MessageType::Image,
-            "file" => MessageType::File,
-            _ => return Err(invalid_data(format!("Invalid message type: {}", value.message_type))),
-        };
-
         Ok(Message {
             id: MessageId::from(value.id),
             room_id: RoomId::from(value.room_id),
             sender_id: UserId::from(value.user_id),
             content,
-            message_type,
+            message_type: value.message_type, // 直接使用枚举
             reply_to: value.reply_to_message_id.map(MessageId::from),
             created_at: value.created_at,
             last_revision: None, // 暂时不从数据库读取修订记录
@@ -402,12 +407,6 @@ impl PgMessageRepository {
     }
 
     pub async fn create(&self, message: Message) -> Result<Message, RepositoryError> {
-        let message_type_str = match message.message_type {
-            MessageType::Text => "text",
-            MessageType::Image => "image",
-            MessageType::File => "file",
-        };
-
         let record = sqlx::query_as::<_, MessageRecord>(
             r#"
             INSERT INTO messages (id, room_id, user_id, content, message_type, reply_to_message_id, created_at, is_deleted)
@@ -419,7 +418,7 @@ impl PgMessageRepository {
         .bind(Uuid::from(message.room_id))
         .bind(Uuid::from(message.sender_id))
         .bind(message.content.as_str())
-        .bind(message_type_str)
+        .bind(&message.message_type) // 直接绑定枚举
         .bind(message.reply_to.map(Uuid::from))
         .bind(message.created_at)
         .bind(message.is_deleted)

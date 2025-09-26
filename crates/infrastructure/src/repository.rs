@@ -11,7 +11,19 @@ use time::OffsetDateTime;
 use uuid::Uuid;
 
 fn map_sqlx_err(err: sqlx::Error) -> RepositoryError {
-    RepositoryError::storage(err.to_string())
+    match err {
+        // 记录不存在 → NotFound
+        sqlx::Error::RowNotFound => RepositoryError::NotFound,
+        // 数据库唯一约束违反（如用户名/邮箱重复）→ Conflict
+        sqlx::Error::Database(ref db_err)
+            if db_err.code().map_or(false, |code| {
+                code == "23505" // PostgreSQL 唯一约束违反错误码
+            }) => {
+            RepositoryError::Conflict
+        }
+        // 其他数据库错误 → Storage（包含详细信息）
+        _ => RepositoryError::storage(format!("SQLx error: {}", err)),
+    }
 }
 
 fn invalid_data(message: impl Into<String>) -> RepositoryError {

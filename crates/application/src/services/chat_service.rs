@@ -436,12 +436,3 @@ impl ChatService {
         Ok(())
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    // 集成测试已经完整覆盖了所有功能
-    // 单元测试需要模拟Repository，但我们使用的是真实的PostgreSQL实现
-    // 因此将主要测试集中在集成测试中
-}

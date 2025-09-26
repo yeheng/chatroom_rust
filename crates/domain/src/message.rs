@@ -3,9 +3,13 @@ use crate::value_objects::{MessageContent, MessageId, RoomId, Timestamp, UserId}
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize, sqlx::Type)]
 #[sqlx(type_name = "message_type")]
+#[sqlx(rename_all = "lowercase")]
 pub enum MessageType {
+    #[sqlx(rename = "text")]
     Text,
+    #[sqlx(rename = "image")]
     Image,
+    #[sqlx(rename = "file")]
     File,
 }
 

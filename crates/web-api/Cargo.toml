@@ -6,6 +6,7 @@ edition.workspace = true
 [dependencies]
 domain = { path = "../domain" }
 application = { path = "../application" }
+config = { path = "../config" }
 tokio = { workspace = true }
 axum = { workspace = true }
 tower = { workspace = true }
@@ -35,3 +36,4 @@ reqwest = { workspace = true }
 serde_json = { workspace = true }
 tokio = { workspace = true, features = ["macros", "rt", "rt-multi-thread", "time"] }
 tokio-tungstenite = { workspace = true }
+config = { path = "../config" }

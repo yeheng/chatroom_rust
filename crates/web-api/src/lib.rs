@@ -6,7 +6,9 @@ mod auth;
 mod error;
 mod routes;
 mod state;
+mod ws_connection;
 
-pub use auth::{JwtConfig, JwtService, LoginResponse};
+pub use auth::{JwtService, LoginResponse};
+pub use config::JwtConfig;
 pub use routes::router;
 pub use state::AppState;

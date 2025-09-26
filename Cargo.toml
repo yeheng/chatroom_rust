@@ -2,6 +2,7 @@
 members = [
     "crates/domain",
     "crates/application",
+    "crates/config",
     "crates/web-api",
     "crates/main"
 ]

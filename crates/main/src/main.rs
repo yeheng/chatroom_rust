@@ -8,9 +8,10 @@ use application::{
     BcryptPasswordHasher, LocalMessageBroadcaster, PgChatRoomRepository, PgMessageRepository,
     PgRoomMemberRepository, PgUserRepository, SystemClock,
 };
-use std::{env, sync::Arc};
+use config::AppConfig;
+use std::sync::Arc;
 use tracing_subscriber::EnvFilter;
-use web_api::{router, AppState, JwtConfig, JwtService};
+use web_api::{router, AppState, JwtService};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -19,17 +20,21 @@ async fn main() -> anyhow::Result<()> {
         .with_env_filter(EnvFilter::from_default_env())
         .init();
 
-    // 读取环境变量配置
-    let database_url = env::var("DATABASE_URL")
-        .unwrap_or_else(|_| "postgres://postgres:postgres@127.0.0.1:5432/chatroom".to_string());
+    // 加载统一配置
+    let config = AppConfig::from_env();
+
+    // 验证配置
+    config
+        .validate()
+        .map_err(|e| anyhow::anyhow!("Configuration validation failed: {}", e))?;
 
     tracing::info!(
         "连接数据库: {}",
-        database_url.split('@').last().unwrap_or("unknown")
+        config.database.url.split('@').last().unwrap_or("unknown")
     );
 
     // 直接创建 PostgreSQL 连接池
-    let pg_pool = create_pg_pool(&database_url).await?;
+    let pg_pool = create_pg_pool(&config.database.url).await?;
 
     // 运行迁移
     sqlx::migrate!("../../migrations").run(&pg_pool).await?;
@@ -63,13 +68,7 @@ async fn main() -> anyhow::Result<()> {
     });
 
     // 创建 JWT 服务
-    let jwt_config = JwtConfig {
-        secret: env::var("JWT_SECRET").unwrap_or_else(|_| {
-            "your-256-bit-secret-key-here-please-change-in-production".to_string()
-        }),
-        expiration_hours: 24,
-    };
-    let jwt_service = Arc::new(JwtService::new(jwt_config));
+    let jwt_service = Arc::new(JwtService::new(config.jwt));
 
     // 创建简单的内存在线状态管理器 - 生产环境可以用 Redis
     let presence_manager = Arc::new(application::presence::memory::MemoryPresenceManager::new());
@@ -85,9 +84,15 @@ async fn main() -> anyhow::Result<()> {
 
     // 启动 Web 服务器
     let app = router(state);
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:8080").await?;
+    let listener =
+        tokio::net::TcpListener::bind(format!("{}:{}", config.server.host, config.server.port))
+            .await?;
 
-    tracing::info!("聊天室服务器启动在 http://127.0.0.1:8080");
+    tracing::info!(
+        "聊天室服务器启动在 http://{}:{}",
+        config.server.host,
+        config.server.port
+    );
     axum::serve(listener, app).await?;
 
     Ok(())

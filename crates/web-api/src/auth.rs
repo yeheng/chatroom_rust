@@ -3,27 +3,12 @@
 //! 提供 JWT token 生成、验证
 
 use axum::http::HeaderMap;
+use config::JwtConfig;
 use jsonwebtoken::{decode, encode, DecodingKey, EncodingKey, Header, Validation};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::error::ApiError;
-
-/// JWT Token 配置
-#[derive(Clone)]
-pub struct JwtConfig {
-    pub secret: String,
-    pub expiration_hours: i64,
-}
-
-impl Default for JwtConfig {
-    fn default() -> Self {
-        Self {
-            secret: "your-256-bit-secret".to_string(), // 生产环境应该从环境变量读取
-            expiration_hours: 24,                      // token 24小时过期
-        }
-    }
-}
 
 /// JWT Claims 结构
 #[derive(Debug, Serialize, Deserialize)]

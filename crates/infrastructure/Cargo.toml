@@ -5,6 +5,7 @@ edition.workspace = true
 
 [dependencies]
 application = { path = "../application" }
+config = { path = "../config" }
 domain = { path = "../domain" }
 tokio = { workspace = true }
 async-trait = { workspace = true }

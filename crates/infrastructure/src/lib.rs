@@ -6,7 +6,6 @@ pub mod broadcast;
 pub mod builder;
 pub mod migrations;
 pub mod password;
-pub mod repository;
 
 pub use broadcast::{
     BroadcasterType, LocalMessageBroadcaster, MessageStream, RedisMessageBroadcaster,
@@ -15,7 +14,3 @@ pub use broadcast::{
 pub use builder::{Infrastructure, InfrastructureConfig, InfrastructureError};
 pub use migrations::MIGRATOR;
 pub use password::BcryptPasswordHasher;
-pub use repository::{
-    create_pg_pool, PgChatRoomRepository, PgMessageRepository, PgRoomMemberRepository, PgStorage,
-    PgUserRepository,
-};

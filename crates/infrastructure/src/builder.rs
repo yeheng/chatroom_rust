@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use application::PasswordHasher;
+use config::AppConfig;
 use thiserror::Error;
 
 use crate::{
@@ -10,27 +11,6 @@ use crate::{
     repository::{create_pg_pool, PgStorage},
 };
 
-#[derive(Debug, Clone)]
-pub struct InfrastructureConfig {
-    pub database_url: String,
-    pub max_connections: u32,
-    pub bcrypt_cost: Option<u32>,
-    pub broadcast_capacity: usize,
-    pub redis_url: Option<String>, // Redis 配置，None 表示使用本地广播器
-}
-
-impl Default for InfrastructureConfig {
-    fn default() -> Self {
-        Self {
-            database_url: "postgres://postgres:postgres@127.0.0.1:5432/postgres".to_string(),
-            max_connections: 5,
-            bcrypt_cost: None,
-            broadcast_capacity: 256,
-            redis_url: None, // 默认使用本地广播器
-        }
-    }
-}
-
 #[derive(Debug, Error)]
 pub enum InfrastructureError {
     #[error("database error: {0}")]
@@ -39,6 +19,8 @@ pub enum InfrastructureError {
     Migration(#[from] sqlx::migrate::MigrateError),
     #[error("redis error: {0}")]
     Redis(#[from] redis::RedisError),
+    #[error("configuration error: {0}")]
+    Config(String),
 }
 
 use crate::broadcast::BroadcasterType;
@@ -51,21 +33,22 @@ pub struct Infrastructure {
 }
 
 impl Infrastructure {
-    pub async fn connect(config: InfrastructureConfig) -> Result<Self, InfrastructureError> {
-        let pool = create_pg_pool(&config.database_url, config.max_connections).await?;
+    pub async fn connect(config: &AppConfig) -> Result<Self, InfrastructureError> {
+        let pool = create_pg_pool(&config.database.url, config.database.max_connections).await?;
         MIGRATOR.run(&pool).await?;
 
         let storage = Arc::new(PgStorage::new(pool));
-        let password_hasher = Arc::new(BcryptPasswordHasher::new(config.bcrypt_cost));
+        let password_hasher = Arc::new(BcryptPasswordHasher::new(config.server.bcrypt_cost));
 
         // 根据配置选择广播器类型
-        let broadcaster = match config.redis_url {
+        let broadcaster = match &config.broadcast.redis_url {
             Some(redis_url) => {
-                let client = redis::Client::open(redis_url)?;
+                let client = redis::Client::open(redis_url.clone())
+                    .map_err(|e| InfrastructureError::Redis(e))?;
                 BroadcasterType::Redis(Arc::new(RedisMessageBroadcaster::new(client)))
             }
             None => BroadcasterType::Local(Arc::new(LocalMessageBroadcaster::new(
-                config.broadcast_capacity,
+                config.broadcast.capacity,
             ))),
         };
 

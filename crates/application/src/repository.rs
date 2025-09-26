@@ -1,7 +1,6 @@
 use domain::{
-    ChatRoom, ChatRoomVisibility, Message, MessageContent, MessageId,
-    MessageType, RepositoryError, RoomId, RoomMember, RoomRole, User, UserEmail, UserId,
-    UserStatus,
+    ChatRoom, ChatRoomVisibility, Message, MessageContent, MessageId, MessageType, RepositoryError,
+    RoomId, RoomMember, RoomRole, User, UserEmail, UserId, UserStatus,
 };
 use sqlx::{postgres::PgPoolOptions, FromRow, PgPool};
 use time::OffsetDateTime;
@@ -14,9 +13,10 @@ fn map_sqlx_err(err: sqlx::Error) -> RepositoryError {
         sqlx::Error::RowNotFound => RepositoryError::NotFound,
         // 数据库唯一约束违反（如用户名/邮箱重复）→ Conflict
         sqlx::Error::Database(ref db_err)
-            if db_err.code().map_or(false, |code| {
+            if db_err.code().is_some_and(|code| {
                 code == "23505" // PostgreSQL 唯一约束违反错误码
-            }) => {
+            }) =>
+        {
             RepositoryError::Conflict
         }
         // 其他数据库错误 → Storage（包含详细信息）
@@ -140,7 +140,8 @@ impl TryFrom<MessageRecord> for Message {
     type Error = RepositoryError;
 
     fn try_from(value: MessageRecord) -> Result<Self, Self::Error> {
-        let content = MessageContent::new(value.content).map_err(|err| invalid_data(err.to_string()))?;
+        let content =
+            MessageContent::new(value.content).map_err(|err| invalid_data(err.to_string()))?;
 
         Ok(Message {
             id: MessageId::from(value.id),
@@ -359,7 +360,11 @@ impl PgRoomMemberRepository {
         Ok(RoomMember::from(record))
     }
 
-    pub async fn find(&self, room_id: RoomId, user_id: UserId) -> Result<Option<RoomMember>, RepositoryError> {
+    pub async fn find(
+        &self,
+        room_id: RoomId,
+        user_id: UserId,
+    ) -> Result<Option<RoomMember>, RepositoryError> {
         let record = sqlx::query_as::<_, MemberRecord>(
             r#"SELECT room_id, user_id, role, joined_at, last_read_message_id FROM room_members WHERE room_id = $1 AND user_id = $2"#,
         )

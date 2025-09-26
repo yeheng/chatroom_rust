@@ -284,10 +284,8 @@ async fn websocket_handler(socket: WebSocket, state: AppState, user_id: Uuid, ro
     }
 
     // 创建消息流 - 直接订阅广播器
-    let mut message_stream = application::MessageStream::new(
-        state.broadcaster.subscribe(),
-        room_id_domain,
-    );
+    let mut message_stream =
+        application::MessageStream::new(state.broadcaster.subscribe(), room_id_domain);
 
     // 清空任何旧消息，只接收连接后发送的新消息
     let mut cleared_count = 0;
@@ -376,7 +374,11 @@ async fn websocket_handler(socket: WebSocket, state: AppState, user_id: Uuid, ro
                     WsMessage::Ping(data) => {
                         // 现在可以正确发送pong了！
                         tracing::debug!(user_id = %user_id, "收到ping消息，发送pong回应");
-                        if cmd_tx.send(WsCommand::SendPong(data.to_vec())).await.is_err() {
+                        if cmd_tx
+                            .send(WsCommand::SendPong(data.to_vec()))
+                            .await
+                            .is_err()
+                        {
                             tracing::warn!(user_id = %user_id, "Failed to send pong command");
                             break;
                         }

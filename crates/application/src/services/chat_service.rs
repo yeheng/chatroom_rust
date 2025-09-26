@@ -1,9 +1,8 @@
 use std::sync::Arc;
 
 use domain::{
-    self, ChatRoom, ChatRoomVisibility, DomainError, Message, MessageContent,
-    MessageId, MessageType, RoomId, RoomMember, RoomRole,
-    UserId,
+    self, ChatRoom, ChatRoomVisibility, DomainError, Message, MessageContent, MessageId,
+    MessageType, RoomId, RoomMember, RoomRole, UserId,
 };
 use uuid::Uuid;
 

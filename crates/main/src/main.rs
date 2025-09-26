@@ -3,10 +3,10 @@
 //! 启动 Axum Web API 服务。
 
 use application::{
-    BcryptPasswordHasher, LocalMessageBroadcaster, SystemClock,
     create_pg_pool,
-    PgChatRoomRepository, PgMessageRepository, PgRoomMemberRepository, PgUserRepository,
     services::{ChatService, ChatServiceDependencies, UserService, UserServiceDependencies},
+    BcryptPasswordHasher, LocalMessageBroadcaster, PgChatRoomRepository, PgMessageRepository,
+    PgRoomMemberRepository, PgUserRepository, SystemClock,
 };
 use std::{env, sync::Arc};
 use tracing_subscriber::EnvFilter;
@@ -23,7 +23,10 @@ async fn main() -> anyhow::Result<()> {
     let database_url = env::var("DATABASE_URL")
         .unwrap_or_else(|_| "postgres://postgres:postgres@127.0.0.1:5432/chatroom".to_string());
 
-    tracing::info!("连接数据库: {}", database_url.split('@').last().unwrap_or("unknown"));
+    tracing::info!(
+        "连接数据库: {}",
+        database_url.split('@').last().unwrap_or("unknown")
+    );
 
     // 直接创建 PostgreSQL 连接池
     let pg_pool = create_pg_pool(&database_url).await?;
@@ -38,7 +41,8 @@ async fn main() -> anyhow::Result<()> {
     let message_repository = PgMessageRepository::new(pg_pool);
 
     // 创建其他服务
-    let password_hasher: Arc<dyn application::PasswordHasher> = Arc::new(BcryptPasswordHasher::default());
+    let password_hasher: Arc<dyn application::PasswordHasher> =
+        Arc::new(BcryptPasswordHasher::default());
     let clock: Arc<dyn application::Clock> = Arc::new(SystemClock::default());
     let broadcaster = Arc::new(LocalMessageBroadcaster::new());
 

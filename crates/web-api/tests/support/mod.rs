@@ -1,19 +1,21 @@
 use std::{env, sync::Arc};
 
 use application::{
-    BcryptPasswordHasher, LocalMessageBroadcaster, SystemClock,
     create_pg_pool,
-    services::{ChatService, ChatServiceDependencies, UserService, UserServiceDependencies},
-    PgChatRoomRepository, PgMessageRepository, PgRoomMemberRepository, PgUserRepository,
     presence::memory::MemoryPresenceManager,
+    services::{ChatService, ChatServiceDependencies, UserService, UserServiceDependencies},
+    BcryptPasswordHasher, LocalMessageBroadcaster, PgChatRoomRepository, PgMessageRepository,
+    PgRoomMemberRepository, PgUserRepository, SystemClock,
 };
-use sqlx::PgPool;
 use axum::Router;
+use sqlx::PgPool;
 
 // 清理数据库中的所有数据，为测试提供干净的环境
 async fn cleanup_database(pool: &PgPool) -> Result<(), sqlx::Error> {
     // 按照外键依赖关系的反序删除数据
-    sqlx::query("DELETE FROM room_members").execute(pool).await?;
+    sqlx::query("DELETE FROM room_members")
+        .execute(pool)
+        .await?;
     sqlx::query("DELETE FROM messages").execute(pool).await?;
     sqlx::query("DELETE FROM chat_rooms").execute(pool).await?;
     sqlx::query("DELETE FROM users").execute(pool).await?;
@@ -30,10 +32,14 @@ pub async fn build_router() -> Router {
     let database_url = env::var("DATABASE_URL")
         .unwrap_or_else(|_| "postgres://postgres:123456@127.0.0.1:5432/chatroom".to_string());
 
-    let pg_pool = create_pg_pool(&database_url).await.expect("Failed to create database pool");
+    let pg_pool = create_pg_pool(&database_url)
+        .await
+        .expect("Failed to create database pool");
 
     // 清理数据库表中的所有数据
-    cleanup_database(&pg_pool).await.expect("Failed to cleanup database");
+    cleanup_database(&pg_pool)
+        .await
+        .expect("Failed to cleanup database");
 
     // 运行迁移确保表结构正确
     // 注意：如果类型已存在，这个会失败，但我们可以忽略
@@ -46,7 +52,8 @@ pub async fn build_router() -> Router {
     let message_repository = PgMessageRepository::new(pg_pool);
 
     // 创建服务
-    let password_hasher: Arc<dyn application::PasswordHasher> = Arc::new(BcryptPasswordHasher::default());
+    let password_hasher: Arc<dyn application::PasswordHasher> =
+        Arc::new(BcryptPasswordHasher::default());
     let clock: Arc<dyn application::Clock> = Arc::new(SystemClock::default());
     let broadcaster = Arc::new(LocalMessageBroadcaster::new());
 
@@ -70,7 +77,8 @@ pub async fn build_router() -> Router {
         expiration_hours: 24,
     }));
 
-    let presence_manager: Arc<dyn application::PresenceManager> = Arc::new(TestPresenceManager::default());
+    let presence_manager: Arc<dyn application::PresenceManager> =
+        Arc::new(TestPresenceManager::default());
 
     let state = AppState::new(
         Arc::new(user_service),

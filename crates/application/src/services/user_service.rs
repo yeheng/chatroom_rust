@@ -4,10 +4,7 @@ use domain::{User, UserEmail, UserId, UserStatus, Username};
 use uuid::Uuid;
 
 use crate::{
-    clock::Clock,
-    error::ApplicationError,
-    password::PasswordHasher,
-    repository::PgUserRepository,
+    clock::Clock, error::ApplicationError, password::PasswordHasher, repository::PgUserRepository,
 };
 
 #[derive(Debug, Clone)]

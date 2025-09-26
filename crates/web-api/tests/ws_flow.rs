@@ -183,7 +183,7 @@ async fn websocket_ping_pong_flow() {
     let client = Client::new();
 
     // 注册用户并获取token
-    let user = client
+    let _user = client
         .post(format!("{}/api/v1/auth/register", base_http))
         .json(&json!({
             "username": "testuser",
@@ -241,15 +241,13 @@ async fn websocket_ping_pong_flow() {
     let timeout = tokio::time::timeout(Duration::from_secs(5), ws.next()).await;
 
     match timeout {
-        Ok(Some(Ok(msg))) => {
-            match msg {
-                TungsteniteMessage::Pong(data) => {
-                    assert_eq!(data.as_ref(), ping_data, "Pong data should match ping data");
-                    println!("✅ Ping/Pong test passed: received correct pong response");
-                }
-                other => panic!("Expected Pong message, got: {:?}", other),
+        Ok(Some(Ok(msg))) => match msg {
+            TungsteniteMessage::Pong(data) => {
+                assert_eq!(data.as_ref(), ping_data, "Pong data should match ping data");
+                println!("✅ Ping/Pong test passed: received correct pong response");
             }
-        }
+            other => panic!("Expected Pong message, got: {:?}", other),
+        },
         Ok(Some(Err(e))) => panic!("WebSocket error: {:?}", e),
         Ok(None) => panic!("WebSocket closed unexpectedly"),
         Err(_) => panic!("Timeout waiting for pong response"),
@@ -280,7 +278,7 @@ async fn websocket_multiple_users_broadcast() {
     let client = Client::new();
 
     // 注册三个用户
-    let owner = client
+    let _owner = client
         .post(format!("{}/api/v1/auth/register", base_http))
         .json(&json!({
             "username": "owner",
@@ -463,7 +461,8 @@ async fn websocket_multiple_users_broadcast() {
                 let msg2 = ws1.next().await.expect("ws1 message2").expect("ws1 text2");
                 match msg2 {
                     TungsteniteMessage::Text(payload2) => {
-                        let json2: serde_json::Value = serde_json::from_str(&payload2).expect("json2");
+                        let json2: serde_json::Value =
+                            serde_json::from_str(&payload2).expect("json2");
                         assert_eq!(json2["content"], "Hello from user2");
                         assert_eq!(json2["sender_id"], user2_id.to_string());
                     }
@@ -508,16 +507,19 @@ async fn websocket_authentication_failure() {
     );
 
     let result = connect_async(ws_url).await;
-    assert!(result.is_err(), "WebSocket connection should fail with invalid token");
-
-    // 尝试连接不带token的WebSocket
-    let ws_url_no_token = format!(
-        "ws://{}/api/v1/ws?room_id={}",
-        addr, room_id
+    assert!(
+        result.is_err(),
+        "WebSocket connection should fail with invalid token"
     );
 
+    // 尝试连接不带token的WebSocket
+    let ws_url_no_token = format!("ws://{}/api/v1/ws?room_id={}", addr, room_id);
+
     let result = connect_async(ws_url_no_token).await;
-    assert!(result.is_err(), "WebSocket connection should fail without token");
+    assert!(
+        result.is_err(),
+        "WebSocket connection should fail without token"
+    );
 
     let _ = shutdown_tx.send(());
 }
@@ -549,7 +551,7 @@ async fn websocket_private_room_flow() {
         .unwrap()
         .as_millis();
 
-    let owner = client
+    let _owner = client
         .post(format!("{}/api/v1/auth/register", base_http))
         .json(&json!({
             "username": format!("private_owner_{}", timestamp),
@@ -579,7 +581,10 @@ async fn websocket_private_room_flow() {
     let member_id = member["id"]
         .as_str()
         .unwrap_or_else(|| {
-            eprintln!("ERROR: Private room member registration failed. Response: {:?}", member);
+            eprintln!(
+                "ERROR: Private room member registration failed. Response: {:?}",
+                member
+            );
             panic!("Member registration failed - no id field in response")
         })
         .parse::<Uuid>()
@@ -596,7 +601,10 @@ async fn websocket_private_room_flow() {
         .await
         .expect("owner login json");
     let owner_token = owner_login["token"].as_str().unwrap_or_else(|| {
-        eprintln!("ERROR: Private room owner login failed. Response: {:?}", owner_login);
+        eprintln!(
+            "ERROR: Private room owner login failed. Response: {:?}",
+            owner_login
+        );
         panic!("Private room owner login failed - no token field in response")
     });
 
@@ -645,7 +653,9 @@ async fn websocket_private_room_flow() {
         "ws://{}/api/v1/ws?room_id={}&token={}",
         addr, room_id, member_token
     );
-    let (mut ws, _) = connect_async(ws_url).await.expect("ws connect to private room");
+    let (mut ws, _) = connect_async(ws_url)
+        .await
+        .expect("ws connect to private room");
 
     // 发送消息
     client
@@ -694,7 +704,7 @@ async fn websocket_message_history_flow() {
     let client = Client::new();
 
     // 注册用户
-    let user = client
+    let _user = client
         .post(format!("{}/api/v1/auth/register", base_http))
         .json(&json!({
             "username": "historyuser",
@@ -759,10 +769,8 @@ async fn websocket_message_history_flow() {
         .expect("get history");
 
     assert_eq!(history_response.status(), 200);
-    let history: Vec<serde_json::Value> = history_response
-        .json()
-        .await
-        .expect("parse history json");
+    let history: Vec<serde_json::Value> =
+        history_response.json().await.expect("parse history json");
 
     // 验证历史消息
     assert_eq!(history.len(), 5);

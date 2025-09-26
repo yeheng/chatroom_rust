@@ -20,5 +20,8 @@ pub use error::ApplicationError;
 pub use local_broadcast::{LocalMessageBroadcaster, MessageStream};
 pub use password::{PasswordHasher, PasswordHasherError};
 pub use presence::{PresenceManager, RedisPresenceManager};
-pub use repository::{PgChatRoomRepository, PgMessageRepository, PgRoomMemberRepository, PgUserRepository, create_pg_pool};
+pub use repository::{
+    create_pg_pool, PgChatRoomRepository, PgMessageRepository, PgRoomMemberRepository,
+    PgUserRepository,
+};
 pub use services::{ChatService, ChatServiceDependencies, UserService, UserServiceDependencies};

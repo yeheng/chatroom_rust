@@ -91,11 +91,9 @@ impl From<ApplicationError> for ApiError {
                     "NOT_FOUND",
                     "requested resource not found",
                 ),
-                domain::RepositoryError::Conflict => ApiError::new(
-                    StatusCode::CONFLICT,
-                    "CONFLICT",
-                    "resource already exists",
-                ),
+                domain::RepositoryError::Conflict => {
+                    ApiError::new(StatusCode::CONFLICT, "CONFLICT", "resource already exists")
+                }
                 domain::RepositoryError::Storage { message } => ApiError::new(
                     StatusCode::INTERNAL_SERVER_ERROR,
                     "DATABASE_ERROR",

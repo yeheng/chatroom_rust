@@ -13,3 +13,5 @@ thiserror = { workspace = true }
 redis = { workspace = true, features = ["aio", "tokio-comp"] }
 tokio = { workspace = true }
 tracing = { workspace = true }
+sqlx = { workspace = true }
+bcrypt = { workspace = true }

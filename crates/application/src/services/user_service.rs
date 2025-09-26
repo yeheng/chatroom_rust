@@ -1,9 +1,14 @@
 use std::sync::Arc;
 
-use domain::{User, UserEmail, UserId, UserRepository, UserStatus, Username};
+use domain::{User, UserEmail, UserId, UserStatus, Username};
 use uuid::Uuid;
 
-use crate::{clock::Clock, error::ApplicationError, password::PasswordHasher};
+use crate::{
+    clock::Clock,
+    error::ApplicationError,
+    password::PasswordHasher,
+    repository::PgUserRepository,
+};
 
 #[derive(Debug, Clone)]
 pub struct RegisterUserRequest {
@@ -19,7 +24,7 @@ pub struct AuthenticateUserRequest {
 }
 
 pub struct UserServiceDependencies {
-    pub user_repository: Arc<dyn UserRepository>,
+    pub user_repository: PgUserRepository,
     pub password_hasher: Arc<dyn PasswordHasher>,
     pub clock: Arc<dyn Clock>,
 }

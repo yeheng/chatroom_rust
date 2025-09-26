@@ -22,7 +22,7 @@ async fn send_request(app: &axum::Router, request: Request<Body>) -> (StatusCode
 
 #[tokio::test]
 async fn user_to_message_flow() {
-    let app = build_router();
+    let app = build_router().await;
 
     let (status, _owner_body) = send_request(
         &app,

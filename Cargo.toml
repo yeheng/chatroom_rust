@@ -1,8 +1,7 @@
 [workspace]
 members = [
     "crates/domain",
-    "crates/application", 
-    "crates/infrastructure",
+    "crates/application",
     "crates/web-api",
     "crates/main"
 ]

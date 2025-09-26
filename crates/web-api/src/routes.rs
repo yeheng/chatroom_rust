@@ -283,44 +283,70 @@ async fn websocket_handler(socket: WebSocket, state: AppState, user_id: Uuid, ro
         return;
     }
 
-    // 创建消息流
-    let mut message_stream = match state
-        .broadcaster
-        .create_message_stream(room_id_domain)
-        .await
-    {
-        Ok(stream) => stream,
-        Err(err) => {
-            tracing::error!(error = %err, "Failed to create message stream");
-            // 连接失败时也要清理在线状态
-            let _ = state
-                .presence_manager
-                .user_disconnected(room_id_domain, user_id_domain)
-                .await;
-            return;
-        }
-    };
+    // 创建消息流 - 直接订阅广播器
+    let mut message_stream = application::MessageStream::new(
+        state.broadcaster.subscribe(),
+        room_id_domain,
+    );
 
     let (mut sender, mut incoming) = socket.split();
+
+    // 创建 mpsc channel 来解耦对 sender 的访问
+    let (cmd_tx, mut cmd_rx) = tokio::sync::mpsc::channel::<WsCommand>(32);
+
+    // 定义 WebSocket 写操作的命令
+    #[derive(Debug)]
+    enum WsCommand {
+        SendText(String),
+        SendPong(Vec<u8>),
+    }
 
     // 创建一个通道用于协调任务
     let (disconnect_tx, mut disconnect_rx) = tokio::sync::oneshot::channel::<()>();
 
-    // 发送任务：将广播消息发送给WebSocket客户端
+    // 发送任务：统一处理所有对 WebSocket sender 的写操作
     let send_task = {
         let _presence_manager = state.presence_manager.clone();
+        let cmd_tx_for_broadcast = cmd_tx.clone();
         tokio::spawn(async move {
-            while let Some(broadcast) = message_stream.recv().await {
-                let payload = match serde_json::to_string(&broadcast.message) {
-                    Ok(json) => json,
-                    Err(err) => {
-                        tracing::warn!(error = %err, "failed to serialize websocket payload");
-                        continue;
+            loop {
+                tokio::select! {
+                    // 处理来自 mpsc channel 的写命令
+                    Some(cmd) = cmd_rx.recv() => {
+                        match cmd {
+                            WsCommand::SendText(text) => {
+                                if sender.send(WsMessage::Text(text.into())).await.is_err() {
+                                    tracing::warn!(user_id = %user_id, "Failed to send text message");
+                                    break;
+                                }
+                            }
+                            WsCommand::SendPong(data) => {
+                                if sender.send(WsMessage::Pong(data.into())).await.is_err() {
+                                    tracing::warn!(user_id = %user_id, "Failed to send pong message");
+                                    break;
+                                }
+                            }
+                        }
                     }
-                };
-                if sender.send(WsMessage::Text(payload.into())).await.is_err() {
-                    // 发送失败，连接已断开
-                    break;
+                    // 处理来自消息流的广播消息
+                    Some(broadcast) = message_stream.recv() => {
+                        let payload = match serde_json::to_string(&broadcast.message) {
+                            Ok(json) => json,
+                            Err(err) => {
+                                tracing::warn!(error = %err, "failed to serialize websocket payload");
+                                continue;
+                            }
+                        };
+                        if cmd_tx_for_broadcast.send(WsCommand::SendText(payload)).await.is_err() {
+                            tracing::warn!(user_id = %user_id, "Failed to send broadcast message to command channel");
+                            break;
+                        }
+                    }
+                    // 检查是否收到断开连接的信号
+                    _ = &mut disconnect_rx => {
+                        tracing::info!(user_id = %user_id, "Received disconnect signal");
+                        break;
+                    }
                 }
             }
             tracing::info!(user_id = %user_id, "WebSocket发送任务结束");
@@ -340,10 +366,13 @@ async fn websocket_handler(socket: WebSocket, state: AppState, user_id: Uuid, ro
                         }
                         break;
                     }
-                    WsMessage::Ping(_data) => {
-                        // 回应ping消息
-                        // 注意：这里无法发送pong，因为sender已经移动到发送任务中
-                        tracing::debug!(user_id = %user_id, "收到ping消息");
+                    WsMessage::Ping(data) => {
+                        // 现在可以正确发送pong了！
+                        tracing::debug!(user_id = %user_id, "收到ping消息，发送pong回应");
+                        if cmd_tx.send(WsCommand::SendPong(data.to_vec())).await.is_err() {
+                            tracing::warn!(user_id = %user_id, "Failed to send pong command");
+                            break;
+                        }
                     }
                     WsMessage::Pong(_) => {
                         tracing::debug!(user_id = %user_id, "收到pong消息");
@@ -365,9 +394,6 @@ async fn websocket_handler(socket: WebSocket, state: AppState, user_id: Uuid, ro
         }
         _ = recv_task => {
             tracing::info!(user_id = %user_id, "WebSocket接收任务完成");
-        }
-        _ = &mut disconnect_rx => {
-            tracing::info!(user_id = %user_id, "WebSocket主动断开");
         }
     }
 

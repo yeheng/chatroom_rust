@@ -12,7 +12,7 @@ use support::build_router;
 
 #[tokio::test]
 async fn presence_management_flow() {
-    let router = build_router();
+    let router = build_router().await;
     let listener = TcpListener::bind("127.0.0.1:0").await.expect("bind");
     let addr = listener.local_addr().expect("addr");
     let (shutdown_tx, shutdown_rx) = oneshot::channel::<()>();

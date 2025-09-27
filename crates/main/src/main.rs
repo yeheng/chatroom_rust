@@ -2,13 +2,19 @@
 //!
 //! 启动 Axum Web API 服务。
 
+use application::repository::{
+    ChatRoomRepository, MessageRepository, RoomMemberRepository, UserRepository,
+};
 use application::{
-    create_pg_pool,
     services::{ChatService, ChatServiceDependencies, UserService, UserServiceDependencies},
-    BcryptPasswordHasher, LocalMessageBroadcaster, PgChatRoomRepository, PgMessageRepository,
-    PgRoomMemberRepository, PgUserRepository, SystemClock,
+    Clock, MessageBroadcaster, PasswordHasher, SystemClock,
 };
 use config::AppConfig;
+use infrastructure::{
+    create_pg_pool, BcryptPasswordHasher, LocalMessageBroadcaster, PgChatRoomRepository,
+    PgMessageRepository, PgRoomMemberRepository, PgUserRepository, RedisMessageBroadcaster,
+};
+use redis::Client as RedisClient;
 use std::sync::Arc;
 use tracing_subscriber::EnvFilter;
 use web_api::{router, AppState, JwtService};
@@ -34,28 +40,40 @@ async fn main() -> anyhow::Result<()> {
     );
 
     // 直接创建 PostgreSQL 连接池
-    let pg_pool = create_pg_pool(&config.database.url).await?;
+    let pg_pool = create_pg_pool(&config.database.url, config.database.max_connections).await?;
 
     // 运行迁移
     sqlx::migrate!("../../migrations").run(&pg_pool).await?;
 
-    // 创建具体的 repository 实例 - 不需要 Arc 包装
-    let user_repository = PgUserRepository::new(pg_pool.clone());
-    let room_repository = PgChatRoomRepository::new(pg_pool.clone());
-    let member_repository = PgRoomMemberRepository::new(pg_pool.clone());
-    let message_repository = PgMessageRepository::new(pg_pool);
+    // 创建具体的 repository 实例
+    let user_repository: Arc<dyn UserRepository> = Arc::new(PgUserRepository::new(pg_pool.clone()));
+    let room_repository: Arc<dyn ChatRoomRepository> =
+        Arc::new(PgChatRoomRepository::new(pg_pool.clone()));
+    let member_repository: Arc<dyn RoomMemberRepository> =
+        Arc::new(PgRoomMemberRepository::new(pg_pool.clone()));
+    let message_repository: Arc<dyn MessageRepository> =
+        Arc::new(PgMessageRepository::new(pg_pool));
 
     // 创建其他服务
-    let password_hasher: Arc<dyn application::PasswordHasher> =
-        Arc::new(BcryptPasswordHasher::default());
-    let clock: Arc<dyn application::Clock> = Arc::new(SystemClock::default());
-    let broadcaster = Arc::new(LocalMessageBroadcaster::new());
+    let password_hasher: Arc<dyn PasswordHasher> = Arc::new(BcryptPasswordHasher::default());
+    let clock: Arc<dyn Clock> = Arc::new(SystemClock::default());
+    let broadcaster: Arc<dyn MessageBroadcaster> =
+        if let Some(redis_url) = &config.broadcast.redis_url {
+            let client = RedisClient::open(redis_url.clone())?;
+            Arc::new(RedisMessageBroadcaster::new(client))
+        } else {
+            Arc::new(LocalMessageBroadcaster::new(config.broadcast.capacity))
+        };
 
     // 创建应用层服务
+    let presence_manager: Arc<dyn application::PresenceManager> =
+        Arc::new(application::presence::memory::MemoryPresenceManager::new());
+
     let user_service = UserService::new(UserServiceDependencies {
         user_repository,
         password_hasher: password_hasher.clone(),
         clock: clock.clone(),
+        presence_manager: presence_manager.clone(),
     });
 
     let chat_service = ChatService::new(ChatServiceDependencies {
@@ -64,14 +82,11 @@ async fn main() -> anyhow::Result<()> {
         message_repository,
         password_hasher,
         clock,
-        broadcaster: broadcaster.clone() as Arc<dyn application::MessageBroadcaster>,
+        broadcaster: broadcaster.clone(),
     });
 
     // 创建 JWT 服务
     let jwt_service = Arc::new(JwtService::new(config.jwt));
-
-    // 创建简单的内存在线状态管理器 - 生产环境可以用 Redis
-    let presence_manager = Arc::new(application::presence::memory::MemoryPresenceManager::new());
 
     // 创建应用状态
     let state = AppState::new(

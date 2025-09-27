@@ -6,6 +6,7 @@ edition.workspace = true
 [dependencies]
 domain = { path = "../domain" }
 application = { path = "../application" }
+infrastructure = { path = "../infrastructure" }
 config = { path = "../config" }
 tokio = { workspace = true }
 axum = { workspace = true }

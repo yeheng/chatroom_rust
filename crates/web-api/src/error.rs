@@ -94,7 +94,7 @@ impl From<ApplicationError> for ApiError {
                 domain::RepositoryError::Conflict => {
                     ApiError::new(StatusCode::CONFLICT, "CONFLICT", "resource already exists")
                 }
-                domain::RepositoryError::Storage { message } => ApiError::new(
+                domain::RepositoryError::Storage { message, .. } => ApiError::new(
                     StatusCode::INTERNAL_SERVER_ERROR,
                     "DATABASE_ERROR",
                     format!("database error: {}", message),
@@ -120,10 +120,10 @@ impl From<ApplicationError> for ApiError {
                 "AUTHORIZATION_FAILED",
                 "authorization failed",
             ),
-            AppErr::Infrastructure(msg) => ApiError::new(
+            AppErr::Infrastructure { message, .. } => ApiError::new(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "INFRASTRUCTURE_ERROR",
-                msg,
+                message,
             ),
         }
     }

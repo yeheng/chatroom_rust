@@ -4,7 +4,8 @@ use domain::{User, UserEmail, UserId, UserStatus, Username};
 use uuid::Uuid;
 
 use crate::{
-    clock::Clock, error::ApplicationError, password::PasswordHasher, repository::PgUserRepository,
+    clock::Clock, error::ApplicationError, password::PasswordHasher, presence::PresenceManager,
+    repository::UserRepository,
 };
 
 #[derive(Debug, Clone)]
@@ -21,9 +22,10 @@ pub struct AuthenticateUserRequest {
 }
 
 pub struct UserServiceDependencies {
-    pub user_repository: PgUserRepository,
+    pub user_repository: Arc<dyn UserRepository>,
     pub password_hasher: Arc<dyn PasswordHasher>,
     pub clock: Arc<dyn Clock>,
+    pub presence_manager: Arc<dyn PresenceManager>,
 }
 
 pub struct UserService {
@@ -93,5 +95,13 @@ impl UserService {
         }
 
         Ok(user)
+    }
+
+    pub async fn logout(&self, user_id: Uuid) -> Result<(), ApplicationError> {
+        let user_id = UserId::from(user_id);
+        self.deps
+            .presence_manager
+            .cleanup_user_presence(user_id)
+            .await
     }
 }

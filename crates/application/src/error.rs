@@ -1,3 +1,5 @@
+use std::error::Error as StdError;
+
 use domain::{DomainError, RepositoryError};
 use thiserror::Error;
 
@@ -13,8 +15,12 @@ pub enum ApplicationError {
     Password(#[from] PasswordHasherError),
     #[error("broadcast error: {0}")]
     Broadcast(#[from] crate::broadcaster::BroadcastError),
-    #[error("infrastructure error: {0}")]
-    Infrastructure(String), // 新增：基础设施错误
+    #[error("infrastructure error: {message}")]
+    Infrastructure {
+        message: String,
+        #[source]
+        source: Option<Box<dyn StdError + Send + Sync>>,
+    },
     #[error("authentication failed")]
     Authentication,
     #[error("authorization failed")]
@@ -23,8 +29,21 @@ pub enum ApplicationError {
 
 impl ApplicationError {
     /// 创建基础设施错误
-    pub fn infrastructure(message: String) -> Self {
-        ApplicationError::Infrastructure(message)
+    pub fn infrastructure(message: impl Into<String>) -> Self {
+        ApplicationError::Infrastructure {
+            message: message.into(),
+            source: None,
+        }
+    }
+
+    pub fn infrastructure_with_source(
+        message: impl Into<String>,
+        source: impl StdError + Send + Sync + 'static,
+    ) -> Self {
+        ApplicationError::Infrastructure {
+            message: message.into(),
+            source: Some(Box::new(source)),
+        }
     }
 }
 

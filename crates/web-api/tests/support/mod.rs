@@ -1,14 +1,17 @@
 use std::{env, sync::Arc};
 
 use application::{
-    create_pg_pool,
     presence::memory::MemoryPresenceManager,
+    repository::{ChatRoomRepository, MessageRepository, RoomMemberRepository, UserRepository},
     services::{ChatService, ChatServiceDependencies, UserService, UserServiceDependencies},
-    BcryptPasswordHasher, LocalMessageBroadcaster, PasswordHasher, PgChatRoomRepository,
-    PgMessageRepository, PgRoomMemberRepository, PgUserRepository, SystemClock,
+    Clock, MessageBroadcaster, PasswordHasher, SystemClock,
 };
 use axum::Router;
 use config::AppConfig;
+use infrastructure::{
+    create_pg_pool, BcryptPasswordHasher, LocalMessageBroadcaster, PgChatRoomRepository,
+    PgMessageRepository, PgRoomMemberRepository, PgUserRepository,
+};
 use sqlx::PgPool;
 use web_api::{router as build_router_fn, AppState, JwtService};
 
@@ -44,6 +47,8 @@ pub struct TestAppState {
     pub router: Router,
     pub _pool: PgPool,
     pub _config: TestConfig,
+    #[allow(dead_code)]
+    pub presence_manager: Arc<TestPresenceManager>,
 }
 
 /// 清理数据库中的所有数据，为测试提供干净的环境
@@ -59,8 +64,8 @@ async fn cleanup_database(pool: &PgPool) -> Result<(), sqlx::Error> {
 }
 
 /// 创建测试用的数据库连接池
-async fn create_test_pool(database_url: &str) -> PgPool {
-    create_pg_pool(database_url)
+async fn create_test_pool(database_url: &str, max_connections: u32) -> PgPool {
+    create_pg_pool(database_url, max_connections)
         .await
         .expect("Failed to create database pool for testing")
 }
@@ -69,28 +74,34 @@ async fn create_test_pool(database_url: &str) -> PgPool {
 fn create_services(
     pool: &PgPool,
     config: &AppConfig,
+    presence_manager: Arc<dyn application::PresenceManager>,
 ) -> (
     Arc<UserService>,
     Arc<ChatService>,
-    Arc<LocalMessageBroadcaster>,
+    Arc<dyn MessageBroadcaster>,
 ) {
     // 创建 repositories
-    let user_repository = PgUserRepository::new(pool.clone());
-    let room_repository = PgChatRoomRepository::new(pool.clone());
-    let member_repository = PgRoomMemberRepository::new(pool.clone());
-    let message_repository = PgMessageRepository::new(pool.clone());
+    let user_repository: Arc<dyn UserRepository> = Arc::new(PgUserRepository::new(pool.clone()));
+    let room_repository: Arc<dyn ChatRoomRepository> =
+        Arc::new(PgChatRoomRepository::new(pool.clone()));
+    let member_repository: Arc<dyn RoomMemberRepository> =
+        Arc::new(PgRoomMemberRepository::new(pool.clone()));
+    let message_repository: Arc<dyn MessageRepository> =
+        Arc::new(PgMessageRepository::new(pool.clone()));
 
     // 创建核心服务
-    let password_hasher: Arc<dyn application::PasswordHasher> =
+    let password_hasher: Arc<dyn PasswordHasher> =
         Arc::new(BcryptPasswordHasher::new(config.server.bcrypt_cost));
-    let clock: Arc<dyn application::Clock> = Arc::new(SystemClock::default());
-    let broadcaster = Arc::new(LocalMessageBroadcaster::new());
+    let clock: Arc<dyn Clock> = Arc::new(SystemClock::default());
+    let broadcaster: Arc<dyn MessageBroadcaster> =
+        Arc::new(LocalMessageBroadcaster::new(config.broadcast.capacity));
 
     // 创建应用层服务
     let user_service = UserService::new(UserServiceDependencies {
         user_repository,
         password_hasher: password_hasher.clone(),
         clock: clock.clone(),
+        presence_manager: presence_manager.clone(),
     });
 
     let chat_service = ChatService::new(ChatServiceDependencies {
@@ -99,7 +110,7 @@ fn create_services(
         message_repository,
         password_hasher,
         clock,
-        broadcaster: broadcaster.clone() as Arc<dyn application::MessageBroadcaster>,
+        broadcaster: broadcaster.clone(),
     });
 
     (Arc::new(user_service), Arc::new(chat_service), broadcaster)
@@ -110,7 +121,11 @@ pub async fn setup_test_app() -> TestAppState {
     let config = TestConfig::default();
 
     // 创建数据库连接池
-    let pool = create_test_pool(&config.database_url).await;
+    let pool = create_test_pool(
+        &config.database_url,
+        config.app_config.database.max_connections,
+    )
+    .await;
 
     // 清理数据库
     cleanup_database(&pool)
@@ -120,15 +135,16 @@ pub async fn setup_test_app() -> TestAppState {
     // 运行数据库迁移
     let _ = sqlx::migrate!("../../migrations").run(&pool).await;
 
+    // 创建在线状态管理器
+    let presence_manager: Arc<TestPresenceManager> = Arc::new(TestPresenceManager::default());
+    let presence_manager_trait: Arc<dyn application::PresenceManager> = presence_manager.clone();
+
     // 创建所有服务
-    let (user_service, chat_service, broadcaster) = create_services(&pool, &config.app_config);
+    let (user_service, chat_service, broadcaster) =
+        create_services(&pool, &config.app_config, presence_manager_trait.clone());
 
     // 创建 JWT 服务
     let jwt_service = Arc::new(JwtService::new(config.app_config.jwt.clone()));
-
-    // 创建在线状态管理器
-    let presence_manager: Arc<dyn application::PresenceManager> =
-        Arc::new(TestPresenceManager::default());
 
     // 创建应用状态
     let app_state = AppState::new(
@@ -136,7 +152,7 @@ pub async fn setup_test_app() -> TestAppState {
         chat_service,
         broadcaster.clone(),
         jwt_service,
-        presence_manager,
+        presence_manager_trait,
     );
 
     // 构建路由器
@@ -146,6 +162,7 @@ pub async fn setup_test_app() -> TestAppState {
         router,
         _pool: pool,
         _config: config,
+        presence_manager,
     }
 }
 

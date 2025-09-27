@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use application::PasswordHasher;
+use application::{MessageBroadcaster, PasswordHasher};
 use config::AppConfig;
 use thiserror::Error;
 
@@ -23,13 +23,11 @@ pub enum InfrastructureError {
     Config(String),
 }
 
-use crate::broadcast::BroadcasterType;
-
 #[derive(Clone)]
 pub struct Infrastructure {
     pub storage: Arc<PgStorage>,
     pub password_hasher: Arc<BcryptPasswordHasher>,
-    pub broadcaster: BroadcasterType, // 使用枚举支持多种广播器
+    pub broadcaster: Arc<dyn MessageBroadcaster>,
 }
 
 impl Infrastructure {
@@ -41,15 +39,13 @@ impl Infrastructure {
         let password_hasher = Arc::new(BcryptPasswordHasher::new(config.server.bcrypt_cost));
 
         // 根据配置选择广播器类型
-        let broadcaster = match &config.broadcast.redis_url {
+        let broadcaster: Arc<dyn MessageBroadcaster> = match &config.broadcast.redis_url {
             Some(redis_url) => {
-                let client = redis::Client::open(redis_url.clone())
-                    .map_err(|e| InfrastructureError::Redis(e))?;
-                BroadcasterType::Redis(Arc::new(RedisMessageBroadcaster::new(client)))
+                let client =
+                    redis::Client::open(redis_url.clone()).map_err(InfrastructureError::Redis)?;
+                Arc::new(RedisMessageBroadcaster::new(client))
             }
-            None => BroadcasterType::Local(Arc::new(LocalMessageBroadcaster::new(
-                config.broadcast.capacity,
-            ))),
+            None => Arc::new(LocalMessageBroadcaster::new(config.broadcast.capacity)),
         };
 
         Ok(Self {

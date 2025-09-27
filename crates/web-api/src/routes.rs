@@ -85,6 +85,7 @@ fn api_routes() -> Router<AppState> {
         // 不需要认证的路由
         .route("/auth/register", post(register_user))
         .route("/auth/login", post(login_user))
+        .route("/auth/logout", post(logout_user))
         // 需要认证的路由
         .route("/rooms", post(create_room))
         // 修改：邀请用户加入房间（替代join_room）
@@ -138,6 +139,15 @@ async fn login_user(
 
     let response = LoginResponse { user, token };
     Ok(Json(response))
+}
+
+async fn logout_user(
+    headers: HeaderMap,
+    State(state): State<AppState>,
+) -> Result<StatusCode, ApiError> {
+    let user_id = state.jwt_service.extract_user_from_headers(&headers)?;
+    state.user_service.logout(user_id).await?;
+    Ok(StatusCode::NO_CONTENT)
 }
 
 async fn create_room(

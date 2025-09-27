@@ -11,7 +11,7 @@ use crate::{
     clock::Clock,
     error::ApplicationError,
     password::PasswordHasher,
-    repository::{PgChatRoomRepository, PgMessageRepository, PgRoomMemberRepository},
+    repository::{ChatRoomRepository, MessageRepository, RoomMemberRepository},
 };
 
 #[derive(Debug, Clone)]
@@ -75,9 +75,9 @@ pub struct SendMessageRequest {
 }
 
 pub struct ChatServiceDependencies {
-    pub room_repository: PgChatRoomRepository,
-    pub member_repository: PgRoomMemberRepository,
-    pub message_repository: PgMessageRepository,
+    pub room_repository: Arc<dyn ChatRoomRepository>,
+    pub member_repository: Arc<dyn RoomMemberRepository>,
+    pub message_repository: Arc<dyn MessageRepository>,
     pub password_hasher: Arc<dyn PasswordHasher>,
     pub clock: Arc<dyn Clock>,
     pub broadcaster: Arc<dyn MessageBroadcaster>,

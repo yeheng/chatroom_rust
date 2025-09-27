@@ -6,11 +6,13 @@ pub mod broadcast;
 pub mod builder;
 pub mod migrations;
 pub mod password;
+pub mod repository;
 
-pub use broadcast::{
-    BroadcasterType, LocalMessageBroadcaster, MessageStream, RedisMessageBroadcaster,
-    RedisMessageStream, WebSocketError,
-};
-pub use builder::{Infrastructure, InfrastructureConfig, InfrastructureError};
+pub use broadcast::{LocalMessageBroadcaster, RedisMessageBroadcaster, RedisMessageStream};
+pub use builder::{Infrastructure, InfrastructureError};
 pub use migrations::MIGRATOR;
 pub use password::BcryptPasswordHasher;
+pub use repository::{
+    create_pg_pool, PgChatRoomRepository, PgMessageRepository, PgRoomMemberRepository, PgStorage,
+    PgUserRepository,
+};

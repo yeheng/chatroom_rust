@@ -1,3 +1,5 @@
+use std::{error::Error as StdError, fmt, sync::Arc};
+
 use thiserror::Error;
 
 /// 领域错误定义。
@@ -34,22 +36,66 @@ impl DomainError {
     }
 }
 
-/// 仓储错误。
-#[derive(Debug, Error, Clone, PartialEq, Eq)]
+#[derive(Debug, Error, Clone)]
 pub enum RepositoryError {
     #[error("entity not found")]
     NotFound,
     #[error("entity already exists")]
     Conflict,
     #[error("storage error: {message}")]
-    Storage { message: String },
+    Storage {
+        message: String,
+        #[source]
+        source: Option<RepositoryErrorSource>,
+    },
 }
 
 impl RepositoryError {
     pub fn storage(message: impl Into<String>) -> Self {
         RepositoryError::Storage {
             message: message.into(),
+            source: None,
         }
+    }
+
+    pub fn storage_with_source<E>(message: impl Into<String>, source: E) -> Self
+    where
+        E: StdError + Send + Sync + 'static,
+    {
+        RepositoryError::Storage {
+            message: message.into(),
+            source: Some(RepositoryErrorSource::new(source)),
+        }
+    }
+}
+
+#[derive(Clone)]
+pub struct RepositoryErrorSource(Arc<dyn StdError + Send + Sync>);
+
+impl RepositoryErrorSource {
+    pub fn new<E>(error: E) -> Self
+    where
+        E: StdError + Send + Sync + 'static,
+    {
+        Self(Arc::new(error))
+    }
+}
+
+impl fmt::Debug for RepositoryErrorSource {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt::Debug::fmt(&self.0, f)
+    }
+}
+
+impl fmt::Display for RepositoryErrorSource {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt::Display::fmt(&self.0, f)
+    }
+}
+
+impl StdError for RepositoryErrorSource {
+    fn source(&self) -> Option<&(dyn StdError + 'static)> {
+        self.0.source()
     }
 }
 

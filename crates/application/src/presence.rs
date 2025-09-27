@@ -65,7 +65,8 @@ impl RedisPresenceManager {
             .get_multiplexed_async_connection()
             .await
             .map_err(|e| {
-                ApplicationError::infrastructure(format!("Redis connection failed: {}", e))
+                let message = format!("Redis connection failed: {e}");
+                ApplicationError::infrastructure_with_source(message, e)
             })
     }
 }
@@ -90,7 +91,8 @@ impl PresenceManager for RedisPresenceManager {
             .query_async(&mut conn)
             .await
             .map_err(|e| {
-                ApplicationError::infrastructure(format!("Redis operation failed: {}", e))
+                let message = format!("Redis operation failed: {e}");
+                ApplicationError::infrastructure_with_source(message, e)
             })?;
 
         tracing::info!(
@@ -118,7 +120,8 @@ impl PresenceManager for RedisPresenceManager {
             .query_async(&mut conn)
             .await
             .map_err(|e| {
-                ApplicationError::infrastructure(format!("Redis operation failed: {}", e))
+                let message = format!("Redis operation failed: {e}");
+                ApplicationError::infrastructure_with_source(message, e)
             })?;
 
         tracing::info!(
@@ -139,7 +142,8 @@ impl PresenceManager for RedisPresenceManager {
             .query_async(&mut conn)
             .await
             .map_err(|e| {
-                ApplicationError::infrastructure(format!("Redis operation failed: {}", e))
+                let message = format!("Redis operation failed: {e}");
+                ApplicationError::infrastructure_with_source(message, e)
             })?;
 
         // 将字符串转换为UserId
@@ -149,7 +153,8 @@ impl PresenceManager for RedisPresenceManager {
             .collect();
 
         let user_ids = user_ids.map_err(|e| {
-            ApplicationError::infrastructure(format!("Invalid UUID in Redis: {}", e))
+            let message = format!("Invalid UUID in Redis: {e}");
+            ApplicationError::infrastructure_with_source(message, e)
         })?;
 
         Ok(user_ids)
@@ -169,7 +174,8 @@ impl PresenceManager for RedisPresenceManager {
             .query_async(&mut conn)
             .await
             .map_err(|e| {
-                ApplicationError::infrastructure(format!("Redis operation failed: {}", e))
+                let message = format!("Redis operation failed: {e}");
+                ApplicationError::infrastructure_with_source(message, e)
             })?;
 
         Ok(is_member)
@@ -184,7 +190,8 @@ impl PresenceManager for RedisPresenceManager {
             .query_async(&mut conn)
             .await
             .map_err(|e| {
-                ApplicationError::infrastructure(format!("Redis operation failed: {}", e))
+                let message = format!("Redis operation failed: {e}");
+                ApplicationError::infrastructure_with_source(message, e)
             })?;
 
         // 将字符串转换为RoomId
@@ -194,7 +201,8 @@ impl PresenceManager for RedisPresenceManager {
             .collect();
 
         let room_ids = room_ids.map_err(|e| {
-            ApplicationError::infrastructure(format!("Invalid UUID in Redis: {}", e))
+            let message = format!("Invalid UUID in Redis: {e}");
+            ApplicationError::infrastructure_with_source(message, e)
         })?;
 
         Ok(room_ids)
@@ -224,7 +232,8 @@ impl PresenceManager for RedisPresenceManager {
         pipe.del(&user_key);
 
         let _: () = pipe.query_async(&mut conn).await.map_err(|e| {
-            ApplicationError::infrastructure(format!("Redis operation failed: {}", e))
+            let message = format!("Redis operation failed: {e}");
+            ApplicationError::infrastructure_with_source(message, e)
         })?;
 
         tracing::info!(

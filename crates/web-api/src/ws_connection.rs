@@ -51,12 +51,26 @@ impl WebSocketConnection {
 
         // 创建消息流 - 直接订阅广播器
         let mut message_stream =
-            application::MessageStream::new(state.broadcaster.subscribe(), room_id_domain);
+            state
+                .broadcaster
+                .subscribe(room_id_domain)
+                .await
+                .map_err(|err| {
+                    tracing::error!(error = %err, "Failed to subscribe message stream");
+                    ApiError::internal_server_error("Failed to establish connection")
+                })?;
 
         // 清空任何旧消息，只接收连接后发送的新消息
         let mut cleared_count = 0;
-        while let Ok(Some(_)) = message_stream.try_recv() {
-            cleared_count += 1;
+        loop {
+            match message_stream.try_recv() {
+                Ok(Some(_)) => cleared_count += 1,
+                Ok(None) => break,
+                Err(err) => {
+                    tracing::warn!(error = %err, "Failed to drain pending messages");
+                    break;
+                }
+            }
         }
         tracing::info!(cleared_count, "清空了旧消息");
 

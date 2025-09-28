@@ -1,10 +1,6 @@
 use std::sync::Arc;
 
-use application::{
-    presence::UserPresenceEvent,
-    stats_collector::EventStorage,
-    ApplicationError,
-};
+use application::{presence::UserPresenceEvent, stats_collector::EventStorage, ApplicationError};
 use async_trait::async_trait;
 use sqlx::{types::chrono, PgPool, Row};
 
@@ -56,7 +52,7 @@ impl EventStorage for PgEventStorage {
             b.push_bind(event.event_id)
                 .push_bind(uuid::Uuid::from(event.user_id))
                 .push_bind(uuid::Uuid::from(event.room_id))
-                .push_bind(event.event_type.to_string())  // 转换为字符串
+                .push_bind(event.event_type.to_string()) // 转换为字符串
                 .push_bind(event.timestamp)
                 .push_bind(event.session_id)
                 .push_bind(&event.user_ip)

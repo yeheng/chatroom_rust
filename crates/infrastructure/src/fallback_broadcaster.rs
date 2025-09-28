@@ -1,4 +1,6 @@
-use application::{broadcaster::BroadcastError, MessageBroadcast, MessageBroadcaster, MessageStream};
+use application::{
+    broadcaster::BroadcastError, MessageBroadcast, MessageBroadcaster, MessageStream,
+};
 use async_trait::async_trait;
 use domain::RoomId;
 use std::sync::{atomic::AtomicBool, Arc};
@@ -54,10 +56,7 @@ pub struct FallbackBroadcaster {
 }
 
 impl FallbackBroadcaster {
-    pub fn new(
-        redis: Arc<dyn MessageBroadcaster>,
-        local: Arc<dyn MessageBroadcaster>,
-    ) -> Self {
+    pub fn new(redis: Arc<dyn MessageBroadcaster>, local: Arc<dyn MessageBroadcaster>) -> Self {
         let health_checker = Arc::new(HealthChecker::new(redis.clone()));
 
         Self {
@@ -70,12 +69,14 @@ impl FallbackBroadcaster {
 
     /// 检查Redis是否可用
     fn is_redis_available(&self) -> bool {
-        self.redis_available.load(std::sync::atomic::Ordering::Relaxed)
+        self.redis_available
+            .load(std::sync::atomic::Ordering::Relaxed)
     }
 
     /// 设置Redis可用状态
     fn set_redis_available(&self, available: bool) {
-        self.redis_available.store(available, std::sync::atomic::Ordering::Relaxed);
+        self.redis_available
+            .store(available, std::sync::atomic::Ordering::Relaxed);
 
         if available {
             info!("Redis connection restored, switching back to Redis broadcast");
@@ -85,7 +86,10 @@ impl FallbackBroadcaster {
     }
 
     /// 尝试使用Redis广播，失败时降级到本地广播
-    async fn try_broadcast_with_fallback(&self, message: MessageBroadcast) -> Result<(), BroadcastError> {
+    async fn try_broadcast_with_fallback(
+        &self,
+        message: MessageBroadcast,
+    ) -> Result<(), BroadcastError> {
         if self.is_redis_available() {
             // 首先尝试Redis
             match self.redis.broadcast(message.clone()).await {
@@ -129,11 +133,11 @@ impl FallbackBroadcaster {
                 interval.tick().await;
 
                 // 如果Redis当前不可用，尝试检查是否恢复
-                if !redis_available.load(std::sync::atomic::Ordering::Relaxed) {
-                    if health_checker.is_healthy().await {
-                        redis_available.store(true, std::sync::atomic::Ordering::Relaxed);
-                        info!("Redis connection restored during health check");
-                    }
+                if !redis_available.load(std::sync::atomic::Ordering::Relaxed)
+                    && health_checker.is_healthy().await
+                {
+                    redis_available.store(true, std::sync::atomic::Ordering::Relaxed);
+                    info!("Redis connection restored during health check");
                 }
             }
         });
@@ -159,7 +163,10 @@ impl MessageBroadcaster for FallbackBroadcaster {
         }
 
         // 降级到本地订阅
-        info!("Using local subscription as fallback for room {:?}", room_id);
+        info!(
+            "Using local subscription as fallback for room {:?}",
+            room_id
+        );
         self.local.subscribe(room_id).await
     }
 }

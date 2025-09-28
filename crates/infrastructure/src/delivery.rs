@@ -30,7 +30,11 @@ impl PgDeliveryTracker {
 
 #[async_trait]
 impl DeliveryTracker for PgDeliveryTracker {
-    async fn mark_sent(&self, message_id: MessageId, user_id: UserId) -> Result<(), RepositoryError> {
+    async fn mark_sent(
+        &self,
+        message_id: MessageId,
+        user_id: UserId,
+    ) -> Result<(), RepositoryError> {
         sqlx::query(
             r#"
             INSERT INTO message_deliveries (message_id, user_id, sent_at)
@@ -48,7 +52,11 @@ impl DeliveryTracker for PgDeliveryTracker {
         Ok(())
     }
 
-    async fn mark_delivered(&self, message_id: MessageId, user_id: UserId) -> Result<(), RepositoryError> {
+    async fn mark_delivered(
+        &self,
+        message_id: MessageId,
+        user_id: UserId,
+    ) -> Result<(), RepositoryError> {
         let result = sqlx::query(
             r#"
             UPDATE message_deliveries
@@ -85,11 +93,15 @@ impl DeliveryTracker for PgDeliveryTracker {
         .await
         .map_err(map_sqlx_err)?;
 
-        Ok(records.into_iter().map(|r| MessageId::from(r.message_id)).collect())
+        Ok(records
+            .into_iter()
+            .map(|r| MessageId::from(r.message_id))
+            .collect())
     }
 
     async fn cleanup_delivered(&self, older_than_hours: u32) -> Result<u64, RepositoryError> {
-        let cutoff_time = OffsetDateTime::now_utc() - time::Duration::hours(older_than_hours as i64);
+        let cutoff_time =
+            OffsetDateTime::now_utc() - time::Duration::hours(older_than_hours as i64);
 
         let result = sqlx::query(
             r#"

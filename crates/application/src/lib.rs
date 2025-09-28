@@ -20,12 +20,14 @@ pub use clock::{Clock, SystemClock};
 pub use delivery::DeliveryTracker;
 pub use error::ApplicationError;
 pub use password::{PasswordHasher, PasswordHasherError};
-pub use presence::{PresenceManager, RedisPresenceManager, OnlineStats, UserPresenceEvent, PresenceEventType};
+pub use presence::{
+    OnlineStats, PresenceEventType, PresenceManager, RedisPresenceManager, UserPresenceEvent,
+};
 pub use rate_limiter::{MessageRateLimiter, RateLimitError, UserQuota};
 pub use repository::{ChatRoomRepository, MessageRepository, RoomMemberRepository, UserRepository};
 pub use sequencer::{MessageSequencer, SequencedMessage};
-pub use stats_collector::{
-    PresenceEventCollector, EventCollectorConfig, QueueStatus, EventStorage,
-    create_connection_event, create_disconnection_event, create_heartbeat_event,
-};
 pub use services::{ChatService, ChatServiceDependencies, UserService, UserServiceDependencies};
+pub use stats_collector::{
+    create_connection_event, create_disconnection_event, create_heartbeat_event,
+    EventCollectorConfig, EventStorage, PresenceEventCollector, QueueStatus,
+};

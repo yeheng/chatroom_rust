@@ -1,4 +1,6 @@
-use application::{broadcaster::BroadcastError, MessageBroadcast, MessageBroadcaster, MessageStream};
+use application::{
+    broadcaster::BroadcastError, MessageBroadcast, MessageBroadcaster, MessageStream,
+};
 use async_trait::async_trait;
 use domain::{Message, MessageContent, MessageId, MessageType, RoomId, UserId};
 use infrastructure::{FallbackBroadcaster, LocalMessageBroadcaster};
@@ -19,7 +21,8 @@ impl FailingRedisBroadcaster {
     }
 
     fn set_failing(&self, failing: bool) {
-        self.should_fail.store(failing, std::sync::atomic::Ordering::Relaxed);
+        self.should_fail
+            .store(failing, std::sync::atomic::Ordering::Relaxed);
     }
 }
 
@@ -57,7 +60,7 @@ fn create_test_message(room_id: RoomId) -> MessageBroadcast {
         is_deleted: false,
     };
 
-    MessageBroadcast { room_id, message }
+    MessageBroadcast::chat(room_id, message)
 }
 
 #[tokio::test]

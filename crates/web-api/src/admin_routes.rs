@@ -26,7 +26,7 @@ pub fn admin_routes() -> Router<AppState> {
 /// 统计查询参数
 #[derive(Debug, Deserialize)]
 struct StatsQueryParams {
-    granularity: Option<String>,  // "hour", "day", "week", "month", "year"
+    granularity: Option<String>, // "hour", "day", "week", "month", "year"
     start_time: Option<DateTime<Utc>>,
     end_time: Option<DateTime<Utc>>,
     limit: Option<i64>,
@@ -94,7 +94,9 @@ fn parse_granularity(granularity_str: &str) -> Result<TimeGranularity, ApiError>
         "week" => Ok(TimeGranularity::Week),
         "month" => Ok(TimeGranularity::Month),
         "year" => Ok(TimeGranularity::Year),
-        _ => Err(ApiError::bad_request("Invalid granularity. Use: hour, day, week, month, year")),
+        _ => Err(ApiError::bad_request(
+            "Invalid granularity. Use: hour, day, week, month, year",
+        )),
     }
 }
 
@@ -155,7 +157,7 @@ async fn get_room_stats(
         .query_stats(query)
         .await
         .map_err(|err| {
-            ApiError::internal_server_error(&format!("Failed to query stats: {}", err))
+            ApiError::internal_server_error(format!("Failed to query stats: {}", err))
         })?;
 
     let response: Vec<RoomStatsResponse> = stats.into_iter().map(RoomStatsResponse::from).collect();
@@ -179,9 +181,9 @@ async fn get_room_stats_by_id(
     };
 
     let end_time = params.end_time.unwrap_or_else(Utc::now);
-    let start_time = params.start_time.unwrap_or_else(|| {
-        end_time - chrono::Duration::days(7)
-    });
+    let start_time = params
+        .start_time
+        .unwrap_or_else(|| end_time - chrono::Duration::days(7));
 
     let query = StatsQuery {
         room_id: Some(RoomId::from(room_id)),
@@ -196,7 +198,7 @@ async fn get_room_stats_by_id(
         .query_stats(query)
         .await
         .map_err(|err| {
-            ApiError::internal_server_error(&format!("Failed to query room stats: {}", err))
+            ApiError::internal_server_error(format!("Failed to query room stats: {}", err))
         })?;
 
     let response: Vec<RoomStatsResponse> = stats.into_iter().map(RoomStatsResponse::from).collect();
@@ -222,7 +224,7 @@ async fn get_stats_summary(
         .get_online_summary(start_time, end_time)
         .await
         .map_err(|err| {
-            ApiError::internal_server_error(&format!("Failed to get stats summary: {}", err))
+            ApiError::internal_server_error(format!("Failed to get stats summary: {}", err))
         })?;
 
     Ok(Json(summary))
@@ -238,13 +240,11 @@ async fn get_current_online_stats(
 
     // 简化实现：返回固定的演示数据
     // 实际实现中应该遍历所有房间获取在线统计
-    let demo_stats = vec![
-        CurrentOnlineStatsResponse {
-            room_id: Uuid::new_v4(),
-            online_count: 5,
-            online_users: vec![Uuid::new_v4(), Uuid::new_v4()],
-        }
-    ];
+    let demo_stats = vec![CurrentOnlineStatsResponse {
+        room_id: Uuid::new_v4(),
+        online_count: 5,
+        online_users: vec![Uuid::new_v4(), Uuid::new_v4()],
+    }];
 
     Ok(Json(demo_stats))
 }
@@ -258,13 +258,9 @@ async fn get_event_metrics(
     verify_admin_access(&state, user_id, None).await?;
 
     // 获取事件存储指标
-    let total_events = state
-        .event_storage
-        .get_event_count()
-        .await
-        .map_err(|err| {
-            ApiError::internal_server_error(&format!("Failed to get event count: {}", err))
-        })?;
+    let total_events = state.event_storage.get_event_count().await.map_err(|err| {
+        ApiError::internal_server_error(format!("Failed to get event count: {}", err))
+    })?;
 
     let now = Utc::now();
     let one_hour_ago = now - chrono::Duration::hours(1);
@@ -275,7 +271,7 @@ async fn get_event_metrics(
         .get_event_count_in_range(one_hour_ago, now)
         .await
         .map_err(|err| {
-            ApiError::internal_server_error(&format!("Failed to get hourly event count: {}", err))
+            ApiError::internal_server_error(format!("Failed to get hourly event count: {}", err))
         })?;
 
     let events_in_last_day = state
@@ -283,7 +279,7 @@ async fn get_event_metrics(
         .get_event_count_in_range(one_day_ago, now)
         .await
         .map_err(|err| {
-            ApiError::internal_server_error(&format!("Failed to get daily event count: {}", err))
+            ApiError::internal_server_error(format!("Failed to get daily event count: {}", err))
         })?;
 
     // 获取队列状态

@@ -4,13 +4,15 @@ use application::{
     presence::memory::MemoryPresenceManager,
     repository::{ChatRoomRepository, MessageRepository, RoomMemberRepository, UserRepository},
     services::{ChatService, ChatServiceDependencies, UserService, UserServiceDependencies},
+    stats_collector::{EventCollectorConfig, EventStorage, PresenceEventCollector},
     Clock, MessageBroadcaster, PasswordHasher, SystemClock,
 };
 use axum::Router;
 use config::AppConfig;
 use infrastructure::{
-    create_pg_pool, BcryptPasswordHasher, LocalMessageBroadcaster, PgChatRoomRepository,
-    PgMessageRepository, PgRoomMemberRepository, PgUserRepository,
+    create_pg_pool, presence_storage::PgEventStorage, BcryptPasswordHasher,
+    LocalMessageBroadcaster, PgChatRoomRepository, PgMessageRepository, PgRoomMemberRepository,
+    PgUserRepository, StatsAggregationService,
 };
 use sqlx::PgPool;
 use web_api::{router as build_router_fn, AppState, JwtService};
@@ -146,6 +148,24 @@ pub async fn setup_test_app() -> TestAppState {
     // 创建 JWT 服务
     let jwt_service = Arc::new(JwtService::new(config.app_config.jwt.clone()));
 
+    // 创建统计服务
+    let stats_service = Arc::new(StatsAggregationService::new(pool.clone()));
+
+    // 创建事件存储
+    let event_storage: Arc<dyn EventStorage> = Arc::new(PgEventStorage::new(pool.clone()));
+
+    // 创建事件收集器
+    let event_collector_config = EventCollectorConfig::default();
+    let event_collector = Arc::new(PresenceEventCollector::new(
+        event_storage.clone(),
+        event_collector_config,
+    ));
+
+    // 启动事件收集器
+    if let Err(err) = event_collector.start().await {
+        panic!("Failed to start event collector: {}", err);
+    }
+
     // 创建应用状态
     let app_state = AppState::new(
         user_service,
@@ -153,6 +173,9 @@ pub async fn setup_test_app() -> TestAppState {
         broadcaster.clone(),
         jwt_service,
         presence_manager_trait,
+        stats_service,
+        event_storage,
+        event_collector,
     );
 
     // 构建路由器

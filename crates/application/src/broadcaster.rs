@@ -1,11 +1,11 @@
 use async_trait::async_trait;
 use domain::{Message, RoomId};
+use serde::{Deserialize, Serialize};
 use std::pin::Pin;
 use thiserror::Error;
 use tokio::sync::broadcast;
 use tokio::sync::broadcast::error::TryRecvError;
 use tokio_stream::{Stream, StreamExt};
-use serde::{Deserialize, Serialize};
 
 use crate::presence::OnlineStats;
 
@@ -24,7 +24,7 @@ pub enum WebSocketMessage {
     SystemNotification {
         message: String,
         #[serde(with = "chrono::serde::ts_seconds")]
-        timestamp: chrono::DateTime<chrono::Utc>
+        timestamp: chrono::DateTime<chrono::Utc>,
     },
 }
 

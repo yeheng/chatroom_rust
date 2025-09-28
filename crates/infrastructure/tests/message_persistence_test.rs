@@ -31,11 +31,17 @@ async fn create_test_data(pool: &PgPool) -> (Uuid, Uuid) {
     // 创建测试用户
     sqlx::query(
         "INSERT INTO users (id, username, email, password_hash, status)
-         VALUES ($1, $2, $3, 'hashed_password', 'active'::user_status)"
+         VALUES ($1, $2, $3, 'hashed_password', 'active'::user_status)",
     )
     .bind(test_user_id)
-    .bind(format!("testuser_{}", test_user_id.to_string()[0..8].to_string()))
-    .bind(format!("test_{}@example.com", test_user_id.to_string()[0..8].to_string()))
+    .bind(format!(
+        "testuser_{}",
+        test_user_id.to_string()[0..8].to_string()
+    ))
+    .bind(format!(
+        "test_{}@example.com",
+        test_user_id.to_string()[0..8].to_string()
+    ))
     .execute(pool)
     .await
     .expect("Failed to create test user");
@@ -43,10 +49,13 @@ async fn create_test_data(pool: &PgPool) -> (Uuid, Uuid) {
     // 创建测试房间
     sqlx::query(
         "INSERT INTO chat_rooms (id, name, owner_id, is_private)
-         VALUES ($1, $2, $3, FALSE)"
+         VALUES ($1, $2, $3, FALSE)",
     )
     .bind(test_room_id)
-    .bind(format!("test_room_{}", test_room_id.to_string()[0..8].to_string()))
+    .bind(format!(
+        "test_room_{}",
+        test_room_id.to_string()[0..8].to_string()
+    ))
     .bind(test_user_id)
     .execute(pool)
     .await
@@ -111,10 +120,7 @@ async fn test_get_recent_messages() {
     }
 
     // 获取最近的3条消息
-    let recent_messages = repo
-        .get_recent_messages(room_id, 3, None)
-        .await
-        .unwrap();
+    let recent_messages = repo.get_recent_messages(room_id, 3, None).await.unwrap();
 
     assert_eq!(recent_messages.len(), 3);
     // 消息应该按时间倒序排列（最新的在前）
@@ -155,10 +161,7 @@ async fn test_get_messages_since() {
     }
 
     // 获取分界时间之后的消息
-    let new_messages = repo
-        .get_messages_since(room_id, cutoff_time)
-        .await
-        .unwrap();
+    let new_messages = repo.get_messages_since(room_id, cutoff_time).await.unwrap();
 
     assert_eq!(new_messages.len(), 2);
     // 消息应该按时间正序排列（旧的在前）

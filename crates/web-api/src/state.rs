@@ -1,8 +1,8 @@
 use std::sync::Arc;
 
 use application::{
-    ChatService, MessageBroadcaster, PresenceManager, UserService,
-    PresenceEventCollector, stats_collector::EventStorage,
+    stats_collector::EventStorage, ChatService, MessageBroadcaster, PresenceEventCollector,
+    PresenceManager, UserService,
 };
 use infrastructure::StatsAggregationService;
 

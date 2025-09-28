@@ -1,11 +1,11 @@
 use crate::error::ApiError;
 use crate::state::AppState;
+use application::MessageBroadcast;
 use axum::extract::ws::{Message as WsMessage, WebSocket};
 use domain::{RoomId, UserId};
 use futures_util::{SinkExt, StreamExt};
 use tokio::sync::mpsc;
 use uuid::Uuid;
-use application::MessageBroadcast;
 
 /// WebSocket 连接管理器
 ///
@@ -85,10 +85,7 @@ impl WebSocketConnection {
     }
 
     /// 广播统计更新到房间
-    pub async fn broadcast_stats_update(
-        state: &AppState,
-        room_id: RoomId,
-    ) -> Result<(), ApiError> {
+    pub async fn broadcast_stats_update(state: &AppState, room_id: RoomId) -> Result<(), ApiError> {
         match state.presence_manager.get_online_stats(room_id).await {
             Ok(stats) => {
                 let broadcast = MessageBroadcast::stats(room_id, stats);

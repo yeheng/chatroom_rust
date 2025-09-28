@@ -1,6 +1,9 @@
 use application::ApplicationError;
 use domain::RoomId;
-use sqlx::{types::chrono::{DateTime, Utc}, PgPool, Row};
+use sqlx::{
+    types::chrono::{DateTime, Utc},
+    PgPool, Row,
+};
 use uuid::Uuid;
 
 use crate::repository::map_sqlx_err;
@@ -115,7 +118,8 @@ impl StatsAggregationService {
             TimeGranularity::Year => "YYYY-01-01 00:00:00",
         };
 
-        let sql = format!(r#"
+        let sql = format!(
+            r#"
             WITH time_buckets AS (
                 SELECT
                     room_id,
@@ -163,7 +167,8 @@ impl StatsAggregationService {
                 COALESCE(unique_users::float / 2.0, 0.0) as avg_online_count
             FROM stats_by_bucket
             ORDER BY room_id, time_bucket
-        "#, time_format,
+        "#,
+            time_format,
             match granularity {
                 TimeGranularity::Hour => "hour",
                 TimeGranularity::Day => "day",
@@ -210,7 +215,8 @@ impl StatsAggregationService {
 
         for stat in stats {
             let granularity_str = stat.granularity.to_string();
-            sqlx::query(r#"
+            sqlx::query(
+                r#"
                 INSERT INTO stats_aggregated (
                     room_id, time_bucket, granularity, peak_online_count,
                     avg_online_count, total_connections, unique_users, avg_session_duration
@@ -222,7 +228,8 @@ impl StatsAggregationService {
                     total_connections = EXCLUDED.total_connections,
                     unique_users = EXCLUDED.unique_users,
                     avg_session_duration = EXCLUDED.avg_session_duration
-            "#)
+            "#,
+            )
             .bind(Uuid::from(stat.room_id))
             .bind(stat.time_bucket)
             .bind(&granularity_str)
@@ -248,12 +255,14 @@ impl StatsAggregationService {
 
     /// 查询聚合统计数据
     pub async fn query_stats(&self, query: StatsQuery) -> Result<Vec<RoomStats>, ApplicationError> {
-        let mut sql = String::from(r#"
+        let mut sql = String::from(
+            r#"
             SELECT room_id, time_bucket, granularity, peak_online_count,
                    avg_online_count, total_connections, unique_users, avg_session_duration
             FROM stats_aggregated
             WHERE granularity = $1 AND time_bucket >= $2 AND time_bucket < $3
-        "#);
+        "#,
+        );
 
         let mut param_count = 3;
         if query.room_id.is_some() {
@@ -282,15 +291,19 @@ impl StatsAggregationService {
             query_builder = query_builder.bind(limit);
         }
 
-        let rows = query_builder.fetch_all(&self.pool).await.map_err(map_sqlx_err)?;
+        let rows = query_builder
+            .fetch_all(&self.pool)
+            .await
+            .map_err(map_sqlx_err)?;
 
         let mut results = Vec::new();
         for row in rows {
             let room_id: Uuid = row.get("room_id");
             let time_bucket: DateTime<Utc> = row.get("time_bucket");
             let granularity_str: String = row.get("granularity");
-            let granularity = granularity_str.parse::<TimeGranularity>()
-                .map_err(|err| ApplicationError::infrastructure(err))?;
+            let granularity = granularity_str
+                .parse::<TimeGranularity>()
+                .map_err(ApplicationError::infrastructure)?;
 
             results.push(RoomStats {
                 room_id: RoomId::from(room_id),
@@ -354,16 +367,22 @@ impl StatsAggregationService {
             total_rooms: row.get::<Option<i64>, _>("total_rooms").unwrap_or(0),
             total_users: row.get::<Option<i64>, _>("total_users").unwrap_or(0),
             total_sessions: row.get::<Option<i64>, _>("total_sessions").unwrap_or(0),
-            avg_session_duration: row.get::<Option<f64>, _>("avg_session_duration").unwrap_or(0.0),
-            peak_concurrent_users: row.get::<Option<i64>, _>("peak_concurrent_users").unwrap_or(0),
+            avg_session_duration: row
+                .get::<Option<f64>, _>("avg_session_duration")
+                .unwrap_or(0.0),
+            peak_concurrent_users: row
+                .get::<Option<i64>, _>("peak_concurrent_users")
+                .unwrap_or(0),
         })
     }
 
     /// 清理过期的聚合数据
     pub async fn cleanup_expired_data(&self) -> Result<i64, ApplicationError> {
-        let row = sqlx::query(r#"
+        let row = sqlx::query(
+            r#"
             SELECT cleanup_expired_aggregated_stats() as deleted_count
-        "#)
+        "#,
+        )
         .fetch_one(&self.pool)
         .await
         .map_err(map_sqlx_err)?;
@@ -397,7 +416,9 @@ impl StatsAggregationService {
         );
 
         // 1. 计算聚合统计
-        let stats = self.aggregate_stats(granularity, start_time, end_time).await?;
+        let stats = self
+            .aggregate_stats(granularity, start_time, end_time)
+            .await?;
         let stats_count = stats.len();
 
         // 2. 保存统计数据

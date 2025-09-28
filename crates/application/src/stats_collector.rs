@@ -1,13 +1,13 @@
+use async_trait::async_trait;
+use chrono::Utc;
 use std::collections::VecDeque;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::RwLock;
-use chrono::Utc;
 use uuid::Uuid;
-use async_trait::async_trait;
 
 use crate::error::ApplicationError;
-use crate::presence::{UserPresenceEvent, PresenceEventType};
+use crate::presence::{PresenceEventType, UserPresenceEvent};
 use domain::{RoomId, UserId};
 
 /// 异步事件采集器配置
@@ -98,7 +98,9 @@ impl PresenceEventCollector {
             while *running.read().await {
                 interval.tick().await;
 
-                if let Err(err) = Self::flush_events_batch(&queue, &storage, config.batch_size).await {
+                if let Err(err) =
+                    Self::flush_events_batch(&queue, &storage, config.batch_size).await
+                {
                     tracing::error!(error = ?err, "Failed to flush presence events");
                 }
             }

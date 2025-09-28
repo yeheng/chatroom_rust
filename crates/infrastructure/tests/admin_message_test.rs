@@ -31,11 +31,17 @@ async fn create_test_data(pool: &PgPool) -> (Uuid, Uuid) {
     // 创建测试用户
     sqlx::query(
         "INSERT INTO users (id, username, email, password_hash, status)
-         VALUES ($1, $2, $3, 'hashed_password', 'active'::user_status)"
+         VALUES ($1, $2, $3, 'hashed_password', 'active'::user_status)",
     )
     .bind(test_user_id)
-    .bind(format!("testuser_{}", test_user_id.to_string()[0..8].to_string()))
-    .bind(format!("test_{}@example.com", test_user_id.to_string()[0..8].to_string()))
+    .bind(format!(
+        "testuser_{}",
+        test_user_id.to_string()[0..8].to_string()
+    ))
+    .bind(format!(
+        "test_{}@example.com",
+        test_user_id.to_string()[0..8].to_string()
+    ))
     .execute(pool)
     .await
     .expect("Failed to create test user");
@@ -43,10 +49,13 @@ async fn create_test_data(pool: &PgPool) -> (Uuid, Uuid) {
     // 创建测试房间
     sqlx::query(
         "INSERT INTO chat_rooms (id, name, owner_id, is_private)
-         VALUES ($1, $2, $3, FALSE)"
+         VALUES ($1, $2, $3, FALSE)",
     )
     .bind(test_room_id)
-    .bind(format!("test_room_{}", test_room_id.to_string()[0..8].to_string()))
+    .bind(format!(
+        "test_room_{}",
+        test_room_id.to_string()[0..8].to_string()
+    ))
     .bind(test_user_id)
     .execute(pool)
     .await
@@ -105,7 +114,7 @@ async fn test_admin_message_history() {
         .unwrap();
 
     assert_eq!(history.len(), 4); // 5条消息减去1条删除的
-    // 应该按时间倒序排列（最新的在前）
+                                  // 应该按时间倒序排列（最新的在前）
     assert_eq!(history[0].content.as_str(), "Test message 5");
     assert_eq!(history[3].content.as_str(), "Test message 1");
 
@@ -116,8 +125,9 @@ async fn test_admin_message_history() {
         .unwrap();
 
     assert_eq!(history_with_deleted.len(), 5); // 包含删除的消息
-    // 检查已删除的消息确实存在
-    let deleted_msg = history_with_deleted.iter()
+                                               // 检查已删除的消息确实存在
+    let deleted_msg = history_with_deleted
+        .iter()
         .find(|m| m.id == deleted_message_id)
         .expect("Deleted message should be present");
     assert_eq!(deleted_msg.is_deleted, true);

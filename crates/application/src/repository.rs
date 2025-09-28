@@ -67,7 +67,9 @@ pub trait MessageRepository: Send + Sync {
     // 为了向后兼容，保留原有的 create 方法
     async fn create(&self, message: Message) -> Result<Message, RepositoryError> {
         let message_id = self.save_message(message.clone()).await?;
-        self.find_by_id(message_id).await?.ok_or(RepositoryError::NotFound)
+        self.find_by_id(message_id)
+            .await?
+            .ok_or(RepositoryError::NotFound)
     }
 
     // 为了向后兼容，保留原有的 list_recent 方法
@@ -77,6 +79,7 @@ pub trait MessageRepository: Send + Sync {
         limit: u32,
         before: Option<MessageId>,
     ) -> Result<Vec<Message>, RepositoryError> {
-        self.get_recent_messages(room_id, limit as i64, before).await
+        self.get_recent_messages(room_id, limit as i64, before)
+            .await
     }
 }

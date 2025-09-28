@@ -75,7 +75,7 @@ async fn test_multiple_users_delivery() {
     let user2_undelivered = tracker.get_undelivered(user2_id).await.unwrap();
 
     assert!(!user1_undelivered.contains(&msg_id)); // user1已送达
-    assert!(user2_undelivered.contains(&msg_id));  // user2未送达
+    assert!(user2_undelivered.contains(&msg_id)); // user2未送达
 }
 
 #[tokio::test]

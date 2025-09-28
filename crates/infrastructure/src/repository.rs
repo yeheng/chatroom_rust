@@ -71,10 +71,9 @@ impl TryFrom<UserRecord> for User {
     type Error = RepositoryError;
 
     fn try_from(value: UserRecord) -> Result<Self, Self::Error> {
-        let username = domain::Username::parse(value.username).map_err(|err| invalid_data(err))?;
-        let email = domain::UserEmail::parse(value.email).map_err(|err| invalid_data(err))?;
-        let password =
-            domain::PasswordHash::new(value.password_hash).map_err(|err| invalid_data(err))?;
+        let username = domain::Username::parse(value.username).map_err(invalid_data)?;
+        let email = domain::UserEmail::parse(value.email).map_err(invalid_data)?;
+        let password = domain::PasswordHash::new(value.password_hash).map_err(invalid_data)?;
 
         Ok(User {
             id: UserId::from(value.id),
@@ -187,7 +186,7 @@ impl TryFrom<RoomRecord> for ChatRoom {
 
     fn try_from(value: RoomRecord) -> Result<Self, Self::Error> {
         let password = match value.password_hash {
-            Some(hash) => Some(domain::PasswordHash::new(hash).map_err(|err| invalid_data(err))?),
+            Some(hash) => Some(domain::PasswordHash::new(hash).map_err(invalid_data)?),
             None => None,
         };
 
@@ -415,7 +414,7 @@ impl TryFrom<MessageRecord> for Message {
     type Error = RepositoryError;
 
     fn try_from(value: MessageRecord) -> Result<Self, Self::Error> {
-        let content = MessageContent::new(value.content).map_err(|err| invalid_data(err))?;
+        let content = MessageContent::new(value.content).map_err(invalid_data)?;
 
         Ok(Message {
             id: MessageId::from(value.id),
@@ -529,11 +528,14 @@ impl MessageRepository for PgMessageRepository {
         timestamp: chrono::DateTime<chrono::Utc>,
     ) -> Result<Vec<Message>, RepositoryError> {
         // 精确转换时间类型（保留纳秒精度）
-        let timestamp_nanos = timestamp.timestamp_nanos_opt()
+        let timestamp_nanos = timestamp
+            .timestamp_nanos_opt()
             .ok_or_else(|| RepositoryError::storage("Timestamp out of range".to_string()))?;
 
         let time_offset = time::OffsetDateTime::from_unix_timestamp_nanos(timestamp_nanos as i128)
-            .map_err(|e| RepositoryError::storage_with_source("Invalid timestamp".to_string(), e))?;
+            .map_err(|e| {
+                RepositoryError::storage_with_source("Invalid timestamp".to_string(), e)
+            })?;
 
         let records = sqlx::query_as::<_, MessageRecord>(
             r#"
@@ -580,10 +582,14 @@ impl MessageRepository for PgMessageRepository {
 
         // 转换时间参数
         let before_time = if let Some(timestamp) = before {
-            let timestamp_nanos = timestamp.timestamp_nanos_opt()
+            let timestamp_nanos = timestamp
+                .timestamp_nanos_opt()
                 .ok_or_else(|| RepositoryError::storage("Timestamp out of range".to_string()))?;
-            Some(time::OffsetDateTime::from_unix_timestamp_nanos(timestamp_nanos as i128)
-                .map_err(|e| RepositoryError::storage_with_source("Invalid timestamp".to_string(), e))?)
+            Some(
+                time::OffsetDateTime::from_unix_timestamp_nanos(timestamp_nanos as i128).map_err(
+                    |e| RepositoryError::storage_with_source("Invalid timestamp".to_string(), e),
+                )?,
+            )
         } else {
             None
         };
@@ -602,7 +608,9 @@ impl MessageRepository for PgMessageRepository {
     // 保留原有的 create 方法实现（通过默认实现调用新方法）
     async fn create(&self, message: Message) -> Result<Message, RepositoryError> {
         let message_id = self.save_message(message.clone()).await?;
-        self.find_by_id(message_id).await?.ok_or(RepositoryError::NotFound)
+        self.find_by_id(message_id)
+            .await?
+            .ok_or(RepositoryError::NotFound)
     }
 
     // 保留原有的 list_recent 方法实现（通过默认实现调用新方法）
@@ -612,7 +620,8 @@ impl MessageRepository for PgMessageRepository {
         limit: u32,
         before: Option<MessageId>,
     ) -> Result<Vec<Message>, RepositoryError> {
-        self.get_recent_messages(room_id, limit as i64, before).await
+        self.get_recent_messages(room_id, limit as i64, before)
+            .await
     }
 }
 

@@ -45,7 +45,10 @@ async fn test_rate_limiter_integration() {
     assert_eq!(message_count, 5);
     assert_eq!(connection_count, 3);
 
-    println!("User status: {} messages, {} connections", message_count, connection_count);
+    println!(
+        "User status: {} messages, {} connections",
+        message_count, connection_count
+    );
 }
 
 #[tokio::test]
@@ -103,7 +106,10 @@ async fn test_concurrent_rate_limiting() {
     let successful = results.iter().filter(|&&success| success).count();
     let rejected = results.len() - successful;
 
-    println!("Concurrent test: {} successful, {} rejected", successful, rejected);
+    println!(
+        "Concurrent test: {} successful, {} rejected",
+        successful, rejected
+    );
     assert_eq!(successful, 10);
     assert_eq!(rejected, 5);
 }

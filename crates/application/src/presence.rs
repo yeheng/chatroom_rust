@@ -1,10 +1,10 @@
-use std::sync::Arc;
-use uuid::Uuid;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use tokio::sync::RwLock;
+use std::sync::Arc;
 use std::time::{Duration, Instant};
+use tokio::sync::RwLock;
+use uuid::Uuid;
 
 use crate::error::ApplicationError;
 use domain::{RoomId, UserId};
@@ -20,11 +20,14 @@ pub struct OnlineStats {
 /// 用户状态变化事件类型
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "sqlx", derive(sqlx::Type))]
-#[cfg_attr(feature = "sqlx", sqlx(type_name = "presence_event_type", rename_all = "PascalCase"))]
+#[cfg_attr(
+    feature = "sqlx",
+    sqlx(type_name = "presence_event_type", rename_all = "PascalCase")
+)]
 pub enum PresenceEventType {
     Connected,
     Disconnected,
-    Heartbeat,  // 用于检测僵尸连接
+    Heartbeat, // 用于检测僵尸连接
 }
 
 impl std::fmt::Display for PresenceEventType {
@@ -45,7 +48,7 @@ pub struct UserPresenceEvent {
     pub room_id: RoomId,
     pub event_type: PresenceEventType,
     pub timestamp: DateTime<Utc>,
-    pub session_id: Uuid,  // 用于计算在线时长
+    pub session_id: Uuid, // 用于计算在线时长
     pub user_ip: Option<String>,
     pub user_agent: Option<String>,
 }
@@ -93,7 +96,8 @@ pub trait PresenceManager: Send + Sync {
     async fn get_online_stats(&self, room_id: RoomId) -> Result<OnlineStats, ApplicationError>;
 
     /// 记录用户状态变化事件（用于历史数据采集）
-    async fn record_presence_event(&self, event: UserPresenceEvent) -> Result<(), ApplicationError>;
+    async fn record_presence_event(&self, event: UserPresenceEvent)
+        -> Result<(), ApplicationError>;
 }
 
 /// 统计缓存项
@@ -169,10 +173,13 @@ impl RedisPresenceManager {
     /// 更新统计缓存
     async fn update_cache(&self, room_id: RoomId, stats: OnlineStats) {
         let mut cache = self.stats_cache.write().await;
-        cache.insert(room_id, CachedStats {
-            stats,
-            cached_at: Instant::now(),
-        });
+        cache.insert(
+            room_id,
+            CachedStats {
+                stats,
+                cached_at: Instant::now(),
+            },
+        );
     }
 }
 
@@ -393,7 +400,10 @@ impl PresenceManager for RedisPresenceManager {
         Ok(stats)
     }
 
-    async fn record_presence_event(&self, event: UserPresenceEvent) -> Result<(), ApplicationError> {
+    async fn record_presence_event(
+        &self,
+        event: UserPresenceEvent,
+    ) -> Result<(), ApplicationError> {
         // 暂时只记录日志，后续会添加数据库写入
         tracing::info!(
             event_id = %event.event_id,
@@ -535,7 +545,10 @@ pub mod memory {
             })
         }
 
-        async fn record_presence_event(&self, event: UserPresenceEvent) -> Result<(), ApplicationError> {
+        async fn record_presence_event(
+            &self,
+            event: UserPresenceEvent,
+        ) -> Result<(), ApplicationError> {
             // 内存实现只记录日志
             tracing::info!(
                 event_id = %event.event_id,

@@ -7,14 +7,14 @@ use application::repository::{
 };
 use application::{
     services::{ChatService, ChatServiceDependencies, UserService, UserServiceDependencies},
+    stats_collector::{EventCollectorConfig, PresenceEventCollector},
     Clock, MessageBroadcaster, PasswordHasher, SystemClock,
-    stats_collector::{PresenceEventCollector, EventCollectorConfig},
 };
 use config::AppConfig;
 use infrastructure::{
-    create_pg_pool, BcryptPasswordHasher, LocalMessageBroadcaster, PgChatRoomRepository,
-    PgMessageRepository, PgRoomMemberRepository, PgUserRepository, RedisMessageBroadcaster,
-    create_event_storage, StatsAggregationService,
+    create_event_storage, create_pg_pool, BcryptPasswordHasher, LocalMessageBroadcaster,
+    PgChatRoomRepository, PgMessageRepository, PgRoomMemberRepository, PgUserRepository,
+    RedisMessageBroadcaster, StatsAggregationService,
 };
 use redis::Client as RedisClient;
 use std::sync::Arc;

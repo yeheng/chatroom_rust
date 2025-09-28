@@ -1,7 +1,7 @@
+use domain::UserId;
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 use std::time::{Duration, Instant};
-use domain::UserId;
 use time::OffsetDateTime;
 
 /// 用户消息配额
@@ -13,6 +13,12 @@ pub struct UserQuota {
     pub window_start: Instant,
     /// 最后一次发送消息的时间
     pub last_message_time: OffsetDateTime,
+}
+
+impl Default for UserQuota {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl UserQuota {
@@ -83,9 +89,11 @@ impl MessageRateLimiter {
 
     /// 检查用户是否可以发送消息
     pub fn check_message_rate(&self, user_id: UserId) -> Result<(), RateLimitError> {
-        let mut quotas = self.user_quotas.write()
+        let mut quotas = self
+            .user_quotas
+            .write()
             .map_err(|_| RateLimitError::UserBanned {
-                reason: "Internal error".to_string()
+                reason: "Internal error".to_string(),
             })?;
 
         let quota = quotas.entry(user_id).or_insert_with(UserQuota::new);
@@ -111,9 +119,11 @@ impl MessageRateLimiter {
 
     /// 检查用户连接数限制
     pub fn check_connection_limit(&self, user_id: UserId) -> Result<(), RateLimitError> {
-        let connections = self.user_connections.read()
+        let connections = self
+            .user_connections
+            .read()
             .map_err(|_| RateLimitError::UserBanned {
-                reason: "Internal error".to_string()
+                reason: "Internal error".to_string(),
             })?;
 
         if let Some(&connection_count) = connections.get(&user_id) {
@@ -132,10 +142,12 @@ impl MessageRateLimiter {
     pub fn add_connection(&self, user_id: UserId) -> Result<(), RateLimitError> {
         self.check_connection_limit(user_id)?;
 
-        let mut connections = self.user_connections.write()
-            .map_err(|_| RateLimitError::UserBanned {
-                reason: "Internal error".to_string()
-            })?;
+        let mut connections =
+            self.user_connections
+                .write()
+                .map_err(|_| RateLimitError::UserBanned {
+                    reason: "Internal error".to_string(),
+                })?;
 
         *connections.entry(user_id).or_insert(0) += 1;
         Ok(())
@@ -162,13 +174,9 @@ impl MessageRateLimiter {
         let quotas = self.user_quotas.read().ok()?;
         let connections = self.user_connections.read().ok()?;
 
-        let message_count = quotas.get(&user_id)
-            .map(|q| q.message_count)
-            .unwrap_or(0);
+        let message_count = quotas.get(&user_id).map(|q| q.message_count).unwrap_or(0);
 
-        let connection_count = connections.get(&user_id)
-            .copied()
-            .unwrap_or(0);
+        let connection_count = connections.get(&user_id).copied().unwrap_or(0);
 
         Some((message_count, connection_count))
     }
@@ -179,9 +187,7 @@ impl MessageRateLimiter {
             let now = Instant::now();
             let window_duration = self.window_duration;
 
-            quotas.retain(|_, quota| {
-                now.duration_since(quota.window_start) < window_duration * 2
-            });
+            quotas.retain(|_, quota| now.duration_since(quota.window_start) < window_duration * 2);
         }
     }
 

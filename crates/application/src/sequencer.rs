@@ -33,10 +33,17 @@ impl MessageSequencer {
 
     /// 为消息分配序列号
     /// 如果消息已存在，返回原序列号；否则分配新序列号
-    pub fn assign_sequence(&self, room_id: RoomId, message_id: MessageId) -> Result<SequencedMessage, String> {
+    pub fn assign_sequence(
+        &self,
+        room_id: RoomId,
+        message_id: MessageId,
+    ) -> Result<SequencedMessage, String> {
         // 检查是否已处理过此消息（去重）
         {
-            let processed = self.processed_messages.read().map_err(|e| format!("RwLock poisoned: {}", e))?;
+            let processed = self
+                .processed_messages
+                .read()
+                .map_err(|e| format!("RwLock poisoned: {}", e))?;
             if let Some(&existing_seq) = processed.get(&message_id) {
                 return Ok(SequencedMessage {
                     sequence_id: existing_seq,
@@ -49,7 +56,10 @@ impl MessageSequencer {
 
         // 为消息分配新的序列号
         let sequence_id = {
-            let mut sequences = self.room_sequences.write().map_err(|e| format!("RwLock poisoned: {}", e))?;
+            let mut sequences = self
+                .room_sequences
+                .write()
+                .map_err(|e| format!("RwLock poisoned: {}", e))?;
             let seq = sequences.entry(room_id).or_insert(0);
             *seq += 1;
             *seq
@@ -57,7 +67,10 @@ impl MessageSequencer {
 
         // 记录已处理的消息
         {
-            let mut processed = self.processed_messages.write().map_err(|e| format!("RwLock poisoned: {}", e))?;
+            let mut processed = self
+                .processed_messages
+                .write()
+                .map_err(|e| format!("RwLock poisoned: {}", e))?;
             processed.insert(message_id, sequence_id);
         }
 
@@ -71,19 +84,28 @@ impl MessageSequencer {
 
     /// 检查消息是否已处理（去重检查）
     pub fn is_duplicate(&self, message_id: MessageId) -> Result<bool, String> {
-        let processed = self.processed_messages.read().map_err(|e| format!("RwLock poisoned: {}", e))?;
+        let processed = self
+            .processed_messages
+            .read()
+            .map_err(|e| format!("RwLock poisoned: {}", e))?;
         Ok(processed.contains_key(&message_id))
     }
 
     /// 获取房间的当前序列号
     pub fn get_room_sequence(&self, room_id: RoomId) -> Result<u64, String> {
-        let sequences = self.room_sequences.read().map_err(|e| format!("RwLock poisoned: {}", e))?;
+        let sequences = self
+            .room_sequences
+            .read()
+            .map_err(|e| format!("RwLock poisoned: {}", e))?;
         Ok(sequences.get(&room_id).copied().unwrap_or(0))
     }
 
     /// 清理旧的已处理消息记录（防止内存泄漏）
     pub fn cleanup_old_messages(&self, max_entries: usize) -> Result<usize, String> {
-        let mut processed = self.processed_messages.write().map_err(|e| format!("RwLock poisoned: {}", e))?;
+        let mut processed = self
+            .processed_messages
+            .write()
+            .map_err(|e| format!("RwLock poisoned: {}", e))?;
 
         if processed.len() <= max_entries {
             return Ok(0);

@@ -552,6 +552,53 @@ impl MessageRepository for PgMessageRepository {
         records.into_iter().map(Message::try_from).collect()
     }
 
+    // 管理员专用：获取历史消息（包含已删除消息）
+    async fn get_admin_message_history(
+        &self,
+        room_id: RoomId,
+        before: Option<chrono::DateTime<chrono::Utc>>,
+        limit: Option<i64>,
+        include_deleted: bool,
+    ) -> Result<Vec<Message>, RepositoryError> {
+        let query = if include_deleted {
+            r#"
+            SELECT id, room_id, user_id, content, message_type, reply_to_message_id, created_at, is_deleted
+            FROM messages
+            WHERE room_id = $1 AND ($2::timestamptz IS NULL OR created_at < $2)
+            ORDER BY created_at DESC
+            LIMIT $3
+            "#
+        } else {
+            r#"
+            SELECT id, room_id, user_id, content, message_type, reply_to_message_id, created_at, is_deleted
+            FROM messages
+            WHERE room_id = $1 AND ($2::timestamptz IS NULL OR created_at < $2) AND is_deleted = FALSE
+            ORDER BY created_at DESC
+            LIMIT $3
+            "#
+        };
+
+        // 转换时间参数
+        let before_time = if let Some(timestamp) = before {
+            let timestamp_nanos = timestamp.timestamp_nanos_opt()
+                .ok_or_else(|| RepositoryError::storage("Timestamp out of range".to_string()))?;
+            Some(time::OffsetDateTime::from_unix_timestamp_nanos(timestamp_nanos as i128)
+                .map_err(|e| RepositoryError::storage_with_source("Invalid timestamp".to_string(), e))?)
+        } else {
+            None
+        };
+
+        let records = sqlx::query_as::<_, MessageRecord>(query)
+            .bind(Uuid::from(room_id))
+            .bind(before_time)
+            .bind(limit.unwrap_or(50)) // 默认限制50条
+            .fetch_all(&self.pool)
+            .await
+            .map_err(map_sqlx_err)?;
+
+        records.into_iter().map(Message::try_from).collect()
+    }
+
     // 保留原有的 create 方法实现（通过默认实现调用新方法）
     async fn create(&self, message: Message) -> Result<Message, RepositoryError> {
         let message_id = self.save_message(message.clone()).await?;

@@ -55,6 +55,15 @@ pub trait MessageRepository: Send + Sync {
         timestamp: chrono::DateTime<chrono::Utc>,
     ) -> Result<Vec<Message>, RepositoryError>;
 
+    // 管理员专用：获取历史消息（包含已删除消息）
+    async fn get_admin_message_history(
+        &self,
+        room_id: RoomId,
+        before: Option<chrono::DateTime<chrono::Utc>>,
+        limit: Option<i64>,
+        include_deleted: bool,
+    ) -> Result<Vec<Message>, RepositoryError>;
+
     // 为了向后兼容，保留原有的 create 方法
     async fn create(&self, message: Message) -> Result<Message, RepositoryError> {
         let message_id = self.save_message(message.clone()).await?;

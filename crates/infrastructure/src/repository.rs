@@ -8,11 +8,11 @@ use domain::{
     ChatRoom, ChatRoomVisibility, Message, MessageContent, MessageId, MessageType, RepositoryError,
     RoomId, RoomMember, RoomRole, User, UserEmail, UserId, UserStatus,
 };
-use sqlx::{postgres::PgPoolOptions, FromRow, PgPool};
+use sqlx::{postgres::PgPoolOptions, types::chrono, FromRow, PgPool};
 use time::OffsetDateTime;
 use uuid::Uuid;
 
-fn map_sqlx_err(err: sqlx::Error) -> RepositoryError {
+pub fn map_sqlx_err(err: sqlx::Error) -> RepositoryError {
     match err {
         sqlx::Error::RowNotFound => RepositoryError::NotFound,
         sqlx::Error::Database(ref db_err) if db_err.code().is_some_and(|code| code == "23505") => {
@@ -444,7 +444,8 @@ impl PgMessageRepository {
 
 #[async_trait]
 impl MessageRepository for PgMessageRepository {
-    async fn create(&self, message: Message) -> Result<Message, RepositoryError> {
+    // 新的核心方法：保存消息并返回消息ID
+    async fn save_message(&self, message: Message) -> Result<MessageId, RepositoryError> {
         let record = sqlx::query_as::<_, MessageRecord>(
             r#"
             INSERT INTO messages (id, room_id, user_id, content, message_type, reply_to_message_id, created_at, is_deleted)
@@ -464,7 +465,7 @@ impl MessageRepository for PgMessageRepository {
         .await
         .map_err(map_sqlx_err)?;
 
-        Message::try_from(record)
+        Ok(MessageId::from(record.id))
     }
 
     async fn find_by_id(&self, id: MessageId) -> Result<Option<Message>, RepositoryError> {
@@ -479,10 +480,11 @@ impl MessageRepository for PgMessageRepository {
         record.map(Message::try_from).transpose()
     }
 
-    async fn list_recent(
+    // 增强的获取最近消息方法
+    async fn get_recent_messages(
         &self,
         room_id: RoomId,
-        limit: u32,
+        limit: i64,
         before: Option<MessageId>,
     ) -> Result<Vec<Message>, RepositoryError> {
         let records = if let Some(before_id) = before {
@@ -490,14 +492,14 @@ impl MessageRepository for PgMessageRepository {
                 r#"
                 SELECT id, room_id, user_id, content, message_type, reply_to_message_id, created_at, is_deleted
                 FROM messages
-                WHERE room_id = $1 AND id < $2
+                WHERE room_id = $1 AND id < $2 AND is_deleted = FALSE
                 ORDER BY created_at DESC
                 LIMIT $3
                 "#,
             )
             .bind(Uuid::from(room_id))
             .bind(Uuid::from(before_id))
-            .bind(limit as i64)
+            .bind(limit)
             .fetch_all(&self.pool)
             .await
         } else {
@@ -505,19 +507,65 @@ impl MessageRepository for PgMessageRepository {
                 r#"
                 SELECT id, room_id, user_id, content, message_type, reply_to_message_id, created_at, is_deleted
                 FROM messages
-                WHERE room_id = $1
+                WHERE room_id = $1 AND is_deleted = FALSE
                 ORDER BY created_at DESC
                 LIMIT $2
                 "#,
             )
             .bind(Uuid::from(room_id))
-            .bind(limit as i64)
+            .bind(limit)
             .fetch_all(&self.pool)
             .await
         }
         .map_err(map_sqlx_err)?;
 
         records.into_iter().map(Message::try_from).collect()
+    }
+
+    // 新方法：获取指定时间之后的消息
+    async fn get_messages_since(
+        &self,
+        room_id: RoomId,
+        timestamp: chrono::DateTime<chrono::Utc>,
+    ) -> Result<Vec<Message>, RepositoryError> {
+        // 精确转换时间类型（保留纳秒精度）
+        let timestamp_nanos = timestamp.timestamp_nanos_opt()
+            .ok_or_else(|| RepositoryError::storage("Timestamp out of range".to_string()))?;
+
+        let time_offset = time::OffsetDateTime::from_unix_timestamp_nanos(timestamp_nanos as i128)
+            .map_err(|e| RepositoryError::storage_with_source("Invalid timestamp".to_string(), e))?;
+
+        let records = sqlx::query_as::<_, MessageRecord>(
+            r#"
+            SELECT id, room_id, user_id, content, message_type, reply_to_message_id, created_at, is_deleted
+            FROM messages
+            WHERE room_id = $1 AND created_at > $2 AND is_deleted = FALSE
+            ORDER BY created_at ASC
+            "#,
+        )
+        .bind(Uuid::from(room_id))
+        .bind(time_offset)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(map_sqlx_err)?;
+
+        records.into_iter().map(Message::try_from).collect()
+    }
+
+    // 保留原有的 create 方法实现（通过默认实现调用新方法）
+    async fn create(&self, message: Message) -> Result<Message, RepositoryError> {
+        let message_id = self.save_message(message.clone()).await?;
+        self.find_by_id(message_id).await?.ok_or(RepositoryError::NotFound)
+    }
+
+    // 保留原有的 list_recent 方法实现（通过默认实现调用新方法）
+    async fn list_recent(
+        &self,
+        room_id: RoomId,
+        limit: u32,
+        before: Option<MessageId>,
+    ) -> Result<Vec<Message>, RepositoryError> {
+        self.get_recent_messages(room_id, limit as i64, before).await
     }
 }
 

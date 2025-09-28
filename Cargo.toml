@@ -40,8 +40,6 @@ mockall = "0.13"
 # 密码哈希
 bcrypt = { version = "0.17" }
 
-# Kafka 消息队列
-rdkafka = { version = "0.38", features = ["cmake-build", "ssl-vendored"] }
 
 # Redis 缓存和 Pub/Sub
 redis = { version = "0.32", features = ["tokio-comp", "connection-manager"] }
@@ -74,7 +72,7 @@ reqwest = { version = "0.12", features = ["json"] }
 
 # 测试容器和工具
 testcontainers = { version = "0.25"}
-testcontainers-modules = { version = "0.13", features = ["postgres", "redis", "kafka"] }
+testcontainers-modules = { version = "0.13", features = ["postgres", "redis"] }
 wiremock = "0.6"
 futures = "0.3"
 

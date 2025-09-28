@@ -8,6 +8,7 @@ domain = { path = "../domain" }
 async-trait = { workspace = true }
 uuid = { workspace = true }
 time = { workspace = true }
+chrono = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 thiserror = { workspace = true }
 redis = { workspace = true, features = ["aio", "tokio-comp"] }

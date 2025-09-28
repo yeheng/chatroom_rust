@@ -31,3 +31,4 @@ testcontainers-modules = { workspace = true, features = ["postgres"] }
 sqlx = { workspace = true, features = ["runtime-tokio-rustls", "postgres", "uuid", "chrono", "time"] }
 uuid = { workspace = true }
 time = { workspace = true }
+chrono = { workspace = true }

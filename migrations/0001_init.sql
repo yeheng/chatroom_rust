@@ -2,10 +2,19 @@
 
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 
--- Create ENUM types
-CREATE TYPE user_status AS ENUM ('active', 'inactive', 'suspended');
-CREATE TYPE room_role AS ENUM ('owner', 'admin', 'member');
-CREATE TYPE message_type AS ENUM ('text', 'image', 'file');
+-- Create ENUM types (skip if exists - PostgreSQL doesn't support IF NOT EXISTS for types)
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'user_status') THEN
+        CREATE TYPE user_status AS ENUM ('active', 'inactive', 'suspended');
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'room_role') THEN
+        CREATE TYPE room_role AS ENUM ('owner', 'admin', 'member');
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'message_type') THEN
+        CREATE TYPE message_type AS ENUM ('text', 'image', 'file');
+    END IF;
+END$$;
 
 -- Users table
 CREATE TABLE IF NOT EXISTS users (
@@ -13,7 +22,7 @@ CREATE TABLE IF NOT EXISTS users (
     username TEXT NOT NULL UNIQUE,
     email TEXT NOT NULL UNIQUE,
     password_hash TEXT NOT NULL,
-    status TYPE user_status USING status::user_status DEFAULT 'inactive'::user_status NOT NULL,
+    status user_status DEFAULT 'inactive'::user_status NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -64,7 +73,7 @@ CREATE TABLE IF NOT EXISTS room_members (
     "role" room_role DEFAULT 'member'::room_role NOT NULL,
     joined_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     last_read_message_id UUID REFERENCES messages(id) ON DELETE SET NULL,
-    PRIMARY KEY (room_id, user_id),
+    PRIMARY KEY (room_id, user_id)
 );
 
 CREATE INDEX IF NOT EXISTS idx_room_members_user_id ON room_members(user_id);

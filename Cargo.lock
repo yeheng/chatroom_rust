@@ -1533,6 +1533,7 @@ dependencies = [
  "config",
  "domain",
  "redis",
+ "serde",
  "serde_json",
  "sqlx",
  "testcontainers",

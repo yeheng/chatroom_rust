@@ -8,11 +8,13 @@ use application::repository::{
 use application::{
     services::{ChatService, ChatServiceDependencies, UserService, UserServiceDependencies},
     Clock, MessageBroadcaster, PasswordHasher, SystemClock,
+    stats_collector::{PresenceEventCollector, EventCollectorConfig},
 };
 use config::AppConfig;
 use infrastructure::{
     create_pg_pool, BcryptPasswordHasher, LocalMessageBroadcaster, PgChatRoomRepository,
     PgMessageRepository, PgRoomMemberRepository, PgUserRepository, RedisMessageBroadcaster,
+    create_event_storage, StatsAggregationService,
 };
 use redis::Client as RedisClient;
 use std::sync::Arc;
@@ -52,7 +54,7 @@ async fn main() -> anyhow::Result<()> {
     let member_repository: Arc<dyn RoomMemberRepository> =
         Arc::new(PgRoomMemberRepository::new(pg_pool.clone()));
     let message_repository: Arc<dyn MessageRepository> =
-        Arc::new(PgMessageRepository::new(pg_pool));
+        Arc::new(PgMessageRepository::new(pg_pool.clone()));
 
     // 创建其他服务
     let password_hasher: Arc<dyn PasswordHasher> = Arc::new(BcryptPasswordHasher::default());
@@ -88,6 +90,17 @@ async fn main() -> anyhow::Result<()> {
     // 创建 JWT 服务
     let jwt_service = Arc::new(JwtService::new(config.jwt));
 
+    // 创建统计相关服务
+    let stats_service = Arc::new(StatsAggregationService::new(pg_pool.clone()));
+    let event_storage = create_event_storage(pg_pool.clone());
+    let event_collector = Arc::new(PresenceEventCollector::new(
+        event_storage.clone(),
+        EventCollectorConfig::default(),
+    ));
+
+    // 启动事件采集器
+    event_collector.start().await?;
+
     // 创建应用状态
     let state = AppState::new(
         Arc::new(user_service),
@@ -95,6 +108,9 @@ async fn main() -> anyhow::Result<()> {
         broadcaster,
         jwt_service,
         presence_manager,
+        stats_service,
+        event_storage,
+        event_collector,
     );
 
     // 启动 Web 服务器

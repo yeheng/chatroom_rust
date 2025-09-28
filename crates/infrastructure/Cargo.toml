@@ -16,6 +16,7 @@ thiserror = { workspace = true }
 tracing = { workspace = true }
 bcrypt = { workspace = true }
 redis = { workspace = true }  # 添加 Redis 支持
+serde = { workspace = true }  # 用于序列化
 serde_json = { workspace = true }  # 用于消息序列化
 tokio-stream = "0.1"  # 用于异步流处理
 async-stream = "0.3"  # 用于创建异步流

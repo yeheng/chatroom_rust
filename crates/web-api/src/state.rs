@@ -1,6 +1,10 @@
 use std::sync::Arc;
 
-use application::{ChatService, MessageBroadcaster, PresenceManager, UserService};
+use application::{
+    ChatService, MessageBroadcaster, PresenceManager, UserService,
+    PresenceEventCollector, stats_collector::EventStorage,
+};
+use infrastructure::StatsAggregationService;
 
 use crate::JwtService;
 
@@ -11,6 +15,9 @@ pub struct AppState {
     pub broadcaster: Arc<dyn MessageBroadcaster>,
     pub jwt_service: Arc<JwtService>,
     pub presence_manager: Arc<dyn PresenceManager>,
+    pub stats_service: Arc<StatsAggregationService>,
+    pub event_storage: Arc<dyn EventStorage>,
+    pub event_collector: Arc<PresenceEventCollector>,
 }
 
 impl AppState {
@@ -20,6 +27,9 @@ impl AppState {
         broadcaster: Arc<dyn MessageBroadcaster>,
         jwt_service: Arc<JwtService>,
         presence_manager: Arc<dyn PresenceManager>,
+        stats_service: Arc<StatsAggregationService>,
+        event_storage: Arc<dyn EventStorage>,
+        event_collector: Arc<PresenceEventCollector>,
     ) -> Self {
         Self {
             user_service,
@@ -27,6 +37,9 @@ impl AppState {
             broadcaster,
             jwt_service,
             presence_manager,
+            stats_service,
+            event_storage,
+            event_collector,
         }
     }
 }

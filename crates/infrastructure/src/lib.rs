@@ -8,7 +8,9 @@ pub mod delivery;
 pub mod fallback_broadcaster;
 pub mod migrations;
 pub mod password;
+pub mod presence_storage;
 pub mod repository;
+pub mod stats_aggregation;
 
 pub use broadcast::{LocalMessageBroadcaster, RedisMessageBroadcaster, RedisMessageStream};
 pub use builder::{Infrastructure, InfrastructureError};
@@ -16,7 +18,11 @@ pub use delivery::PgDeliveryTracker;
 pub use fallback_broadcaster::{FallbackBroadcaster, HealthChecker};
 pub use migrations::MIGRATOR;
 pub use password::BcryptPasswordHasher;
+pub use presence_storage::{create_event_storage, PgEventStorage};
 pub use repository::{
     create_pg_pool, PgChatRoomRepository, PgMessageRepository, PgRoomMemberRepository, PgStorage,
     PgUserRepository,
+};
+pub use stats_aggregation::{
+    OnlineStatsSummary, RoomStats, StatsAggregationService, StatsQuery, TimeGranularity,
 };

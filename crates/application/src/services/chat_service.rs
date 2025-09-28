@@ -254,10 +254,7 @@ impl ChatService {
 
         self.deps
             .broadcaster
-            .broadcast(MessageBroadcast {
-                room_id,
-                message: stored.clone(),
-            })
+            .broadcast(MessageBroadcast::chat(room_id, stored.clone()))
             .await?;
 
         Ok(stored)

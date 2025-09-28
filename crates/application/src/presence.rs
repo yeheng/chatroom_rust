@@ -1,8 +1,54 @@
 use std::sync::Arc;
 use uuid::Uuid;
+use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use tokio::sync::RwLock;
+use std::time::{Duration, Instant};
 
 use crate::error::ApplicationError;
 use domain::{RoomId, UserId};
+
+/// 实时在线统计数据
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OnlineStats {
+    pub room_id: RoomId,
+    pub online_count: u64,
+    pub timestamp: DateTime<Utc>,
+}
+
+/// 用户状态变化事件类型
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "sqlx", derive(sqlx::Type))]
+#[cfg_attr(feature = "sqlx", sqlx(type_name = "presence_event_type", rename_all = "PascalCase"))]
+pub enum PresenceEventType {
+    Connected,
+    Disconnected,
+    Heartbeat,  // 用于检测僵尸连接
+}
+
+impl std::fmt::Display for PresenceEventType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            PresenceEventType::Connected => write!(f, "Connected"),
+            PresenceEventType::Disconnected => write!(f, "Disconnected"),
+            PresenceEventType::Heartbeat => write!(f, "Heartbeat"),
+        }
+    }
+}
+
+/// 用户状态变化事件（用于历史数据采集）
+#[derive(Debug, Clone)]
+pub struct UserPresenceEvent {
+    pub event_id: Uuid,
+    pub user_id: UserId,
+    pub room_id: RoomId,
+    pub event_type: PresenceEventType,
+    pub timestamp: DateTime<Utc>,
+    pub session_id: Uuid,  // 用于计算在线时长
+    pub user_ip: Option<String>,
+    pub user_agent: Option<String>,
+}
 
 /// 在线状态管理器trait
 /// 使用Redis Set来跟踪每个房间的在线用户
@@ -37,16 +83,49 @@ pub trait PresenceManager: Send + Sync {
 
     /// 清理用户的所有在线状态（用户完全断开时）
     async fn cleanup_user_presence(&self, user_id: UserId) -> Result<(), ApplicationError>;
+
+    // === 在线统计功能扩展 ===
+
+    /// 获取房间在线用户数量
+    async fn get_online_count(&self, room_id: RoomId) -> Result<u64, ApplicationError>;
+
+    /// 获取房间实时统计信息
+    async fn get_online_stats(&self, room_id: RoomId) -> Result<OnlineStats, ApplicationError>;
+
+    /// 记录用户状态变化事件（用于历史数据采集）
+    async fn record_presence_event(&self, event: UserPresenceEvent) -> Result<(), ApplicationError>;
+}
+
+/// 统计缓存项
+#[derive(Debug, Clone)]
+struct CachedStats {
+    stats: OnlineStats,
+    cached_at: Instant,
 }
 
 /// Redis实现的在线状态管理器
 pub struct RedisPresenceManager {
     redis_client: Arc<redis::Client>,
+    /// 内存缓存，避免频繁Redis查询（5秒缓存）
+    stats_cache: Arc<RwLock<HashMap<RoomId, CachedStats>>>,
+    cache_ttl: Duration,
 }
 
 impl RedisPresenceManager {
     pub fn new(redis_client: Arc<redis::Client>) -> Self {
-        Self { redis_client }
+        Self {
+            redis_client,
+            stats_cache: Arc::new(RwLock::new(HashMap::new())),
+            cache_ttl: Duration::from_secs(5),
+        }
+    }
+
+    pub fn with_cache_ttl(redis_client: Arc<redis::Client>, cache_ttl: Duration) -> Self {
+        Self {
+            redis_client,
+            stats_cache: Arc::new(RwLock::new(HashMap::new())),
+            cache_ttl,
+        }
     }
 
     /// 生成房间在线用户集合的Redis键
@@ -68,6 +147,32 @@ impl RedisPresenceManager {
                 let message = format!("Redis connection failed: {e}");
                 ApplicationError::infrastructure_with_source(message, e)
             })
+    }
+
+    /// 清除房间统计缓存
+    async fn invalidate_cache(&self, room_id: RoomId) {
+        let mut cache = self.stats_cache.write().await;
+        cache.remove(&room_id);
+    }
+
+    /// 从缓存获取统计信息，如果缓存过期则返回None
+    async fn get_cached_stats(&self, room_id: RoomId) -> Option<OnlineStats> {
+        let cache = self.stats_cache.read().await;
+        if let Some(cached) = cache.get(&room_id) {
+            if cached.cached_at.elapsed() < self.cache_ttl {
+                return Some(cached.stats.clone());
+            }
+        }
+        None
+    }
+
+    /// 更新统计缓存
+    async fn update_cache(&self, room_id: RoomId, stats: OnlineStats) {
+        let mut cache = self.stats_cache.write().await;
+        cache.insert(room_id, CachedStats {
+            stats,
+            cached_at: Instant::now(),
+        });
     }
 }
 
@@ -101,6 +206,9 @@ impl PresenceManager for RedisPresenceManager {
             "用户连接到房间"
         );
 
+        // 清除统计缓存，因为在线人数发生了变化
+        self.invalidate_cache(room_id).await;
+
         Ok(())
     }
 
@@ -129,6 +237,9 @@ impl PresenceManager for RedisPresenceManager {
             user_id = %user_id,
             "用户从房间断开"
         );
+
+        // 清除统计缓存，因为在线人数发生了变化
+        self.invalidate_cache(room_id).await;
 
         Ok(())
     }
@@ -243,6 +354,57 @@ impl PresenceManager for RedisPresenceManager {
 
         Ok(())
     }
+
+    // === 在线统计功能实现 ===
+
+    async fn get_online_count(&self, room_id: RoomId) -> Result<u64, ApplicationError> {
+        let mut conn = self.get_connection().await?;
+        let room_key = self.room_online_key(room_id);
+
+        let count: u64 = redis::cmd("SCARD")
+            .arg(&room_key)
+            .query_async(&mut conn)
+            .await
+            .map_err(|e| {
+                let message = format!("Redis operation failed: {e}");
+                ApplicationError::infrastructure_with_source(message, e)
+            })?;
+
+        Ok(count)
+    }
+
+    async fn get_online_stats(&self, room_id: RoomId) -> Result<OnlineStats, ApplicationError> {
+        // 先检查缓存
+        if let Some(cached_stats) = self.get_cached_stats(room_id).await {
+            return Ok(cached_stats);
+        }
+
+        // 缓存未命中，从Redis查询
+        let count = self.get_online_count(room_id).await?;
+        let stats = OnlineStats {
+            room_id,
+            online_count: count,
+            timestamp: Utc::now(),
+        };
+
+        // 更新缓存
+        self.update_cache(room_id, stats.clone()).await;
+
+        Ok(stats)
+    }
+
+    async fn record_presence_event(&self, event: UserPresenceEvent) -> Result<(), ApplicationError> {
+        // 暂时只记录日志，后续会添加数据库写入
+        tracing::info!(
+            event_id = %event.event_id,
+            user_id = %event.user_id,
+            room_id = %event.room_id,
+            event_type = %event.event_type,
+            session_id = %event.session_id,
+            "记录用户状态变化事件"
+        );
+        Ok(())
+    }
 }
 
 /// 内存实现的在线状态管理器（用于测试）
@@ -350,6 +512,39 @@ pub mod memory {
                 self.user_disconnected(room_id, user_id).await?;
             }
 
+            Ok(())
+        }
+
+        // === 在线统计功能实现 ===
+
+        async fn get_online_count(&self, room_id: RoomId) -> Result<u64, ApplicationError> {
+            let room_users = self.room_users.read().await;
+            let count = room_users
+                .get(&room_id)
+                .map(|users| users.len() as u64)
+                .unwrap_or(0);
+            Ok(count)
+        }
+
+        async fn get_online_stats(&self, room_id: RoomId) -> Result<OnlineStats, ApplicationError> {
+            let count = self.get_online_count(room_id).await?;
+            Ok(OnlineStats {
+                room_id,
+                online_count: count,
+                timestamp: Utc::now(),
+            })
+        }
+
+        async fn record_presence_event(&self, event: UserPresenceEvent) -> Result<(), ApplicationError> {
+            // 内存实现只记录日志
+            tracing::info!(
+                event_id = %event.event_id,
+                user_id = %event.user_id,
+                room_id = %event.room_id,
+                event_type = %event.event_type,
+                session_id = %event.session_id,
+                "记录用户状态变化事件（内存实现）"
+            );
             Ok(())
         }
     }

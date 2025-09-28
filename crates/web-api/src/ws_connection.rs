@@ -5,6 +5,7 @@ use domain::{RoomId, UserId};
 use futures_util::{SinkExt, StreamExt};
 use tokio::sync::mpsc;
 use uuid::Uuid;
+use application::MessageBroadcast;
 
 /// WebSocket 连接管理器
 ///
@@ -83,6 +84,25 @@ impl WebSocketConnection {
         })
     }
 
+    /// 广播统计更新到房间
+    pub async fn broadcast_stats_update(
+        state: &AppState,
+        room_id: RoomId,
+    ) -> Result<(), ApiError> {
+        match state.presence_manager.get_online_stats(room_id).await {
+            Ok(stats) => {
+                let broadcast = MessageBroadcast::stats(room_id, stats);
+                if let Err(err) = state.broadcaster.broadcast(broadcast).await {
+                    tracing::warn!(error = %err, "Failed to broadcast stats update");
+                }
+            }
+            Err(err) => {
+                tracing::warn!(error = %err, "Failed to get online stats");
+            }
+        }
+        Ok(())
+    }
+
     /// 运行 WebSocket 连接的主循环
     ///
     /// 这是连接的核心逻辑，处理：
@@ -97,6 +117,17 @@ impl WebSocketConnection {
             .expect("Message stream should be available");
 
         let (mut sender, mut incoming) = socket.split();
+
+        // 广播用户连接的统计更新
+        tokio::spawn({
+            let state = self.state.clone();
+            let room_id = self.room_id;
+            async move {
+                if let Err(err) = Self::broadcast_stats_update(&state, room_id).await {
+                    tracing::warn!(error = ?err, "Failed to broadcast connection stats");
+                }
+            }
+        });
 
         // 创建 mpsc channel 来解耦对 sender 的访问
         let (cmd_tx, mut cmd_rx) = mpsc::channel::<WsCommand>(32);
@@ -174,6 +205,17 @@ impl WebSocketConnection {
         {
             tracing::error!(error = %err, user_id = %self.user_id, room_id = %self.room_id, "Failed to cleanup user presence");
         }
+
+        // 广播用户断开的统计更新
+        tokio::spawn({
+            let state = self.state.clone();
+            let room_id = self.room_id;
+            async move {
+                if let Err(err) = Self::broadcast_stats_update(&state, room_id).await {
+                    tracing::warn!(error = ?err, "Failed to broadcast disconnection stats");
+                }
+            }
+        });
 
         tracing::info!(user_id = %self.user_id, room_id = %self.room_id, "WebSocket连接已断开，在线状态已清理");
     }

@@ -34,6 +34,10 @@ impl ApiError {
         Self::new(StatusCode::UNAUTHORIZED, "UNAUTHORIZED", message)
     }
 
+    pub fn bad_request(message: impl Into<String>) -> Self {
+        Self::new(StatusCode::BAD_REQUEST, "BAD_REQUEST", message)
+    }
+
     pub fn internal_server_error(message: impl Into<String>) -> Self {
         Self::new(StatusCode::INTERNAL_SERVER_ERROR, "INTERNAL_ERROR", message)
     }

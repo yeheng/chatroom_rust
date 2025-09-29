@@ -250,7 +250,15 @@ impl ChatService {
             now,
         )?;
 
-        let stored = self.deps.message_repository.create(message).await?;
+        let message_id = self.deps.message_repository.create(message.clone()).await?;
+
+        // 获取保存后的完整消息对象
+        let stored = self
+            .deps
+            .message_repository
+            .find_by_id(message_id)
+            .await?
+            .ok_or(domain::DomainError::MessageNotFound)?;
 
         self.deps
             .broadcaster
@@ -430,5 +438,17 @@ impl ChatService {
         // 删除房间（这会级联删除成员和消息）
         self.deps.room_repository.delete(room_id).await?;
         Ok(())
+    }
+
+    /// 获取用户在房间中的角色（用于权限检查）
+    pub async fn get_user_role_in_room(
+        &self,
+        room_id: RoomId,
+        user_id: UserId,
+    ) -> Result<Option<RoomRole>, ApplicationError> {
+        match self.deps.member_repository.find(room_id, user_id).await? {
+            Some(member) => Ok(Some(member.role)),
+            None => Ok(None),
+        }
     }
 }

@@ -7,7 +7,6 @@ pub mod broadcaster;
 pub mod clock;
 pub mod delivery;
 pub mod error;
-pub mod event_storage;
 pub mod password;
 pub mod presence;
 pub mod rate_limiter;
@@ -19,7 +18,6 @@ pub use broadcaster::{MessageBroadcast, MessageBroadcaster, MessageStream, WebSo
 pub use clock::{Clock, SystemClock};
 pub use delivery::DeliveryTracker;
 pub use error::ApplicationError;
-pub use event_storage::EventStorage;
 pub use password::{PasswordHasher, PasswordHasherError};
 pub use presence::{
     OnlineStats, PresenceEventType, PresenceManager, RedisPresenceManager, UserPresenceEvent,

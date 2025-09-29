@@ -101,26 +101,65 @@ fn parse_granularity(granularity_str: &str) -> Result<TimeGranularity, ApiError>
 }
 
 /// 验证管理员权限
-/// 简化实现：检查用户是否为房间所有者或系统管理员
+///
+/// 权限规则：
+/// 1. 系统管理员（is_superuser = true）可以访问所有统计信息
+/// 2. 对于房间级统计，只有房间的 Owner 或 Admin 可以访问
+/// 3. 对于全局统计，只有系统管理员可以访问
 async fn verify_admin_access(
-    _state: &AppState,
-    _user_id: Uuid,
+    state: &AppState,
+    user_id: Uuid,
     room_id: Option<Uuid>,
 ) -> Result<(), ApiError> {
-    // 简化实现：假设所有认证用户都可以查看统计（生产环境应该有更严格的权限控制）
-    // 实际实现中应该：
-    // 1. 检查用户是否为系统管理员
-    // 2. 如果指定了房间ID，检查用户是否为房间所有者
-    // 3. 查询用户角色和权限
+    use domain::{RoomId, UserId};
 
-    // 这里我们使用简化的权限检查
-    if let Some(_room_id) = room_id {
-        // 检查用户是否为房间成员（简化权限检查）
-        // 实际应该检查是否为房间所有者或管理员
+    let user_id = UserId::from(user_id);
+
+    // 首先检查用户是否为系统管理员
+    let user = state
+        .user_service
+        .find_user_by_id(user_id)
+        .await
+        .map_err(|err| ApiError::internal_server_error(format!("Failed to find user: {}", err)))?
+        .ok_or_else(|| ApiError::forbidden("User not found"))?;
+
+    // 系统管理员可以访问所有统计信息
+    if user.is_system_admin() {
+        return Ok(());
     }
 
-    // 暂时允许所有认证用户访问（仅用于演示）
-    Ok(())
+    // 如果指定了房间ID，检查用户在该房间的权限
+    if let Some(room_id) = room_id {
+        let room_id = RoomId::from(room_id);
+
+        // 获取用户在房间中的角色
+        let role = state
+            .chat_service
+            .get_user_role_in_room(room_id, user_id)
+            .await
+            .map_err(|err| {
+                ApiError::internal_server_error(format!("Failed to get user role: {}", err))
+            })?;
+
+        match role {
+            Some(room_role) => {
+                // 只有房间 Owner 或 Admin 才能访问房间统计
+                if room_role.has_admin_access() {
+                    Ok(())
+                } else {
+                    Err(ApiError::forbidden(
+                        "Only room owners and admins can access room statistics",
+                    ))
+                }
+            }
+            None => Err(ApiError::forbidden("User is not a member of this room")),
+        }
+    } else {
+        // 全局统计只有系统管理员可以访问
+        Err(ApiError::forbidden(
+            "Only system administrators can access global statistics",
+        ))
+    }
 }
 
 /// 获取房间统计数据
@@ -257,38 +296,16 @@ async fn get_event_metrics(
     let user_id = state.jwt_service.extract_user_from_headers(&headers)?;
     verify_admin_access(&state, user_id, None).await?;
 
-    // 获取事件存储指标
-    let total_events = state.event_storage.get_event_count().await.map_err(|err| {
-        ApiError::internal_server_error(format!("Failed to get event count: {}", err))
-    })?;
-
-    let now = Utc::now();
-    let one_hour_ago = now - chrono::Duration::hours(1);
-    let one_day_ago = now - chrono::Duration::days(1);
-
-    let events_in_last_hour = state
-        .event_storage
-        .get_event_count_in_range(one_hour_ago, now)
-        .await
-        .map_err(|err| {
-            ApiError::internal_server_error(format!("Failed to get hourly event count: {}", err))
-        })?;
-
-    let events_in_last_day = state
-        .event_storage
-        .get_event_count_in_range(one_day_ago, now)
-        .await
-        .map_err(|err| {
-            ApiError::internal_server_error(format!("Failed to get daily event count: {}", err))
-        })?;
+    // 注意：事件处理现在由独立的 stats-consumer 服务完成
+    // 这里返回模拟数据以保持 API 兼容性
 
     // 获取队列状态（现在返回独立服务的虚拟状态）
     let queue_status = state.get_event_collector_status();
 
     let response = EventMetricsResponse {
-        total_events,
-        events_in_last_hour,
-        events_in_last_day,
+        total_events: 0,        // 主应用不再知道总事件数
+        events_in_last_hour: 0, // 独立服务处理
+        events_in_last_day: 0,  // 独立服务处理
         queue_status: QueueStatusResponse {
             queue_size: queue_status.queue_size,
             max_queue_size: queue_status.max_queue_size,

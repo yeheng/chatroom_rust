@@ -1,10 +1,8 @@
-use std::sync::Arc;
-
-use application::{ApplicationError, EventStorage, UserPresenceEvent};
+use application::{ApplicationError, UserPresenceEvent};
 use async_trait::async_trait;
 use sqlx::{types::chrono, PgPool, Row};
 
-use crate::repository::map_sqlx_err;
+use crate::event_storage::EventStorage;
 
 /// PostgreSQL事件存储实现
 /// 实现EventStorage trait，负责将用户状态事件批量插入数据库
@@ -29,6 +27,10 @@ impl PgEventStorage {
             })?;
         Ok(())
     }
+}
+
+fn map_sqlx_err(err: sqlx::Error) -> ApplicationError {
+    ApplicationError::infrastructure_with_source("Database operation failed".to_string(), err)
 }
 
 #[async_trait]
@@ -103,25 +105,6 @@ impl EventStorage for PgEventStorage {
 }
 
 /// 为基础设施构建器添加事件存储支持
-pub fn create_event_storage(pool: PgPool) -> Arc<dyn application::EventStorage> {
-    Arc::new(PgEventStorage::new(pool))
-}
-
-#[cfg(test)]
-mod tests {
-    // 这里可以添加单元测试
-    // 需要测试环境数据库连接才能运行实际测试
-
-    #[tokio::test]
-    #[ignore] // 需要数据库连接
-    async fn test_insert_events() {
-        // 测试批量插入事件
-        // 实际测试需要数据库连接和迁移
-    }
-
-    #[tokio::test]
-    #[ignore] // 需要数据库连接
-    async fn test_health_check() {
-        // 测试健康检查
-    }
+pub fn create_event_storage(pool: PgPool) -> PgEventStorage {
+    PgEventStorage::new(pool)
 }

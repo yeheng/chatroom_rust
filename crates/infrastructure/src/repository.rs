@@ -1,7 +1,8 @@
 use std::sync::Arc;
 
 use application::repository::{
-    ChatRoomRepository, MessageRepository, RoomMemberRepository, UserRepository,
+    ChatRoomRepository, MessageRepository, PaginationParams, RoomMemberRepository, TimeRangeParams,
+    UserRepository,
 };
 use async_trait::async_trait;
 use domain::{
@@ -63,6 +64,7 @@ struct UserRecord {
     email: String,
     password_hash: String,
     status: UserStatus,
+    is_superuser: bool,
     created_at: OffsetDateTime,
     updated_at: OffsetDateTime,
 }
@@ -81,6 +83,7 @@ impl TryFrom<UserRecord> for User {
             email,
             password,
             status: value.status,
+            is_superuser: value.is_superuser,
             created_at: value.created_at,
             updated_at: value.updated_at,
         })
@@ -103,9 +106,9 @@ impl UserRepository for PgUserRepository {
     async fn create(&self, user: User) -> Result<User, RepositoryError> {
         let record = sqlx::query_as::<_, UserRecord>(
             r#"
-            INSERT INTO users (id, username, email, password_hash, status, created_at, updated_at)
-            VALUES ($1, $2, $3, $4, $5, $6, $7)
-            RETURNING id, username, email, password_hash, status, created_at, updated_at
+            INSERT INTO users (id, username, email, password_hash, status, is_superuser, created_at, updated_at)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+            RETURNING id, username, email, password_hash, status, is_superuser, created_at, updated_at
             "#,
         )
         .bind(Uuid::from(user.id))
@@ -113,6 +116,7 @@ impl UserRepository for PgUserRepository {
         .bind(user.email.as_str())
         .bind(user.password.as_str())
         .bind(&user.status)
+        .bind(user.is_superuser)
         .bind(user.created_at)
         .bind(user.updated_at)
         .fetch_one(&self.pool)
@@ -126,9 +130,9 @@ impl UserRepository for PgUserRepository {
         let record = sqlx::query_as::<_, UserRecord>(
             r#"
             UPDATE users
-            SET username = $2, email = $3, password_hash = $4, status = $5, updated_at = $6
+            SET username = $2, email = $3, password_hash = $4, status = $5, is_superuser = $6, updated_at = $7
             WHERE id = $1
-            RETURNING id, username, email, password_hash, status, created_at, updated_at
+            RETURNING id, username, email, password_hash, status, is_superuser, created_at, updated_at
             "#,
         )
         .bind(Uuid::from(user.id))
@@ -136,6 +140,7 @@ impl UserRepository for PgUserRepository {
         .bind(user.email.as_str())
         .bind(user.password.as_str())
         .bind(&user.status)
+        .bind(user.is_superuser)
         .bind(user.updated_at)
         .fetch_one(&self.pool)
         .await
@@ -146,7 +151,7 @@ impl UserRepository for PgUserRepository {
 
     async fn find_by_id(&self, id: UserId) -> Result<Option<User>, RepositoryError> {
         let record = sqlx::query_as::<_, UserRecord>(
-            r#"SELECT id, username, email, password_hash, status, created_at, updated_at FROM users WHERE id = $1"#,
+            r#"SELECT id, username, email, password_hash, status, is_superuser, created_at, updated_at FROM users WHERE id = $1"#,
         )
         .bind(Uuid::from(id))
         .fetch_optional(&self.pool)
@@ -158,7 +163,7 @@ impl UserRepository for PgUserRepository {
 
     async fn find_by_email(&self, email: UserEmail) -> Result<Option<User>, RepositoryError> {
         let record = sqlx::query_as::<_, UserRecord>(
-            r#"SELECT id, username, email, password_hash, status, created_at, updated_at FROM users WHERE email = $1"#,
+            r#"SELECT id, username, email, password_hash, status, is_superuser, created_at, updated_at FROM users WHERE email = $1"#,
         )
         .bind(email.as_str())
         .fetch_optional(&self.pool)
@@ -288,7 +293,7 @@ impl ChatRoomRepository for PgChatRoomRepository {
         Ok(())
     }
 
-    async fn list_by_owner(&self, owner_id: UserId) -> Result<Vec<ChatRoom>, RepositoryError> {
+    async fn find_by_owner(&self, owner_id: UserId) -> Result<Vec<ChatRoom>, RepositoryError> {
         let records = sqlx::query_as::<_, RoomRecord>(
             r#"SELECT id, name, owner_id, is_private, password_hash, created_at, updated_at, is_closed FROM chat_rooms WHERE owner_id = $1"#,
         )
@@ -299,6 +304,9 @@ impl ChatRoomRepository for PgChatRoomRepository {
 
         records.into_iter().map(ChatRoom::try_from).collect()
     }
+
+    // === 向后兼容方法 ===
+    // 注意：向后兼容方法已移动到 trait 的默认实现中
 }
 
 #[derive(Debug, FromRow)]
@@ -357,7 +365,7 @@ impl RoomMemberRepository for PgRoomMemberRepository {
         Ok(RoomMember::from(record))
     }
 
-    async fn find(
+    async fn find_member(
         &self,
         room_id: RoomId,
         user_id: UserId,
@@ -374,7 +382,7 @@ impl RoomMemberRepository for PgRoomMemberRepository {
         Ok(record.map(RoomMember::from))
     }
 
-    async fn remove(&self, room_id: RoomId, user_id: UserId) -> Result<(), RepositoryError> {
+    async fn delete_member(&self, room_id: RoomId, user_id: UserId) -> Result<(), RepositoryError> {
         sqlx::query("DELETE FROM room_members WHERE room_id = $1 AND user_id = $2")
             .bind(Uuid::from(room_id))
             .bind(Uuid::from(user_id))
@@ -385,7 +393,7 @@ impl RoomMemberRepository for PgRoomMemberRepository {
         Ok(())
     }
 
-    async fn list_members(&self, room_id: RoomId) -> Result<Vec<RoomMember>, RepositoryError> {
+    async fn find_by_room(&self, room_id: RoomId) -> Result<Vec<RoomMember>, RepositoryError> {
         let records = sqlx::query_as::<_, MemberRecord>(
             r#"SELECT room_id, user_id, role, joined_at, last_read_message_id FROM room_members WHERE room_id = $1"#,
         )
@@ -396,6 +404,9 @@ impl RoomMemberRepository for PgRoomMemberRepository {
 
         Ok(records.into_iter().map(RoomMember::from).collect())
     }
+
+    // === 向后兼容方法 ===
+    // 注意：向后兼容方法已移动到 trait 的默认实现中
 }
 
 #[derive(Debug, FromRow)]
@@ -444,7 +455,7 @@ impl PgMessageRepository {
 #[async_trait]
 impl MessageRepository for PgMessageRepository {
     // 新的核心方法：保存消息并返回消息ID
-    async fn save_message(&self, message: Message) -> Result<MessageId, RepositoryError> {
+    async fn create(&self, message: Message) -> Result<MessageId, RepositoryError> {
         let record = sqlx::query_as::<_, MessageRecord>(
             r#"
             INSERT INTO messages (id, room_id, user_id, content, message_type, reply_to_message_id, created_at, is_deleted)
@@ -480,10 +491,10 @@ impl MessageRepository for PgMessageRepository {
     }
 
     // 增强的获取最近消息方法
-    async fn get_recent_messages(
+    async fn find_recent_by_room(
         &self,
         room_id: RoomId,
-        limit: i64,
+        pagination: PaginationParams,
         before: Option<MessageId>,
     ) -> Result<Vec<Message>, RepositoryError> {
         let records = if let Some(before_id) = before {
@@ -498,7 +509,7 @@ impl MessageRepository for PgMessageRepository {
             )
             .bind(Uuid::from(room_id))
             .bind(Uuid::from(before_id))
-            .bind(limit)
+            .bind(pagination.limit)
             .fetch_all(&self.pool)
             .await
         } else {
@@ -512,7 +523,7 @@ impl MessageRepository for PgMessageRepository {
                 "#,
             )
             .bind(Uuid::from(room_id))
-            .bind(limit)
+            .bind(pagination.limit)
             .fetch_all(&self.pool)
             .await
         }
@@ -522,7 +533,7 @@ impl MessageRepository for PgMessageRepository {
     }
 
     // 新方法：获取指定时间之后的消息
-    async fn get_messages_since(
+    async fn find_since_timestamp(
         &self,
         room_id: RoomId,
         timestamp: chrono::DateTime<chrono::Utc>,
@@ -554,40 +565,64 @@ impl MessageRepository for PgMessageRepository {
         records.into_iter().map(Message::try_from).collect()
     }
 
-    // 管理员专用：获取历史消息（包含已删除消息）
-    async fn get_admin_message_history(
+    // 管理员专用：按时间范围获取历史消息（包含已删除消息）
+    async fn find_by_time_range(
         &self,
         room_id: RoomId,
-        before: Option<chrono::DateTime<chrono::Utc>>,
-        limit: Option<i64>,
-        include_deleted: bool,
+        time_range: TimeRangeParams,
+        pagination: PaginationParams,
     ) -> Result<Vec<Message>, RepositoryError> {
-        let query = if include_deleted {
+        let query = if time_range.include_deleted {
             r#"
             SELECT id, room_id, user_id, content, message_type, reply_to_message_id, created_at, is_deleted
             FROM messages
-            WHERE room_id = $1 AND ($2::timestamptz IS NULL OR created_at < $2)
+            WHERE room_id = $1
+                AND ($2::timestamptz IS NULL OR created_at >= $2)
+                AND ($3::timestamptz IS NULL OR created_at <= $3)
             ORDER BY created_at DESC
-            LIMIT $3
+            LIMIT $4
             "#
         } else {
             r#"
             SELECT id, room_id, user_id, content, message_type, reply_to_message_id, created_at, is_deleted
             FROM messages
-            WHERE room_id = $1 AND ($2::timestamptz IS NULL OR created_at < $2) AND is_deleted = FALSE
+            WHERE room_id = $1
+                AND ($2::timestamptz IS NULL OR created_at >= $2)
+                AND ($3::timestamptz IS NULL OR created_at <= $3)
+                AND is_deleted = FALSE
             ORDER BY created_at DESC
-            LIMIT $3
+            LIMIT $4
             "#
         };
 
         // 转换时间参数
-        let before_time = if let Some(timestamp) = before {
-            let timestamp_nanos = timestamp
-                .timestamp_nanos_opt()
-                .ok_or_else(|| RepositoryError::storage("Timestamp out of range".to_string()))?;
+        let start_time = if let Some(timestamp) = time_range.start {
+            let timestamp_nanos = timestamp.timestamp_nanos_opt().ok_or_else(|| {
+                RepositoryError::storage("Start timestamp out of range".to_string())
+            })?;
             Some(
                 time::OffsetDateTime::from_unix_timestamp_nanos(timestamp_nanos as i128).map_err(
-                    |e| RepositoryError::storage_with_source("Invalid timestamp".to_string(), e),
+                    |e| {
+                        RepositoryError::storage_with_source(
+                            "Invalid start timestamp".to_string(),
+                            e,
+                        )
+                    },
+                )?,
+            )
+        } else {
+            None
+        };
+
+        let end_time = if let Some(timestamp) = time_range.end {
+            let timestamp_nanos = timestamp.timestamp_nanos_opt().ok_or_else(|| {
+                RepositoryError::storage("End timestamp out of range".to_string())
+            })?;
+            Some(
+                time::OffsetDateTime::from_unix_timestamp_nanos(timestamp_nanos as i128).map_err(
+                    |e| {
+                        RepositoryError::storage_with_source("Invalid end timestamp".to_string(), e)
+                    },
                 )?,
             )
         } else {
@@ -596,8 +631,9 @@ impl MessageRepository for PgMessageRepository {
 
         let records = sqlx::query_as::<_, MessageRecord>(query)
             .bind(Uuid::from(room_id))
-            .bind(before_time)
-            .bind(limit.unwrap_or(50)) // 默认限制50条
+            .bind(start_time)
+            .bind(end_time)
+            .bind(pagination.limit)
             .fetch_all(&self.pool)
             .await
             .map_err(map_sqlx_err)?;
@@ -605,24 +641,8 @@ impl MessageRepository for PgMessageRepository {
         records.into_iter().map(Message::try_from).collect()
     }
 
-    // 保留原有的 create 方法实现（通过默认实现调用新方法）
-    async fn create(&self, message: Message) -> Result<Message, RepositoryError> {
-        let message_id = self.save_message(message.clone()).await?;
-        self.find_by_id(message_id)
-            .await?
-            .ok_or(RepositoryError::NotFound)
-    }
-
-    // 保留原有的 list_recent 方法实现（通过默认实现调用新方法）
-    async fn list_recent(
-        &self,
-        room_id: RoomId,
-        limit: u32,
-        before: Option<MessageId>,
-    ) -> Result<Vec<Message>, RepositoryError> {
-        self.get_recent_messages(room_id, limit as i64, before)
-            .await
-    }
+    // === 向后兼容方法 ===
+    // 注意：向后兼容方法已移动到 trait 的默认实现中
 }
 
 pub async fn create_pg_pool(

@@ -5,7 +5,8 @@ members = [
     "crates/config",
     "crates/web-api",
     "crates/main",
-    "crates/stats-aggregator"
+    "crates/stats-aggregator",
+    "crates/stats-consumer"
 ]
 
 resolver = "2"

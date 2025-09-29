@@ -41,6 +41,10 @@ impl ApiError {
     pub fn internal_server_error(message: impl Into<String>) -> Self {
         Self::new(StatusCode::INTERNAL_SERVER_ERROR, "INTERNAL_ERROR", message)
     }
+
+    pub fn forbidden(message: impl Into<String>) -> Self {
+        Self::new(StatusCode::FORBIDDEN, "FORBIDDEN", message)
+    }
 }
 
 impl From<ApplicationError> for ApiError {

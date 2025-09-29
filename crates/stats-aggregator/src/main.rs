@@ -257,7 +257,7 @@ async fn main() -> Result<()> {
     info!("启动统计聚合服务");
 
     // 加载配置
-    let config = AppConfig::from_env();
+    let config = AppConfig::from_env_with_defaults();
 
     // 创建数据库连接池
     let db_pool = create_pg_pool(&config.database.url, config.database.max_connections).await?;

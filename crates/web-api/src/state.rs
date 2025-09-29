@@ -1,7 +1,7 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use application::{ChatService, EventStorage, MessageBroadcaster, PresenceManager, UserService};
+use application::{ChatService, MessageBroadcaster, PresenceManager, UserService};
 use infrastructure::StatsAggregationService;
 
 use crate::JwtService;
@@ -24,8 +24,7 @@ pub struct AppState {
     pub jwt_service: Arc<JwtService>,
     pub presence_manager: Arc<dyn PresenceManager>,
     pub stats_service: Arc<StatsAggregationService>,
-    pub event_storage: Arc<dyn EventStorage>,
-    // 注意：事件收集器已迁移到独立服务，这里保留兼容性接口
+    // 注意：事件处理现在由独立的 stats-consumer 服务完成
 }
 
 impl AppState {
@@ -36,7 +35,6 @@ impl AppState {
         jwt_service: Arc<JwtService>,
         presence_manager: Arc<dyn PresenceManager>,
         stats_service: Arc<StatsAggregationService>,
-        event_storage: Arc<dyn EventStorage>,
     ) -> Self {
         Self {
             user_service,
@@ -45,7 +43,6 @@ impl AppState {
             jwt_service,
             presence_manager,
             stats_service,
-            event_storage,
         }
     }
 

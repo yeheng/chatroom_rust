@@ -11,9 +11,9 @@ use application::{
 };
 use config::AppConfig;
 use infrastructure::{
-    create_event_storage, create_pg_pool, BcryptPasswordHasher, LocalMessageBroadcaster,
-    PgChatRoomRepository, PgMessageRepository, PgRoomMemberRepository, PgUserRepository,
-    RedisMessageBroadcaster, StatsAggregationService,
+    create_pg_pool, BcryptPasswordHasher, LocalMessageBroadcaster, PgChatRoomRepository,
+    PgMessageRepository, PgRoomMemberRepository, PgUserRepository, RedisMessageBroadcaster,
+    StatsAggregationService,
 };
 use redis::Client as RedisClient;
 use std::sync::Arc;
@@ -27,17 +27,29 @@ async fn main() -> anyhow::Result<()> {
         .with_env_filter(EnvFilter::from_default_env())
         .init();
 
-    // 加载统一配置
-    let config = AppConfig::from_env();
+    // 加载统一配置 - 生产环境要求设置关键环境变量
+    let config = if cfg!(test) || std::env::var("CHATROOM_ENV").as_deref() == Ok("development") {
+        // 测试和开发环境使用带默认值的配置
+        AppConfig::from_env_with_defaults()
+    } else {
+        // 生产环境要求严格的环境变量配置
+        AppConfig::from_env()
+    };
 
-    // 验证配置
-    config
-        .validate()
-        .map_err(|e| anyhow::anyhow!("Configuration validation failed: {}", e))?;
+    // 验证配置（生产环境强制验证）
+    if let Err(e) = config.validate() {
+        tracing::error!("❌ 配置验证失败: {}", e);
+        return Err(anyhow::anyhow!("Configuration validation failed: {}", e));
+    }
 
     tracing::info!(
-        "连接数据库: {}",
-        config.database.url.split('@').last().unwrap_or("unknown")
+        "📦 连接数据库: {} (环境: {})",
+        config.database.url.split('@').last().unwrap_or("unknown"),
+        if config.database.url.contains("127.0.0.1") || config.database.url.contains("localhost") {
+            "开发环境"
+        } else {
+            "生产环境"
+        }
     );
 
     // 直接创建 PostgreSQL 连接池
@@ -68,16 +80,12 @@ async fn main() -> anyhow::Result<()> {
 
     // 创建统计相关服务
     let stats_service = Arc::new(StatsAggregationService::new(pg_pool.clone()));
-    let event_storage = create_event_storage(pg_pool.clone());
 
     // 创建应用层服务
     let presence_manager: Arc<dyn application::PresenceManager> =
         if let Some(redis_url) = &config.broadcast.redis_url {
             let redis_client = Arc::new(RedisClient::open(redis_url.clone())?);
-            Arc::new(application::RedisPresenceManager::with_event_storage(
-                redis_client,
-                event_storage.clone(),
-            ))
+            Arc::new(application::RedisPresenceManager::new(redis_client))
         } else {
             Arc::new(application::presence::memory::MemoryPresenceManager::new())
         };
@@ -101,9 +109,6 @@ async fn main() -> anyhow::Result<()> {
     // 创建 JWT 服务
     let jwt_service = Arc::new(JwtService::new(config.jwt));
 
-    // 注意：事件采集现在直接在 RedisPresenceManager 中异步处理
-    // 不再需要独立的 stats-consumer 服务
-
     // 创建应用状态
     let state = AppState::new(
         Arc::new(user_service),
@@ -112,7 +117,6 @@ async fn main() -> anyhow::Result<()> {
         jwt_service,
         presence_manager,
         stats_service,
-        event_storage,
     );
 
     // 启动 Web 服务器
@@ -122,9 +126,14 @@ async fn main() -> anyhow::Result<()> {
             .await?;
 
     tracing::info!(
-        "聊天室服务器启动在 http://{}:{}",
+        "🚀 聊天室服务器启动在 http://{}:{} (配置模式: {})",
         config.server.host,
-        config.server.port
+        config.server.port,
+        if cfg!(test) || std::env::var("CHATROOM_ENV").as_deref() == Ok("development") {
+            "开发环境"
+        } else {
+            "生产环境"
+        }
     );
     axum::serve(listener, app).await?;
 

@@ -12,6 +12,28 @@ pub enum RoomRole {
     Member,
 }
 
+impl RoomRole {
+    /// 检查角色是否有管理员权限（可以访问房间统计信息）
+    pub fn has_admin_access(&self) -> bool {
+        matches!(self, RoomRole::Owner | RoomRole::Admin)
+    }
+
+    /// 检查角色是否为房间所有者
+    pub fn is_owner(&self) -> bool {
+        matches!(self, RoomRole::Owner)
+    }
+
+    /// 检查角色是否可以管理房间成员
+    pub fn can_manage_members(&self) -> bool {
+        matches!(self, RoomRole::Owner | RoomRole::Admin)
+    }
+
+    /// 检查角色是否可以删除消息
+    pub fn can_delete_messages(&self) -> bool {
+        matches!(self, RoomRole::Owner | RoomRole::Admin)
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct RoomMember {
     pub room_id: RoomId,

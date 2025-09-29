@@ -20,6 +20,7 @@ pub struct User {
     #[serde(skip_serializing)] // 密码字段不暴露给客户端
     pub password: PasswordHash,
     pub status: UserStatus,
+    pub is_superuser: bool, // 系统级管理员标识
     pub created_at: Timestamp,
     pub updated_at: Timestamp,
 }
@@ -38,6 +39,7 @@ impl User {
             email,
             password,
             status: UserStatus::Inactive,
+            is_superuser: false, // 新注册用户默认不是超级用户
             created_at: now,
             updated_at: now,
         }
@@ -71,5 +73,22 @@ impl User {
     pub fn set_password(&mut self, password: PasswordHash, now: Timestamp) {
         self.password = password;
         self.updated_at = now;
+    }
+
+    /// 提升用户为系统管理员
+    pub fn grant_superuser(&mut self, now: Timestamp) {
+        self.is_superuser = true;
+        self.updated_at = now;
+    }
+
+    /// 撤销用户的系统管理员权限
+    pub fn revoke_superuser(&mut self, now: Timestamp) {
+        self.is_superuser = false;
+        self.updated_at = now;
+    }
+
+    /// 检查用户是否为系统管理员
+    pub fn is_system_admin(&self) -> bool {
+        self.is_superuser && self.status == UserStatus::Active
     }
 }

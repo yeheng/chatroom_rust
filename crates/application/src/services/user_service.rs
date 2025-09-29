@@ -97,6 +97,15 @@ impl UserService {
         Ok(user)
     }
 
+    /// 根据用户ID查找用户（用于权限检查）
+    pub async fn find_user_by_id(&self, user_id: UserId) -> Result<Option<User>, ApplicationError> {
+        self.deps
+            .user_repository
+            .find_by_id(user_id)
+            .await
+            .map_err(ApplicationError::Repository)
+    }
+
     pub async fn logout(&self, user_id: Uuid) -> Result<(), ApplicationError> {
         let user_id = UserId::from(user_id);
         self.deps

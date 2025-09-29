@@ -180,22 +180,14 @@ async fn test_user_connected_event_stream_writing() -> Result<(), Box<dyn std::e
     let helper = StreamTestHelper::new(config.clone()).await?;
 
     // 创建RedisPresenceManager
-    let presence_manager = Arc::new(RedisPresenceManager::new(helper.redis_client.clone()));
+    let presence_manager = Arc::new(RedisPresenceManager::with_stream_name(
+        helper.redis_client.clone(),
+        config.stream_name.clone(),
+    ));
 
-    // 记录用户连接事件
-    let event = application::UserPresenceEvent {
-        event_id: Uuid::new_v4(),
-        user_id: config.user_id,
-        room_id: config.room_id,
-        event_type: application::PresenceEventType::Connected,
-        timestamp: Utc::now(),
-        session_id: Uuid::new_v4(),
-        user_ip: Some("127.0.0.1".to_string()),
-        user_agent: Some("test-agent".to_string()),
-    };
-
+    // 用户连接到房间（这会自动触发事件记录）
     presence_manager
-        .record_presence_event(event.clone())
+        .user_connected(config.room_id, config.user_id)
         .await?;
 
     // 等待写入完成
@@ -213,11 +205,12 @@ async fn test_user_connected_event_stream_writing() -> Result<(), Box<dyn std::e
     assert_eq!(events.len(), 1, "应该解析出1个事件");
 
     let parsed_event = &events[0];
-    assert_eq!(parsed_event.event_id, event.event_id);
-    assert_eq!(parsed_event.user_id, event.user_id);
-    assert_eq!(parsed_event.room_id, event.room_id);
-    assert_eq!(parsed_event.event_type, event.event_type);
-    assert_eq!(parsed_event.session_id, event.session_id);
+    assert_eq!(parsed_event.user_id, config.user_id);
+    assert_eq!(parsed_event.room_id, config.room_id);
+    assert_eq!(
+        parsed_event.event_type,
+        application::PresenceEventType::Connected
+    );
 
     println!("✅ 用户连接事件Redis Stream写入测试通过");
     Ok(())
@@ -229,22 +222,14 @@ async fn test_user_disconnected_event_stream_writing() -> Result<(), Box<dyn std
     let config = StreamTestConfig::default();
     let helper = StreamTestHelper::new(config.clone()).await?;
 
-    let presence_manager = Arc::new(RedisPresenceManager::new(helper.redis_client.clone()));
+    let presence_manager = Arc::new(RedisPresenceManager::with_stream_name(
+        helper.redis_client.clone(),
+        config.stream_name.clone(),
+    ));
 
-    // 记录用户断开事件
-    let event = application::UserPresenceEvent {
-        event_id: Uuid::new_v4(),
-        user_id: config.user_id,
-        room_id: config.room_id,
-        event_type: application::PresenceEventType::Disconnected,
-        timestamp: Utc::now(),
-        session_id: Uuid::new_v4(),
-        user_ip: Some("192.168.1.1".to_string()),
-        user_agent: Some("test-disconnect-agent".to_string()),
-    };
-
+    // 用户断开连接（这会自动触发事件记录）
     presence_manager
-        .record_presence_event(event.clone())
+        .user_disconnected(config.room_id, config.user_id)
         .await?;
 
     // 等待写入完成
@@ -261,10 +246,12 @@ async fn test_user_disconnected_event_stream_writing() -> Result<(), Box<dyn std
     assert_eq!(events.len(), 1, "应该解析出1个事件");
     let parsed_event = &events[0];
 
-    assert_eq!(parsed_event.event_id, event.event_id);
-    assert_eq!(parsed_event.user_id, event.user_id);
-    assert_eq!(parsed_event.room_id, event.room_id);
-    assert_eq!(parsed_event.event_type, event.event_type);
+    assert_eq!(parsed_event.user_id, config.user_id);
+    assert_eq!(parsed_event.room_id, config.room_id);
+    assert_eq!(
+        parsed_event.event_type,
+        application::PresenceEventType::Disconnected
+    );
 
     println!("✅ 用户断开事件Redis Stream写入测试通过");
     Ok(())

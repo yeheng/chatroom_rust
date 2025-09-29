@@ -8,7 +8,6 @@ pub mod delivery;
 pub mod fallback_broadcaster;
 pub mod migrations;
 pub mod password;
-pub mod presence_storage;
 pub mod repository;
 pub mod stats_aggregation;
 
@@ -18,7 +17,6 @@ pub use delivery::PgDeliveryTracker;
 pub use fallback_broadcaster::FallbackBroadcaster;
 pub use migrations::MIGRATOR;
 pub use password::BcryptPasswordHasher;
-pub use presence_storage::{create_event_storage, PgEventStorage};
 pub use repository::{
     create_pg_pool, PgChatRoomRepository, PgMessageRepository, PgRoomMemberRepository, PgStorage,
     PgUserRepository,

@@ -4,7 +4,6 @@ use std::sync::Arc;
 use uuid::Uuid;
 
 use crate::error::ApplicationError;
-use crate::EventStorage;
 use domain::{RoomId, UserId};
 
 /// 实时在线统计数据
@@ -113,27 +112,25 @@ pub trait PresenceManager: Send + Sync {
 
 /// Redis实现的在线状态管理器
 /// 直接查询Redis，确保数据强一致性
+/// 事件通过Redis Stream进行异步处理
 pub struct RedisPresenceManager {
     redis_client: Arc<redis::Client>,
-    event_storage: Option<Arc<dyn crate::EventStorage>>, // 可选的事件存储
+    stream_name: String, // Redis Stream 名称
 }
 
 impl RedisPresenceManager {
     pub fn new(redis_client: Arc<redis::Client>) -> Self {
         Self {
             redis_client,
-            event_storage: None,
+            stream_name: "presence_events".to_string(),
         }
     }
 
-    /// 创建支持事件存储的 RedisPresenceManager
-    pub fn with_event_storage(
-        redis_client: Arc<redis::Client>,
-        event_storage: Arc<dyn EventStorage>,
-    ) -> Self {
+    /// 创建带自定义流名称的 RedisPresenceManager
+    pub fn with_stream_name(redis_client: Arc<redis::Client>, stream_name: String) -> Self {
         Self {
             redis_client,
-            event_storage: Some(event_storage),
+            stream_name,
         }
     }
 
@@ -183,6 +180,28 @@ impl PresenceManager for RedisPresenceManager {
                 ApplicationError::infrastructure_with_source(message, e)
             })?;
 
+        // 记录用户连接事件
+        let event = UserPresenceEvent {
+            event_id: uuid::Uuid::new_v4(),
+            user_id,
+            room_id,
+            event_type: PresenceEventType::Connected,
+            timestamp: chrono::Utc::now(),
+            session_id: uuid::Uuid::new_v4(), // 这里应该从外部传入真实的 session_id
+            user_ip: None,
+            user_agent: None,
+        };
+
+        // 异步记录事件，不阻塞主流程
+        if let Err(e) = self.record_presence_event(event).await {
+            tracing::warn!(
+                error = %e,
+                user_id = %user_id,
+                room_id = %room_id,
+                "Failed to record presence event, but user connection succeeded"
+            );
+        }
+
         tracing::info!(
             room_id = %room_id,
             user_id = %user_id,
@@ -211,6 +230,28 @@ impl PresenceManager for RedisPresenceManager {
                 let message = format!("Redis operation failed: {e}");
                 ApplicationError::infrastructure_with_source(message, e)
             })?;
+
+        // 记录用户断开事件
+        let event = UserPresenceEvent {
+            event_id: uuid::Uuid::new_v4(),
+            user_id,
+            room_id,
+            event_type: PresenceEventType::Disconnected,
+            timestamp: chrono::Utc::now(),
+            session_id: uuid::Uuid::new_v4(), // 这里应该从外部传入真实的 session_id
+            user_ip: None,
+            user_agent: None,
+        };
+
+        // 异步记录事件，不阻塞主流程
+        if let Err(e) = self.record_presence_event(event).await {
+            tracing::warn!(
+                error = %e,
+                user_id = %user_id,
+                room_id = %room_id,
+                "Failed to record presence event, but user disconnection succeeded"
+            );
+        }
 
         tracing::info!(
             room_id = %room_id,
@@ -366,29 +407,53 @@ impl PresenceManager for RedisPresenceManager {
         &self,
         event: UserPresenceEvent,
     ) -> Result<(), ApplicationError> {
-        // 如果有事件存储，则异步写入数据库（fire-and-forget）
-        if let Some(event_storage) = &self.event_storage {
-            let event_storage = event_storage.clone();
-            let event_to_store = event.clone();
+        // 将事件写入 Redis Stream (fire-and-forget)
+        let mut conn = self.get_connection().await?;
 
-            // 在独立任务中异步执行，不阻塞主流程
-            tokio::spawn(async move {
-                if let Err(e) = event_storage.insert_events(&[event_to_store]).await {
-                    tracing::error!(
-                        error = %e,
-                        "Failed to store presence event in background task"
-                    );
-                }
-            });
-        }
+        // 使用 XADD 将事件添加到 Redis Stream
+        let _: String = redis::cmd("XADD")
+            .arg(&self.stream_name)
+            .arg("*") // 自动生成 ID
+            .arg("event_id")
+            .arg(event.event_id.to_string())
+            .arg("user_id")
+            .arg(event.user_id.to_string())
+            .arg("room_id")
+            .arg(event.room_id.to_string())
+            .arg("event_type")
+            .arg(event.event_type.to_string())
+            .arg("timestamp")
+            .arg(event.timestamp.to_rfc3339())
+            .arg("session_id")
+            .arg(event.session_id.to_string())
+            .arg("user_ip")
+            .arg(event.user_ip.as_deref().unwrap_or(""))
+            .arg("user_agent")
+            .arg(event.user_agent.as_deref().unwrap_or(""))
+            .query_async(&mut conn)
+            .await
+            .map_err(|e| {
+                // Redis 写入失败不应该阻塞主流程，只记录错误
+                tracing::error!(
+                    error = %e,
+                    event_id = %event.event_id,
+                    stream_name = %self.stream_name,
+                    "Failed to write presence event to Redis Stream"
+                );
+                ApplicationError::infrastructure_with_source(
+                    "Redis Stream write failed".to_string(),
+                    e,
+                )
+            })?;
 
-        tracing::info!(
+        tracing::debug!(
             event_id = %event.event_id,
             user_id = %event.user_id,
             room_id = %event.room_id,
             event_type = %event.event_type,
             session_id = %event.session_id,
-            "Recorded presence event (direct database write)"
+            stream_name = %self.stream_name,
+            "事件已写入 Redis Stream"
         );
 
         Ok(())

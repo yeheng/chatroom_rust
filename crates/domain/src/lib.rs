@@ -6,6 +6,7 @@
 mod chat_room;
 mod errors;
 mod message;
+mod message_delivery;
 mod room_member;
 mod user;
 mod value_objects;
@@ -13,6 +14,7 @@ mod value_objects;
 pub use chat_room::{ChatRoom, ChatRoomVisibility};
 pub use errors::{DomainError, RepositoryError};
 pub use message::{Message, MessageRevision, MessageType};
+pub use message_delivery::MessageDelivery;
 pub use room_member::{RoomMember, RoomRole};
 pub use user::{User, UserStatus};
 pub use value_objects::{

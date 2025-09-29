@@ -1,12 +1,12 @@
 use std::sync::Arc;
 
 use application::repository::{
-    ChatRoomRepository, MessageRepository, PaginationParams, RoomMemberRepository, TimeRangeParams,
+    ChatRoomRepository, MessageRepository, MessageDeliveryRepository, PaginationParams, RoomMemberRepository, TimeRangeParams,
     UserRepository,
 };
 use async_trait::async_trait;
 use domain::{
-    ChatRoom, ChatRoomVisibility, Message, MessageContent, MessageId, MessageType, RepositoryError,
+    ChatRoom, ChatRoomVisibility, Message, MessageContent, MessageId, MessageType, MessageDelivery, RepositoryError,
     RoomId, RoomMember, RoomRole, User, UserEmail, UserId, UserStatus,
 };
 use sqlx::{postgres::PgPoolOptions, types::chrono, FromRow, PgPool};
@@ -418,6 +418,7 @@ struct MessageRecord {
     message_type: MessageType,
     reply_to_message_id: Option<Uuid>,
     created_at: OffsetDateTime,
+    updated_at: Option<OffsetDateTime>, // 对应SQL schema中的updated_at字段
     is_deleted: bool,
 }
 
@@ -427,6 +428,20 @@ impl TryFrom<MessageRecord> for Message {
     fn try_from(value: MessageRecord) -> Result<Self, Self::Error> {
         let content = MessageContent::new(value.content).map_err(invalid_data)?;
 
+        // 如果消息被编辑过（updated_at存在且不同于created_at），创建revision记录
+        let last_revision = if let Some(updated_at) = value.updated_at {
+            if updated_at != value.created_at {
+                Some(domain::MessageRevision {
+                    content: content.clone(), // 当前存储的是最新内容，原始内容已丢失
+                    updated_at,
+                })
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+
         Ok(Message {
             id: MessageId::from(value.id),
             room_id: RoomId::from(value.room_id),
@@ -435,7 +450,7 @@ impl TryFrom<MessageRecord> for Message {
             message_type: value.message_type,
             reply_to: value.reply_to_message_id.map(MessageId::from),
             created_at: value.created_at,
-            last_revision: None,
+            last_revision,
             is_deleted: value.is_deleted,
         })
     }
@@ -458,9 +473,9 @@ impl MessageRepository for PgMessageRepository {
     async fn create(&self, message: Message) -> Result<MessageId, RepositoryError> {
         let record = sqlx::query_as::<_, MessageRecord>(
             r#"
-            INSERT INTO messages (id, room_id, user_id, content, message_type, reply_to_message_id, created_at, is_deleted)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-            RETURNING id, room_id, user_id, content, message_type, reply_to_message_id, created_at, is_deleted
+            INSERT INTO messages (id, room_id, user_id, content, message_type, reply_to_message_id, created_at, updated_at, is_deleted)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+            RETURNING id, room_id, user_id, content, message_type, reply_to_message_id, created_at, updated_at, is_deleted
             "#,
         )
         .bind(Uuid::from(message.id))
@@ -470,6 +485,7 @@ impl MessageRepository for PgMessageRepository {
         .bind(&message.message_type)
         .bind(message.reply_to.map(Uuid::from))
         .bind(message.created_at)
+        .bind(message.created_at) // 新消息的updated_at初始值等于created_at
         .bind(message.is_deleted)
         .fetch_one(&self.pool)
         .await
@@ -478,9 +494,34 @@ impl MessageRepository for PgMessageRepository {
         Ok(MessageId::from(record.id))
     }
 
+    async fn update(&self, message: Message) -> Result<(), RepositoryError> {
+        // 计算updated_at时间：如果有编辑历史则使用编辑时间，否则使用当前时间
+        let updated_at = if let Some(revision) = &message.last_revision {
+            revision.updated_at
+        } else {
+            message.created_at // 如果没有编辑历史，保持原创建时间
+        };
+
+        sqlx::query(
+            r#"
+            UPDATE messages
+            SET content = $2, updated_at = $3
+            WHERE id = $1 AND is_deleted = FALSE
+            "#,
+        )
+        .bind(Uuid::from(message.id))
+        .bind(message.content.as_str())
+        .bind(updated_at)
+        .execute(&self.pool)
+        .await
+        .map_err(map_sqlx_err)?;
+
+        Ok(())
+    }
+
     async fn find_by_id(&self, id: MessageId) -> Result<Option<Message>, RepositoryError> {
         let record = sqlx::query_as::<_, MessageRecord>(
-            r#"SELECT id, room_id, user_id, content, message_type, reply_to_message_id, created_at, is_deleted FROM messages WHERE id = $1"#,
+            r#"SELECT id, room_id, user_id, content, message_type, reply_to_message_id, created_at, updated_at, is_deleted FROM messages WHERE id = $1"#,
         )
         .bind(Uuid::from(id))
         .fetch_optional(&self.pool)
@@ -500,7 +541,7 @@ impl MessageRepository for PgMessageRepository {
         let records = if let Some(before_id) = before {
             sqlx::query_as::<_, MessageRecord>(
                 r#"
-                SELECT id, room_id, user_id, content, message_type, reply_to_message_id, created_at, is_deleted
+                SELECT id, room_id, user_id, content, message_type, reply_to_message_id, created_at, updated_at, is_deleted
                 FROM messages
                 WHERE room_id = $1 AND id < $2 AND is_deleted = FALSE
                 ORDER BY created_at DESC
@@ -515,7 +556,7 @@ impl MessageRepository for PgMessageRepository {
         } else {
             sqlx::query_as::<_, MessageRecord>(
                 r#"
-                SELECT id, room_id, user_id, content, message_type, reply_to_message_id, created_at, is_deleted
+                SELECT id, room_id, user_id, content, message_type, reply_to_message_id, created_at, updated_at, is_deleted
                 FROM messages
                 WHERE room_id = $1 AND is_deleted = FALSE
                 ORDER BY created_at DESC
@@ -550,7 +591,7 @@ impl MessageRepository for PgMessageRepository {
 
         let records = sqlx::query_as::<_, MessageRecord>(
             r#"
-            SELECT id, room_id, user_id, content, message_type, reply_to_message_id, created_at, is_deleted
+            SELECT id, room_id, user_id, content, message_type, reply_to_message_id, created_at, updated_at, is_deleted
             FROM messages
             WHERE room_id = $1 AND created_at > $2 AND is_deleted = FALSE
             ORDER BY created_at ASC
@@ -574,7 +615,7 @@ impl MessageRepository for PgMessageRepository {
     ) -> Result<Vec<Message>, RepositoryError> {
         let query = if time_range.include_deleted {
             r#"
-            SELECT id, room_id, user_id, content, message_type, reply_to_message_id, created_at, is_deleted
+            SELECT id, room_id, user_id, content, message_type, reply_to_message_id, created_at, updated_at, is_deleted
             FROM messages
             WHERE room_id = $1
                 AND ($2::timestamptz IS NULL OR created_at >= $2)
@@ -584,7 +625,7 @@ impl MessageRepository for PgMessageRepository {
             "#
         } else {
             r#"
-            SELECT id, room_id, user_id, content, message_type, reply_to_message_id, created_at, is_deleted
+            SELECT id, room_id, user_id, content, message_type, reply_to_message_id, created_at, updated_at, is_deleted
             FROM messages
             WHERE room_id = $1
                 AND ($2::timestamptz IS NULL OR created_at >= $2)
@@ -653,4 +694,153 @@ pub async fn create_pg_pool(
         .max_connections(max_connections)
         .connect(database_url)
         .await
+}
+
+// MessageDelivery相关的实现
+
+#[derive(Debug, FromRow)]
+struct MessageDeliveryRecord {
+    message_id: Uuid,
+    user_id: Uuid,
+    sent_at: OffsetDateTime,
+    delivered_at: Option<OffsetDateTime>,
+}
+
+impl From<MessageDeliveryRecord> for MessageDelivery {
+    fn from(value: MessageDeliveryRecord) -> Self {
+        Self {
+            message_id: MessageId::from(value.message_id),
+            user_id: UserId::from(value.user_id),
+            sent_at: value.sent_at,
+            delivered_at: value.delivered_at,
+        }
+    }
+}
+
+#[derive(Clone)]
+pub struct PgMessageDeliveryRepository {
+    pool: PgPool,
+}
+
+impl PgMessageDeliveryRepository {
+    pub fn new(pool: PgPool) -> Self {
+        Self { pool }
+    }
+}
+
+#[async_trait]
+impl MessageDeliveryRepository for PgMessageDeliveryRepository {
+    async fn record_sent(&self, delivery: MessageDelivery) -> Result<(), RepositoryError> {
+        sqlx::query(
+            r#"
+            INSERT INTO message_deliveries (message_id, user_id, sent_at, delivered_at)
+            VALUES ($1, $2, $3, $4)
+            ON CONFLICT (message_id, user_id) DO NOTHING
+            "#,
+        )
+        .bind(Uuid::from(delivery.message_id))
+        .bind(Uuid::from(delivery.user_id))
+        .bind(delivery.sent_at)
+        .bind(delivery.delivered_at)
+        .execute(&self.pool)
+        .await
+        .map_err(map_sqlx_err)?;
+
+        Ok(())
+    }
+
+    async fn mark_delivered(
+        &self,
+        message_id: MessageId,
+        user_id: UserId,
+        delivered_at: chrono::DateTime<chrono::Utc>,
+    ) -> Result<(), RepositoryError> {
+        // 精确转换时间类型
+        let timestamp_nanos = delivered_at
+            .timestamp_nanos_opt()
+            .ok_or_else(|| RepositoryError::storage("Timestamp out of range".to_string()))?;
+
+        let time_offset = time::OffsetDateTime::from_unix_timestamp_nanos(timestamp_nanos as i128)
+            .map_err(|e| {
+                RepositoryError::storage_with_source("Invalid timestamp".to_string(), e)
+            })?;
+
+        sqlx::query(
+            r#"
+            UPDATE message_deliveries
+            SET delivered_at = $3
+            WHERE message_id = $1 AND user_id = $2 AND delivered_at IS NULL
+            "#,
+        )
+        .bind(Uuid::from(message_id))
+        .bind(Uuid::from(user_id))
+        .bind(time_offset)
+        .execute(&self.pool)
+        .await
+        .map_err(map_sqlx_err)?;
+
+        Ok(())
+    }
+
+    async fn find_undelivered_for_user(&self, user_id: UserId) -> Result<Vec<MessageDelivery>, RepositoryError> {
+        let records = sqlx::query_as::<_, MessageDeliveryRecord>(
+            r#"
+            SELECT message_id, user_id, sent_at, delivered_at
+            FROM message_deliveries
+            WHERE user_id = $1 AND delivered_at IS NULL
+            ORDER BY sent_at ASC
+            "#,
+        )
+        .bind(Uuid::from(user_id))
+        .fetch_all(&self.pool)
+        .await
+        .map_err(map_sqlx_err)?;
+
+        Ok(records.into_iter().map(MessageDelivery::from).collect())
+    }
+
+    async fn find_by_message(&self, message_id: MessageId) -> Result<Vec<MessageDelivery>, RepositoryError> {
+        let records = sqlx::query_as::<_, MessageDeliveryRecord>(
+            r#"
+            SELECT message_id, user_id, sent_at, delivered_at
+            FROM message_deliveries
+            WHERE message_id = $1
+            ORDER BY sent_at ASC
+            "#,
+        )
+        .bind(Uuid::from(message_id))
+        .fetch_all(&self.pool)
+        .await
+        .map_err(map_sqlx_err)?;
+
+        Ok(records.into_iter().map(MessageDelivery::from).collect())
+    }
+
+    async fn cleanup_delivered_before(
+        &self,
+        before: chrono::DateTime<chrono::Utc>,
+    ) -> Result<u64, RepositoryError> {
+        // 精确转换时间类型
+        let timestamp_nanos = before
+            .timestamp_nanos_opt()
+            .ok_or_else(|| RepositoryError::storage("Timestamp out of range".to_string()))?;
+
+        let time_offset = time::OffsetDateTime::from_unix_timestamp_nanos(timestamp_nanos as i128)
+            .map_err(|e| {
+                RepositoryError::storage_with_source("Invalid timestamp".to_string(), e)
+            })?;
+
+        let result = sqlx::query(
+            r#"
+            DELETE FROM message_deliveries
+            WHERE delivered_at IS NOT NULL AND delivered_at < $1
+            "#,
+        )
+        .bind(time_offset)
+        .execute(&self.pool)
+        .await
+        .map_err(map_sqlx_err)?;
+
+        Ok(result.rows_affected())
+    }
 }

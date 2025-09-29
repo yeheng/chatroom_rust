@@ -1,6 +1,6 @@
 use async_trait::async_trait;
 use domain::{
-    ChatRoom, Message, MessageId, RepositoryError, RoomId, RoomMember, User, UserEmail, UserId,
+    ChatRoom, Message, MessageId, MessageDelivery, RepositoryError, RoomId, RoomMember, User, UserEmail, UserId,
 };
 
 /// 简单直接的事务管理：使用一个单独的service层来管理事务
@@ -172,6 +172,9 @@ pub trait MessageRepository: Send + Sync {
         pagination: PaginationParams,
     ) -> Result<Vec<Message>, RepositoryError>;
 
+    /// 更新消息内容（编辑功能）
+    async fn update(&self, message: Message) -> Result<(), RepositoryError>;
+
     /// 软删除消息
     async fn delete(&self, id: MessageId) -> Result<(), RepositoryError> {
         // 默认实现：不支持删除消息
@@ -236,4 +239,32 @@ pub trait MessageRepository: Send + Sync {
         self.find_recent_by_room(room_id, PaginationParams::new(limit as i64), before)
             .await
     }
+}
+
+/// 消息传递状态追踪Repository
+/// 对应数据库表：message_deliveries
+#[async_trait]
+pub trait MessageDeliveryRepository: Send + Sync {
+    /// 记录消息发送状态
+    async fn record_sent(&self, delivery: MessageDelivery) -> Result<(), RepositoryError>;
+
+    /// 标记消息已送达
+    async fn mark_delivered(
+        &self,
+        message_id: MessageId,
+        user_id: UserId,
+        delivered_at: chrono::DateTime<chrono::Utc>,
+    ) -> Result<(), RepositoryError>;
+
+    /// 查找用户的未送达消息
+    async fn find_undelivered_for_user(&self, user_id: UserId) -> Result<Vec<MessageDelivery>, RepositoryError>;
+
+    /// 查找特定消息的传递状态
+    async fn find_by_message(&self, message_id: MessageId) -> Result<Vec<MessageDelivery>, RepositoryError>;
+
+    /// 清理已送达的旧记录（用于数据维护）
+    async fn cleanup_delivered_before(
+        &self,
+        before: chrono::DateTime<chrono::Utc>,
+    ) -> Result<u64, RepositoryError>;
 }

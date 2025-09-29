@@ -1,7 +1,7 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use application::{ChatService, MessageBroadcaster, PresenceManager, UserService, EventStorage};
+use application::{ChatService, EventStorage, MessageBroadcaster, PresenceManager, UserService};
 use infrastructure::StatsAggregationService;
 
 use crate::JwtService;
@@ -57,9 +57,9 @@ impl AppState {
         use std::time::Duration;
 
         QueueStatus {
-            queue_size: 0,  // 独立服务处理，主应用不知道队列状态
+            queue_size: 0, // 独立服务处理，主应用不知道队列状态
             max_queue_size: 10000,
-            is_running: true,  // 假设独立服务正在运行
+            is_running: true, // 假设独立服务正在运行
             batch_size: 1000,
             flush_interval: Duration::from_secs(5),
         }

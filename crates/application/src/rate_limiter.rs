@@ -36,7 +36,11 @@ pub struct MessageRateLimiter {
 
 impl MessageRateLimiter {
     /// 创建新的Redis-based限流器
-    pub fn new(redis_client: Arc<redis::Client>, max_messages_per_minute: u32, max_connections_per_user: u32) -> Self {
+    pub fn new(
+        redis_client: Arc<redis::Client>,
+        max_messages_per_minute: u32,
+        max_connections_per_user: u32,
+    ) -> Self {
         Self {
             max_messages_per_minute,
             max_connections_per_user,
@@ -182,11 +186,7 @@ impl MessageRateLimiter {
             "#,
         );
 
-        let _: () = script
-            .key(&key)
-            .invoke_async(&mut conn)
-            .await
-            .unwrap_or(());
+        let _: () = script.key(&key).invoke_async(&mut conn).await.unwrap_or(());
     }
 
     /// 获取用户当前状态

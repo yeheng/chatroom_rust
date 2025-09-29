@@ -1,7 +1,7 @@
 use application::ApplicationError;
 use domain::RoomId;
 use sqlx::{
-    types::chrono::{DateTime, Utc, NaiveDate},
+    types::chrono::{DateTime, NaiveDate, Utc},
     PgPool, Row,
 };
 use uuid::Uuid;
@@ -378,7 +378,10 @@ impl StatsAggregationService {
 
     /// 创建分区表（按月分区）
     /// 用于确保新月份的分区存在
-    pub async fn create_partition_if_not_exists(&self, target_date: DateTime<Utc>) -> Result<String, ApplicationError> {
+    pub async fn create_partition_if_not_exists(
+        &self,
+        target_date: DateTime<Utc>,
+    ) -> Result<String, ApplicationError> {
         // 使用 SQL 来处理日期计算，避免复杂的 Rust 日期操作
         let partition_row = sqlx::query(
             r#"
@@ -404,7 +407,7 @@ impl StatsAggregationService {
                 SELECT 1 FROM pg_class
                 WHERE relname = $1 AND relkind = 'r'
             ) as partition_exists
-            "#
+            "#,
         )
         .bind(&partition_name)
         .fetch_one(&self.pool)
@@ -471,7 +474,7 @@ impl StatsAggregationService {
             SELECT
                 (CURRENT_DATE - INTERVAL '30 days')::date as cutoff_date,
                 date_trunc('month', (CURRENT_DATE - INTERVAL '30 days')::date)::date as cutoff_month
-            "#
+            "#,
         )
         .fetch_one(&self.pool)
         .await
@@ -486,7 +489,7 @@ impl StatsAggregationService {
             FROM pg_tables
             WHERE tablename LIKE 'presence_events_%'
             AND tablename ~ '^presence_events_\d{4}_\d{2}$'
-            "#
+            "#,
         )
         .fetch_all(&self.pool)
         .await
@@ -499,13 +502,19 @@ impl StatsAggregationService {
 
             // 解析分区表名中的日期
             if let Some(date_part) = table_name.strip_prefix("presence_events_") {
-                if let Ok(partition_date) = NaiveDate::parse_from_str(&format!("{}-01", date_part.replace('_', "-")), "%Y-%m-%d") {
+                if let Ok(partition_date) = NaiveDate::parse_from_str(
+                    &format!("{}-01", date_part.replace('_', "-")),
+                    "%Y-%m-%d",
+                ) {
                     if partition_date < cutoff_month {
                         // 获取分区表的记录数
-                        let count_row = sqlx::query(&format!("SELECT COUNT(*) as row_count FROM {}", table_name))
-                            .fetch_one(&self.pool)
-                            .await
-                            .map_err(map_sqlx_err)?;
+                        let count_row = sqlx::query(&format!(
+                            "SELECT COUNT(*) as row_count FROM {}",
+                            table_name
+                        ))
+                        .fetch_one(&self.pool)
+                        .await
+                        .map_err(map_sqlx_err)?;
 
                         let row_count: i64 = count_row.get("row_count");
 
@@ -535,7 +544,7 @@ impl StatsAggregationService {
     pub async fn cleanup_expired_aggregated_data(&self) -> Result<i64, ApplicationError> {
         // 获取保留策略
         let retention_rows = sqlx::query(
-            "SELECT granularity, retention_days FROM stats_data_retention WHERE retention_days > 0"
+            "SELECT granularity, retention_days FROM stats_data_retention WHERE retention_days > 0",
         )
         .fetch_all(&self.pool)
         .await
@@ -553,7 +562,7 @@ impl StatsAggregationService {
                 DELETE FROM stats_aggregated
                 WHERE granularity = $1
                 AND time_bucket < (CURRENT_TIMESTAMP - ($2 || ' days')::INTERVAL)
-                "#
+                "#,
             )
             .bind(&granularity)
             .bind(retention_days)

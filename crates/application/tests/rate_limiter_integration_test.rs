@@ -1,8 +1,8 @@
 use application::{MessageRateLimiter, RateLimitError};
 use domain::UserId;
+use redis::Client;
 use std::sync::Arc;
 use uuid::Uuid;
-use redis::Client;
 
 #[tokio::test]
 async fn test_rate_limiter_integration() {

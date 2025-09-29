@@ -3,7 +3,10 @@ use application::{
 };
 use async_trait::async_trait;
 use domain::RoomId;
-use std::sync::{atomic::{AtomicU64, AtomicU8, Ordering}, Arc, Mutex};
+use std::sync::{
+    atomic::{AtomicU64, AtomicU8, Ordering},
+    Arc, Mutex,
+};
 use tokio::time::{Duration, Instant};
 use tracing::{error, info, warn};
 
@@ -29,10 +32,10 @@ impl From<u8> for CircuitState {
 /// 断路器配置
 #[derive(Debug, Clone)]
 struct CircuitConfig {
-    failure_threshold: u64,     // 失败阈值
-    success_threshold: u64,     // 成功阈值（半开状态下）
-    timeout: Duration,          // 超时时间
-    half_open_max_calls: u64,   // 半开状态下最大尝试次数
+    failure_threshold: u64,   // 失败阈值
+    success_threshold: u64,   // 成功阈值（半开状态下）
+    timeout: Duration,        // 超时时间
+    half_open_max_calls: u64, // 半开状态下最大尝试次数
 }
 
 impl Default for CircuitConfig {
@@ -113,15 +116,24 @@ impl FallbackBroadcaster {
             match new_state {
                 CircuitState::Closed => {
                     self.metrics.reset();
-                    info!("Circuit breaker: {} → CLOSED (Normal operation)", format!("{:?}", old_state));
+                    info!(
+                        "Circuit breaker: {} → CLOSED (Normal operation)",
+                        format!("{:?}", old_state)
+                    );
                 }
                 CircuitState::Open => {
                     *self.metrics.last_failure_time.lock().unwrap() = Some(Instant::now());
-                    error!("Circuit breaker: {} → OPEN (Redis unavailable, using local fallback only)", format!("{:?}", old_state));
+                    error!(
+                        "Circuit breaker: {} → OPEN (Redis unavailable, using local fallback only)",
+                        format!("{:?}", old_state)
+                    );
                 }
                 CircuitState::HalfOpen => {
                     self.metrics.half_open_calls.store(0, Ordering::Relaxed);
-                    warn!("Circuit breaker: {} → HALF_OPEN (Testing Redis recovery)", format!("{:?}", old_state));
+                    warn!(
+                        "Circuit breaker: {} → HALF_OPEN (Testing Redis recovery)",
+                        format!("{:?}", old_state)
+                    );
                 }
             }
         }
@@ -138,7 +150,10 @@ impl FallbackBroadcaster {
             }
             CircuitState::HalfOpen => {
                 let success_count = self.metrics.success_count.fetch_add(1, Ordering::Relaxed) + 1;
-                info!("Circuit breaker: Success in HALF_OPEN state ({}/{})", success_count, self.config.success_threshold);
+                info!(
+                    "Circuit breaker: Success in HALF_OPEN state ({}/{})",
+                    success_count, self.config.success_threshold
+                );
 
                 if success_count >= self.config.success_threshold {
                     self.transition_to(CircuitState::Closed);
@@ -158,7 +173,10 @@ impl FallbackBroadcaster {
         match current_state {
             CircuitState::Closed => {
                 let failure_count = self.metrics.failure_count.fetch_add(1, Ordering::Relaxed) + 1;
-                warn!("Circuit breaker: Failure in CLOSED state ({}/{})", failure_count, self.config.failure_threshold);
+                warn!(
+                    "Circuit breaker: Failure in CLOSED state ({}/{})",
+                    failure_count, self.config.failure_threshold
+                );
 
                 if failure_count >= self.config.failure_threshold {
                     self.transition_to(CircuitState::Open);
@@ -200,7 +218,9 @@ impl FallbackBroadcaster {
     /// 使用断路器保护的Redis操作
     async fn protected_redis_operation<F, T>(&self, operation: F) -> Result<T, BroadcastError>
     where
-        F: FnOnce() -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<T, BroadcastError>> + Send + 'static>>,
+        F: FnOnce() -> std::pin::Pin<
+            Box<dyn std::future::Future<Output = Result<T, BroadcastError>> + Send + 'static>,
+        >,
     {
         if !self.can_attempt_request() {
             return Err(BroadcastError::failed("Circuit breaker is OPEN"));
@@ -243,9 +263,12 @@ impl MessageBroadcaster for FallbackBroadcaster {
                 let redis = self.redis.clone();
                 let msg_clone = message.clone();
 
-                match self.protected_redis_operation(move || {
-                    Box::pin(async move { redis.broadcast(msg_clone).await })
-                }).await {
+                match self
+                    .protected_redis_operation(move || {
+                        Box::pin(async move { redis.broadcast(msg_clone).await })
+                    })
+                    .await
+                {
                     Ok(_) => Ok(()),
                     Err(_) => {
                         // Redis失败，使用本地广播作为降级
@@ -268,23 +291,35 @@ impl MessageBroadcaster for FallbackBroadcaster {
         match state {
             CircuitState::Open => {
                 // 断路器断开：只能使用本地订阅
-                warn!("Circuit breaker OPEN: Subscribe using local broadcaster for room {:?}", room_id);
+                warn!(
+                    "Circuit breaker OPEN: Subscribe using local broadcaster for room {:?}",
+                    room_id
+                );
                 self.local.subscribe(room_id).await
             }
             CircuitState::Closed | CircuitState::HalfOpen => {
                 // 尝试Redis订阅
                 let redis = self.redis.clone();
 
-                match self.protected_redis_operation(move || {
-                    Box::pin(async move { redis.subscribe(room_id).await })
-                }).await {
+                match self
+                    .protected_redis_operation(move || {
+                        Box::pin(async move { redis.subscribe(room_id).await })
+                    })
+                    .await
+                {
                     Ok(stream) => {
-                        info!("Circuit breaker: Redis subscription established for room {:?}", room_id);
+                        info!(
+                            "Circuit breaker: Redis subscription established for room {:?}",
+                            room_id
+                        );
                         Ok(stream)
                     }
                     Err(e) => {
                         // Redis订阅失败，降级到本地订阅
-                        warn!("Redis subscription failed for room {:?}: {:?}, using local fallback", room_id, e);
+                        warn!(
+                            "Redis subscription failed for room {:?}: {:?}, using local fallback",
+                            room_id, e
+                        );
                         self.local.subscribe(room_id).await
                     }
                 }

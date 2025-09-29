@@ -5,12 +5,15 @@
 //! - 定时任务调度
 //! - 数据存储和查询
 
-use anyhow::{Result, anyhow};
-use infrastructure::stats_aggregation::{TimeGranularity, StatsQuery, RoomStats};
-use domain::RoomId;
-use sqlx::{PgPool, Row, types::chrono::{DateTime, Utc}};
-use uuid::Uuid;
+use anyhow::{anyhow, Result};
 use chrono::Duration;
+use domain::RoomId;
+use infrastructure::stats_aggregation::{RoomStats, StatsQuery, TimeGranularity};
+use sqlx::{
+    types::chrono::{DateTime, Utc},
+    PgPool, Row,
+};
+use uuid::Uuid;
 
 /// 测试专用的统计聚合服务包装器
 #[derive(Clone)]
@@ -109,7 +112,8 @@ impl TestStatsAggregationService {
             .bind(start_time)
             .bind(end_time)
             .fetch_all(&self.pool)
-            .await.map_err(|e| anyhow!("Database query failed: {}", e))?;
+            .await
+            .map_err(|e| anyhow!("Database query failed: {}", e))?;
 
         let mut results = Vec::new();
         for row in rows {
@@ -137,7 +141,11 @@ impl TestStatsAggregationService {
             return Ok(());
         }
 
-        let mut tx = self.pool.begin().await.map_err(|e| anyhow!("Failed to begin transaction: {}", e))?;
+        let mut tx = self
+            .pool
+            .begin()
+            .await
+            .map_err(|e| anyhow!("Failed to begin transaction: {}", e))?;
 
         for stat in stats {
             let granularity_str = stat.granularity.to_string();
@@ -170,7 +178,9 @@ impl TestStatsAggregationService {
             .map_err(|e| anyhow!("Failed to save stats: {}", e))?;
         }
 
-        tx.commit().await.map_err(|e| anyhow!("Failed to commit transaction: {}", e))?;
+        tx.commit()
+            .await
+            .map_err(|e| anyhow!("Failed to commit transaction: {}", e))?;
 
         Ok(())
     }
@@ -248,7 +258,7 @@ impl TestStatsAggregationService {
 #[derive(Clone)]
 struct TestConfig {
     database_url: String,
-    test_id: String,  // 为每个测试实例添加唯一ID
+    test_id: String, // 为每个测试实例添加唯一ID
 }
 
 impl Default for TestConfig {
@@ -271,9 +281,10 @@ impl TestServices {
     async fn new(config: TestConfig) -> Result<Self> {
         // 创建数据库连接池
         let pool = sqlx::postgres::PgPoolOptions::new()
-            .max_connections(5)  // 减少连接数避免并发问题
+            .max_connections(5) // 减少连接数避免并发问题
             .connect(&config.database_url)
-            .await.map_err(|e| anyhow!(e))?;
+            .await
+            .map_err(|e| anyhow!(e))?;
 
         // 创建测试所需的表结构
         Self::setup_test_tables(&pool, &config.test_id).await?;
@@ -296,21 +307,37 @@ impl TestServices {
         let stats_table = format!("stats_aggregated_{}", test_id);
 
         // 清理可能存在的表，避免冲突
-        sqlx::query(&format!("DROP TABLE IF EXISTS public.{} CASCADE", events_table))
-            .execute(pool)
-            .await.map_err(|e| anyhow!(e))?;
+        sqlx::query(&format!(
+            "DROP TABLE IF EXISTS public.{} CASCADE",
+            events_table
+        ))
+        .execute(pool)
+        .await
+        .map_err(|e| anyhow!(e))?;
 
-        sqlx::query(&format!("DROP TABLE IF EXISTS public.{} CASCADE", stats_table))
-            .execute(pool)
-            .await.map_err(|e| anyhow!(e))?;
+        sqlx::query(&format!(
+            "DROP TABLE IF EXISTS public.{} CASCADE",
+            stats_table
+        ))
+        .execute(pool)
+        .await
+        .map_err(|e| anyhow!(e))?;
 
-        sqlx::query(&format!("DROP TABLE IF EXISTS public.{} CASCADE", rooms_table))
-            .execute(pool)
-            .await.map_err(|e| anyhow!(e))?;
+        sqlx::query(&format!(
+            "DROP TABLE IF EXISTS public.{} CASCADE",
+            rooms_table
+        ))
+        .execute(pool)
+        .await
+        .map_err(|e| anyhow!(e))?;
 
-        sqlx::query(&format!("DROP TABLE IF EXISTS public.{} CASCADE", users_table))
-            .execute(pool)
-            .await.map_err(|e| anyhow!(e))?;
+        sqlx::query(&format!(
+            "DROP TABLE IF EXISTS public.{} CASCADE",
+            users_table
+        ))
+        .execute(pool)
+        .await
+        .map_err(|e| anyhow!(e))?;
 
         // 创建用户表
         sqlx::query(&format!(
@@ -327,7 +354,8 @@ impl TestServices {
             users_table
         ))
         .execute(pool)
-        .await.map_err(|e| anyhow!(e))?;
+        .await
+        .map_err(|e| anyhow!(e))?;
 
         // 创建聊天室表
         sqlx::query(&format!(
@@ -345,7 +373,8 @@ impl TestServices {
             rooms_table, users_table
         ))
         .execute(pool)
-        .await.map_err(|e| anyhow!(e))?;
+        .await
+        .map_err(|e| anyhow!(e))?;
 
         // 创建presence_events表（简化版本，避免枚举类型冲突）
         sqlx::query(&format!(
@@ -364,7 +393,8 @@ impl TestServices {
             events_table
         ))
         .execute(pool)
-        .await.map_err(|e| anyhow!(e))?;
+        .await
+        .map_err(|e| anyhow!(e))?;
 
         // 创建stats_aggregated表（简化版本）
         sqlx::query(&format!(
@@ -384,30 +414,39 @@ impl TestServices {
             stats_table
         ))
         .execute(pool)
-        .await.map_err(|e| anyhow!(e))?;
+        .await
+        .map_err(|e| anyhow!(e))?;
 
         // 创建索引
-        sqlx::query(&format!("CREATE INDEX IF NOT EXISTS idx_{}_room_time ON {} (room_id, timestamp)", events_table, events_table))
-            .execute(pool)
-            .await.map_err(|e| anyhow!(e))?;
+        sqlx::query(&format!(
+            "CREATE INDEX IF NOT EXISTS idx_{}_room_time ON {} (room_id, timestamp)",
+            events_table, events_table
+        ))
+        .execute(pool)
+        .await
+        .map_err(|e| anyhow!(e))?;
 
-        sqlx::query(&format!("CREATE INDEX IF NOT EXISTS idx_{}_user_session ON {} (user_id, session_id)", events_table, events_table))
-            .execute(pool)
-            .await.map_err(|e| anyhow!(e))?;
+        sqlx::query(&format!(
+            "CREATE INDEX IF NOT EXISTS idx_{}_user_session ON {} (user_id, session_id)",
+            events_table, events_table
+        ))
+        .execute(pool)
+        .await
+        .map_err(|e| anyhow!(e))?;
 
-        sqlx::query(&format!("CREATE INDEX IF NOT EXISTS idx_{}_time_gran ON {} (time_bucket, granularity)", stats_table, stats_table))
-            .execute(pool)
-            .await.map_err(|e| anyhow!(e))?;
+        sqlx::query(&format!(
+            "CREATE INDEX IF NOT EXISTS idx_{}_time_gran ON {} (time_bucket, granularity)",
+            stats_table, stats_table
+        ))
+        .execute(pool)
+        .await
+        .map_err(|e| anyhow!(e))?;
 
         Ok(())
     }
 
     /// 创建测试事件数据
-    async fn create_test_events(
-        &self,
-        room_id: Uuid,
-        start_time: DateTime<Utc>,
-    ) -> Result<()> {
+    async fn create_test_events(&self, room_id: Uuid, start_time: DateTime<Utc>) -> Result<()> {
         let events_table = format!("presence_events_{}", self.test_id);
 
         // 创建测试用户
@@ -452,12 +491,14 @@ impl TestServices {
         // 清理 presence_events 表
         sqlx::query(&format!("DELETE FROM public.{}", events_table))
             .execute(&self.pool)
-            .await.map_err(|e| anyhow!(e))?;
+            .await
+            .map_err(|e| anyhow!(e))?;
 
         // 清理 stats_aggregated 表
         sqlx::query(&format!("DELETE FROM public.{}", stats_table))
             .execute(&self.pool)
-            .await.map_err(|e| anyhow!(e))?;
+            .await
+            .map_err(|e| anyhow!(e))?;
 
         Ok(())
     }
@@ -474,7 +515,10 @@ impl TestServices {
         let granularity_str = granularity.to_string();
 
         // 添加调试信息
-        println!("验证查询参数 - room_id: {}, granularity: {}", room_id, granularity_str);
+        println!(
+            "验证查询参数 - room_id: {}, granularity: {}",
+            room_id, granularity_str
+        );
 
         let count = sqlx::query_scalar::<_, i64>(&format!(
             "SELECT COUNT(*) FROM public.{}
@@ -484,9 +528,13 @@ impl TestServices {
         .bind(room_id)
         .bind(&granularity_str)
         .fetch_one(&self.pool)
-        .await.map_err(|e| anyhow!(e))?;
+        .await
+        .map_err(|e| anyhow!(e))?;
 
-        println!("查询结果 count: {}, expected_count: {}", count, expected_count);
+        println!(
+            "查询结果 count: {}, expected_count: {}",
+            count, expected_count
+        );
 
         // 查询实际的记录详情
         let actual_records = sqlx::query(&format!(
@@ -497,14 +545,18 @@ impl TestServices {
         .bind(room_id)
         .bind(&granularity_str)
         .fetch_all(&self.pool)
-        .await.map_err(|e| anyhow!(e))?;
+        .await
+        .map_err(|e| anyhow!(e))?;
 
         println!("实际记录数量: {}", actual_records.len());
         for record in actual_records {
             let room: Uuid = record.get("room_id");
             let time_bucket: DateTime<Utc> = record.get("time_bucket");
             let gran: String = record.get("granularity");
-            println!("  记录: room_id={}, time_bucket={}, granularity={}", room, time_bucket, gran);
+            println!(
+                "  记录: room_id={}, time_bucket={}, granularity={}",
+                room, time_bucket, gran
+            );
         }
 
         Ok(count as usize == expected_count)
@@ -521,14 +573,18 @@ async fn test_hourly_stats_aggregation() -> Result<(), anyhow::Error> {
     let start_time = Utc::now() - Duration::hours(2);
 
     // 创建测试事件数据
-    services.create_test_events(room_id, start_time).await.map_err(|e| anyhow!(e))?;
+    services
+        .create_test_events(room_id, start_time)
+        .await
+        .map_err(|e| anyhow!(e))?;
 
     // 执行小时级聚合
     let end_time = start_time + Duration::hours(1);
     let stats = services
         .aggregation_service
         .aggregate_stats(TimeGranularity::Hour, start_time, end_time)
-        .await.map_err(|e| anyhow!(e))?;
+        .await
+        .map_err(|e| anyhow!(e))?;
 
     // 验证聚合结果
     assert!(!stats.is_empty(), "应该有聚合统计结果");
@@ -559,7 +615,8 @@ async fn test_hourly_stats_aggregation() -> Result<(), anyhow::Error> {
     // 验证数据已保存
     let saved = services
         .verify_aggregation_results(room_id, TimeGranularity::Hour, start_time, 1)
-        .await.map_err(|e| anyhow!(e))?;
+        .await
+        .map_err(|e| anyhow!(e))?;
     println!("数据验证结果: {}", saved);
     assert!(saved, "聚合结果应该已保存到数据库");
 
@@ -580,14 +637,18 @@ async fn test_daily_stats_aggregation() -> Result<(), anyhow::Error> {
     let start_time = Utc::now() - Duration::days(2);
 
     // 创建测试事件数据
-    services.create_test_events(room_id, start_time).await.map_err(|e| anyhow!(e))?;
+    services
+        .create_test_events(room_id, start_time)
+        .await
+        .map_err(|e| anyhow!(e))?;
 
     // 执行日级聚合
     let end_time = start_time + Duration::days(1);
     let stats = services
         .aggregation_service
         .aggregate_stats(TimeGranularity::Day, start_time, end_time)
-        .await.map_err(|e| anyhow!(e))?;
+        .await
+        .map_err(|e| anyhow!(e))?;
 
     // 验证聚合结果
     assert!(!stats.is_empty(), "应该有聚合统计结果");
@@ -602,12 +663,14 @@ async fn test_daily_stats_aggregation() -> Result<(), anyhow::Error> {
     services
         .aggregation_service
         .save_aggregated_stats(&stats)
-        .await.map_err(|e| anyhow!(e))?;
+        .await
+        .map_err(|e| anyhow!(e))?;
 
     // 验证数据已保存
     let saved = services
         .verify_aggregation_results(room_id, TimeGranularity::Day, start_time, 1)
-        .await.map_err(|e| anyhow!(e))?;
+        .await
+        .map_err(|e| anyhow!(e))?;
     assert!(saved, "日聚合结果应该已保存到数据库");
 
     // 清理测试数据
@@ -627,20 +690,25 @@ async fn test_aggregation_pipeline() -> Result<()> {
     let start_time = Utc::now() - Duration::days(1);
 
     // 创建测试事件数据
-    services.create_test_events(room_id, start_time).await.map_err(|e| anyhow!(e))?;
+    services
+        .create_test_events(room_id, start_time)
+        .await
+        .map_err(|e| anyhow!(e))?;
 
     // 手动执行聚合管道的步骤，避免调用不存在的清理函数
     // 1. 计算聚合统计
     let stats = services
         .aggregation_service
         .aggregate_stats(TimeGranularity::Hour, start_time, Utc::now())
-        .await.map_err(|e| anyhow!(e))?;
+        .await
+        .map_err(|e| anyhow!(e))?;
 
     // 2. 保存统计数据
     services
         .aggregation_service
         .save_aggregated_stats(&stats)
-        .await.map_err(|e| anyhow!(e))?;
+        .await
+        .map_err(|e| anyhow!(e))?;
 
     // 验证管道生成了结果
     assert!(stats.len() > 0, "聚合管道应该生成结果");
@@ -662,24 +730,29 @@ async fn test_stats_query() -> Result<()> {
     let start_time = Utc::now() - Duration::hours(2);
 
     // 创建测试事件数据
-    services.create_test_events(room_id, start_time).await.map_err(|e| anyhow!(e))?;
+    services
+        .create_test_events(room_id, start_time)
+        .await
+        .map_err(|e| anyhow!(e))?;
 
     // 执行聚合
     let end_time = start_time + Duration::hours(1);
     let stats = services
         .aggregation_service
         .aggregate_stats(TimeGranularity::Hour, start_time, end_time)
-        .await.map_err(|e| anyhow!(e))?;
+        .await
+        .map_err(|e| anyhow!(e))?;
 
     // 保存聚合结果
     services
         .aggregation_service
         .save_aggregated_stats(&stats)
-        .await.map_err(|e| anyhow!(e))?;
+        .await
+        .map_err(|e| anyhow!(e))?;
 
     // 查询统计信息 - 使用更宽泛的时间范围确保包含聚合数据
-    let query_start_time = start_time - Duration::hours(1);  // 扩大查询范围
-    let query_end_time = end_time + Duration::hours(1);      // 扩大查询范围
+    let query_start_time = start_time - Duration::hours(1); // 扩大查询范围
+    let query_end_time = end_time + Duration::hours(1); // 扩大查询范围
     let query = StatsQuery {
         room_id: Some(RoomId::from(room_id)),
         granularity: TimeGranularity::Hour,
@@ -690,7 +763,8 @@ async fn test_stats_query() -> Result<()> {
     let query_results = services
         .aggregation_service
         .query_stats(query)
-        .await.map_err(|e| anyhow!(e))?;
+        .await
+        .map_err(|e| anyhow!(e))?;
 
     assert!(!query_results.is_empty(), "应该能查询到统计信息");
 
@@ -711,7 +785,10 @@ async fn test_concurrent_aggregation() -> Result<()> {
     let start_time = Utc::now() - Duration::hours(2);
 
     // 创建测试事件数据
-    services.create_test_events(room_id, start_time).await.map_err(|e| anyhow!(e))?;
+    services
+        .create_test_events(room_id, start_time)
+        .await
+        .map_err(|e| anyhow!(e))?;
 
     // 并发执行多个聚合任务
     let agg_service1 = services.aggregation_service.clone();

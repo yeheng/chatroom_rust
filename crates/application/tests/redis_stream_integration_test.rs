@@ -2,13 +2,13 @@
 //!
 //! 验证用户状态事件能够正确写入Redis Stream
 
-use application::{RedisPresenceManager, PresenceManager};
+use application::{PresenceManager, RedisPresenceManager};
+use chrono::Utc;
 use domain::{RoomId, UserId};
+use redis::Client;
 use std::sync::Arc;
 use tokio::time::sleep;
 use uuid::Uuid;
-use redis::Client;
-use chrono::Utc;
 
 /// 测试配置
 #[derive(Clone)]
@@ -50,7 +50,11 @@ impl StreamTestHelper {
     }
 
     /// 读取流中的消息（使用结构化类型）
-    async fn read_stream_messages(&self, count: i64) -> Result<Vec<(String, Vec<(String, Vec<(String, String)>)>)>, Box<dyn std::error::Error>> {
+    async fn read_stream_messages(
+        &self,
+        count: i64,
+    ) -> Result<Vec<(String, Vec<(String, Vec<(String, String)>)>)>, Box<dyn std::error::Error>>
+    {
         let mut conn = self.redis_client.get_multiplexed_async_connection().await?;
 
         let messages: Vec<(String, Vec<(String, Vec<(String, String)>)>)> = redis::cmd("XREAD")
@@ -58,7 +62,7 @@ impl StreamTestHelper {
             .arg(count)
             .arg("STREAMS")
             .arg(&self.config.stream_name)
-            .arg("0")  // 从开头读取
+            .arg("0") // 从开头读取
             .query_async(&mut conn)
             .await?;
 
@@ -80,18 +84,24 @@ impl StreamTestHelper {
     /// 清理测试环境
     async fn cleanup_test_environment(
         redis_client: &Arc<Client>,
-        stream_name: &str
+        stream_name: &str,
     ) -> Result<(), Box<dyn std::error::Error>> {
         let mut conn = redis_client.get_multiplexed_async_connection().await?;
 
         // 删除流
-        let _: () = redis::cmd("DEL").arg(stream_name).query_async(&mut conn).await?;
+        let _: () = redis::cmd("DEL")
+            .arg(stream_name)
+            .query_async(&mut conn)
+            .await?;
 
         Ok(())
     }
 
     /// 从结构化消息中提取事件数据
-    fn extract_event_from_messages(&self, messages: &[(String, Vec<(String, Vec<(String, String)>)>)]) -> Vec<application::UserPresenceEvent> {
+    fn extract_event_from_messages(
+        &self,
+        messages: &[(String, Vec<(String, Vec<(String, String)>)>)],
+    ) -> Vec<application::UserPresenceEvent> {
         let mut events = Vec::new();
 
         for (_stream_name, stream_messages) in messages {
@@ -106,7 +116,10 @@ impl StreamTestHelper {
     }
 
     /// 从字段数组中提取事件数据
-    fn extract_event_from_fields(&self, fields: &[(String, String)]) -> Option<application::UserPresenceEvent> {
+    fn extract_event_from_fields(
+        &self,
+        fields: &[(String, String)],
+    ) -> Option<application::UserPresenceEvent> {
         let mut event_id = None;
         let mut user_id = None;
         let mut room_id = None;
@@ -127,9 +140,16 @@ impl StreamTestHelper {
         }
 
         // 构建事件对象
-        if let (Some(event_id), Some(user_id), Some(room_id), Some(event_type), Some(timestamp), Some(session_id)) =
-            (event_id, user_id, room_id, event_type, timestamp, session_id) {
-
+        if let (
+            Some(event_id),
+            Some(user_id),
+            Some(room_id),
+            Some(event_type),
+            Some(timestamp),
+            Some(session_id),
+        ) = (
+            event_id, user_id, room_id, event_type, timestamp, session_id,
+        ) {
             let presence_type = match event_type.as_str() {
                 "Connected" => application::PresenceEventType::Connected,
                 "Disconnected" => application::PresenceEventType::Disconnected,
@@ -174,7 +194,9 @@ async fn test_user_connected_event_stream_writing() -> Result<(), Box<dyn std::e
         user_agent: Some("test-agent".to_string()),
     };
 
-    presence_manager.record_presence_event(event.clone()).await?;
+    presence_manager
+        .record_presence_event(event.clone())
+        .await?;
 
     // 等待写入完成
     sleep(tokio::time::Duration::from_millis(100)).await;
@@ -221,7 +243,9 @@ async fn test_user_disconnected_event_stream_writing() -> Result<(), Box<dyn std
         user_agent: Some("test-disconnect-agent".to_string()),
     };
 
-    presence_manager.record_presence_event(event.clone()).await?;
+    presence_manager
+        .record_presence_event(event.clone())
+        .await?;
 
     // 等待写入完成
     sleep(tokio::time::Duration::from_millis(100)).await;
@@ -290,24 +314,46 @@ async fn test_multiple_events_sequential_writing() -> Result<(), Box<dyn std::er
 
     // 顺序写入事件
     for event in &events {
-        presence_manager.record_presence_event(event.clone()).await?;
+        presence_manager
+            .record_presence_event(event.clone())
+            .await?;
         sleep(tokio::time::Duration::from_millis(50)).await;
     }
 
     // 检查流长度
     let stream_length = helper.get_stream_length().await?;
-    assert_eq!(stream_length, events.len() as i64, "应该写入{}个事件", events.len());
+    assert_eq!(
+        stream_length,
+        events.len() as i64,
+        "应该写入{}个事件",
+        events.len()
+    );
 
     // 读取所有消息
     let messages = helper.read_stream_messages(10).await?;
     let parsed_events = helper.extract_event_from_messages(&messages);
 
     // 验证事件数量和顺序
-    assert_eq!(parsed_events.len(), events.len(), "应该解析出{}个事件", events.len());
+    assert_eq!(
+        parsed_events.len(),
+        events.len(),
+        "应该解析出{}个事件",
+        events.len()
+    );
 
     for (i, (parsed_event, original_event)) in parsed_events.iter().zip(events.iter()).enumerate() {
-        assert_eq!(parsed_event.event_id, original_event.event_id, "第{}个事件的ID应该匹配", i + 1);
-        assert_eq!(parsed_event.event_type, original_event.event_type, "第{}个事件的类型应该匹配", i + 1);
+        assert_eq!(
+            parsed_event.event_id,
+            original_event.event_id,
+            "第{}个事件的ID应该匹配",
+            i + 1
+        );
+        assert_eq!(
+            parsed_event.event_type,
+            original_event.event_type,
+            "第{}个事件的类型应该匹配",
+            i + 1
+        );
     }
 
     println!("✅ 多个事件顺序写入测试通过");
@@ -352,13 +398,23 @@ async fn test_mixed_event_types_writing() -> Result<(), Box<dyn std::error::Erro
 
     // 验证所有事件都被写入
     let stream_length = helper.get_stream_length().await?;
-    assert_eq!(stream_length, events.len() as i64, "应该写入{}个事件", events.len());
+    assert_eq!(
+        stream_length,
+        events.len() as i64,
+        "应该写入{}个事件",
+        events.len()
+    );
 
     // 读取并验证事件
     let messages = helper.read_stream_messages(10).await?;
     let parsed_events = helper.extract_event_from_messages(&messages);
 
-    assert_eq!(parsed_events.len(), events.len(), "应该解析出{}个事件", events.len());
+    assert_eq!(
+        parsed_events.len(),
+        events.len(),
+        "应该解析出{}个事件",
+        events.len()
+    );
 
     // 验证事件类型的正确性
     let mut connect_count = 0;
@@ -431,6 +487,9 @@ async fn test_bulk_events_writing() -> Result<(), Box<dyn std::error::Error>> {
     assert!(!parsed_events.is_empty(), "应该能解析出事件");
     assert!(parsed_events.len() <= 20, "最多应该读取20个事件");
 
-    println!("✅ 批量事件写入测试通过 ({}个事件, {:?})", event_count, duration);
+    println!(
+        "✅ 批量事件写入测试通过 ({}个事件, {:?})",
+        event_count, duration
+    );
     Ok(())
 }

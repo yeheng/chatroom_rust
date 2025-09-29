@@ -94,8 +94,10 @@ pub trait PresenceManager: Send + Sync {
     async fn get_online_stats(&self, room_id: RoomId) -> Result<OnlineStats, ApplicationError>;
 
     /// 记录用户状态变化事件（用于历史数据采集）
-    async fn record_presence_event(&self, event: UserPresenceEvent)
-        -> Result<(), ApplicationError> {
+    async fn record_presence_event(
+        &self,
+        event: UserPresenceEvent,
+    ) -> Result<(), ApplicationError> {
         // 默认实现：只记录日志
         tracing::info!(
             event_id = %event.event_id,
@@ -127,7 +129,7 @@ impl RedisPresenceManager {
     /// 创建支持事件存储的 RedisPresenceManager
     pub fn with_event_storage(
         redis_client: Arc<redis::Client>,
-        event_storage: Arc<dyn EventStorage>
+        event_storage: Arc<dyn EventStorage>,
     ) -> Self {
         Self {
             redis_client,
@@ -155,8 +157,7 @@ impl RedisPresenceManager {
                 ApplicationError::infrastructure_with_source(message, e)
             })
     }
-
-    }
+}
 
 #[async_trait::async_trait]
 impl PresenceManager for RedisPresenceManager {
@@ -361,7 +362,10 @@ impl PresenceManager for RedisPresenceManager {
         Ok(stats)
     }
 
-    async fn record_presence_event(&self, event: UserPresenceEvent) -> Result<(), ApplicationError> {
+    async fn record_presence_event(
+        &self,
+        event: UserPresenceEvent,
+    ) -> Result<(), ApplicationError> {
         // 如果有事件存储，则异步写入数据库（fire-and-forget）
         if let Some(event_storage) = &self.event_storage {
             let event_storage = event_storage.clone();
@@ -389,8 +393,7 @@ impl PresenceManager for RedisPresenceManager {
 
         Ok(())
     }
-
-    }
+}
 
 /// 内存实现的在线状态管理器（用于测试）
 pub mod memory {

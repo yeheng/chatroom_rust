@@ -9,9 +9,9 @@ use application::{
 use axum::Router;
 use config::AppConfig;
 use infrastructure::{
-    create_event_storage, create_pg_pool, BcryptPasswordHasher,
-    LocalMessageBroadcaster, PgChatRoomRepository, PgMessageRepository, PgRoomMemberRepository,
-    PgUserRepository, StatsAggregationService,
+    create_event_storage, create_pg_pool, BcryptPasswordHasher, LocalMessageBroadcaster,
+    PgChatRoomRepository, PgMessageRepository, PgRoomMemberRepository, PgUserRepository,
+    StatsAggregationService,
 };
 use sqlx::PgPool;
 use web_api::{router as build_router_fn, AppState, JwtService};

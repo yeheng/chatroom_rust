@@ -1,6 +1,6 @@
+use crate::{ApplicationError, UserPresenceEvent};
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
-use crate::{ApplicationError, UserPresenceEvent};
 
 /// 事件存储trait - 用于将用户状态事件持久化到数据库
 #[async_trait]

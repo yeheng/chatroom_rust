@@ -18,6 +18,7 @@ impl PgEventStorage {
     }
 
     /// 检查数据库连接是否正常
+    #[allow(dead_code)]
     pub async fn health_check(&self) -> Result<(), ApplicationError> {
         sqlx::query("SELECT 1")
             .fetch_one(&self.pool)

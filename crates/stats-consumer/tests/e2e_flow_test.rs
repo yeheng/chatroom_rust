@@ -4,10 +4,8 @@
 
 use application::{PresenceEventType, PresenceManager, RedisPresenceManager, UserPresenceEvent};
 use chrono::Utc;
-use config::AppConfig;
 use domain::{RoomId, UserId};
-use redis::Client as RedisClient;
-use stats_consumer::{create_event_storage, EventStorage, PgEventStorage};
+use stats_consumer::{create_event_storage, EventStorage};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::time::sleep;
@@ -39,7 +37,7 @@ impl Default for E2ETestConfig {
 
 /// 端到端测试辅助结构
 struct E2ETestHelper {
-    redis_client: Arc<RedisClient>,
+    redis_client: Arc<redis::Client>,
     presence_manager: Arc<dyn PresenceManager>,
     event_storage: Arc<dyn EventStorage>,
     config: E2ETestConfig,
@@ -48,7 +46,7 @@ struct E2ETestHelper {
 impl E2ETestHelper {
     async fn new(config: E2ETestConfig) -> Result<Self, Box<dyn std::error::Error>> {
         // 创建 Redis 客户端
-        let redis_client = Arc::new(RedisClient::open(config.redis_url.clone())?);
+        let redis_client = Arc::new(redis::Client::open(config.redis_url.clone())?);
 
         // 创建带自定义流名称的 PresenceManager
         let presence_manager = Arc::new(RedisPresenceManager::with_stream_name(
@@ -60,10 +58,10 @@ impl E2ETestHelper {
         let pg_pool = infrastructure::create_pg_pool(&config.database_url, 5).await?;
 
         // 运行迁移
-        sqlx::migrate!("../../../migrations").run(&pg_pool).await?;
+        sqlx::migrate!("../../migrations").run(&pg_pool).await?;
 
         // 创建事件存储
-        let event_storage = create_event_storage(pg_pool);
+        let event_storage = Arc::new(create_event_storage(pg_pool)) as Arc<dyn EventStorage>;
 
         // 清理测试环境
         Self::cleanup_test_environment(&redis_client, &config.stream_name).await?;
@@ -78,7 +76,7 @@ impl E2ETestHelper {
 
     /// 清理测试环境
     async fn cleanup_test_environment(
-        redis_client: &Arc<RedisClient>,
+        redis_client: &Arc<redis::Client>,
         stream_name: &str,
     ) -> Result<(), Box<dyn std::error::Error>> {
         let mut conn = redis_client.get_multiplexed_async_connection().await?;

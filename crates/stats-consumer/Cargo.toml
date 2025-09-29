@@ -14,7 +14,7 @@ infrastructure = { path = "../infrastructure" }
 tokio = { version = "1.0", features = ["full"] }
 
 # Redis 客户端
-redis = { version = "0.23", features = ["tokio-comp", "streams"] }
+redis = { workspace = true, features = ["tokio-comp", "streams"] }
 
 # 日志
 tracing = "0.1"

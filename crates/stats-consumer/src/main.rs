@@ -21,7 +21,6 @@ use pg_event_storage::{create_event_storage, PgEventStorage};
 /// Stats Consumer 配置
 #[derive(Debug, Clone)]
 struct ConsumerConfig {
-    redis_url: String,
     stream_name: String,
     consumer_group: String,
     consumer_name: String,
@@ -32,7 +31,6 @@ struct ConsumerConfig {
 impl Default for ConsumerConfig {
     fn default() -> Self {
         Self {
-            redis_url: "redis://127.0.0.1:6379".to_string(),
             stream_name: "presence_events".to_string(),
             consumer_group: "stats_consumers".to_string(),
             consumer_name: "consumer_1".to_string(),
@@ -51,7 +49,7 @@ pub struct StatsConsumer {
 
 impl StatsConsumer {
     /// 创建 Stats Consumer
-    pub fn new(
+    fn new(
         redis_client: Arc<redis::Client>,
         event_storage: PgEventStorage,
         config: ConsumerConfig,
@@ -252,7 +250,7 @@ impl StatsConsumer {
         key: &str,
     ) -> Option<String> {
         match fields.get(key) {
-            Some(redis::Value::Data(bytes)) => String::from_utf8(bytes.clone()).ok(),
+            Some(redis::Value::BulkString(bytes)) => String::from_utf8(bytes.clone()).ok(),
             _ => None,
         }
     }
@@ -295,10 +293,7 @@ async fn main() -> anyhow::Result<()> {
     let redis_client = Arc::new(redis::Client::open(redis_url.clone())?);
 
     // 创建消费者配置
-    let consumer_config = ConsumerConfig {
-        redis_url: redis_url.clone(),
-        ..Default::default()
-    };
+    let consumer_config = ConsumerConfig::default();
 
     // 创建并启动消费者
     let consumer = StatsConsumer::new(redis_client, event_storage, consumer_config);

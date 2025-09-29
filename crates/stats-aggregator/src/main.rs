@@ -15,16 +15,14 @@ use tracing::{error, info};
 /// 并将结果保存到 stats_aggregated 表供报表查询使用。
 pub struct StatsAggregator {
     aggregation_service: StatsAggregationService,
-    pool: PgPool,
 }
 
 impl StatsAggregator {
     /// 创建新的统计聚合服务
     pub fn new(pool: PgPool) -> Self {
-        let aggregation_service = StatsAggregationService::new(pool.clone());
+        let aggregation_service = StatsAggregationService::new(pool);
         Self {
             aggregation_service,
-            pool,
         }
     }
 

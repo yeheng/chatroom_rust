@@ -9,9 +9,11 @@ pub trait EventStorage: Send + Sync {
     async fn insert_events(&self, events: &[UserPresenceEvent]) -> Result<(), ApplicationError>;
 
     /// 获取事件总数（用于监控）
+    #[allow(dead_code)]
     async fn get_event_count(&self) -> Result<i64, ApplicationError>;
 
     /// 获取指定时间范围内的事件数量
+    #[allow(dead_code)]
     async fn get_event_count_in_range(
         &self,
         start: DateTime<Utc>,

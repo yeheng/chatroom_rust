@@ -265,10 +265,10 @@ async fn main() -> anyhow::Result<()> {
 
     info!("Stats Consumer 启动中...");
 
-    // 加载配置
+    // Linus式配置加载 - FAIL FAST
     let app_config = AppConfig::load().unwrap_or_else(|e| {
-        eprintln!("配置加载失败，使用默认配置: {}", e);
-        AppConfig::default()
+        eprintln!("配置加载失败: {}", e);
+        std::process::exit(1);
     });
     app_config
         .validate()

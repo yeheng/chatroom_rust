@@ -26,6 +26,8 @@ pub enum DomainError {
     RoomIsPrivate,
     #[error("room is closed")]
     RoomClosed,
+    #[error("insufficient permissions")]
+    InsufficientPermissions,
     #[error("operation not allowed")]
     OperationNotAllowed,
 }

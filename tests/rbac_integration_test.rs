@@ -163,12 +163,11 @@ async fn rbac_permission_system_works() {
 
     println!("✅ 房间角色权限验证通过");
 
-    // 5. 测试 Admin Routes 中的权限检查逻辑
+    // 5. 测试应用层的统一权限检查逻辑
     println!("🔧 测试权限检查逻辑...");
 
-    // 模拟 verify_admin_access 的逻辑
-    async fn verify_admin_access_simulation(
-        user_service: &UserService,
+    // 直接测试应用层的权限检查方法 - Linus式：直接测试真实逻辑
+    async fn test_admin_access(
         chat_service: &ChatService,
         user_id: Uuid,
         room_id: Option<Uuid>,
@@ -176,22 +175,13 @@ async fn rbac_permission_system_works() {
         use domain::{RoomId, UserId};
 
         let user_id = UserId::from(user_id);
+        let room_id = room_id.map(RoomId::from);
 
-        // 首先检查用户是否为系统管理员
-        let user = user_service
-            .find_user_by_id(user_id)
+        chat_service
+            .check_admin_access(user_id, room_id)
             .await
-            .map_err(|err| format!("找不到用户: {}", err))?
-            .ok_or_else(|| "用户不存在".to_string())?;
-
-        // 系统管理员可以访问所有统计信息
-        if user.is_system_admin() {
-            return Ok(());
-        }
-
-        // 如果指定了房间ID，检查用户在该房间的权限
-        if let Some(room_id) = room_id {
-            let room_id = RoomId::from(room_id);
+            .map_err(|err| err.to_string())
+    }
 
             // 获取用户在房间中的角色
             let role = chat_service
@@ -212,33 +202,16 @@ async fn rbac_permission_system_works() {
             }
         } else {
             // 全局统计只有系统管理员可以访问
-            Err("只有系统管理员可以访问全局统计".to_string())
-        }
-    }
-
     // 测试超级用户访问全局统计
-    let result = verify_admin_access_simulation(
-        &user_service,
-        &chat_service,
-        superuser.id.into(),
-        None,
-    )
-    .await;
+    let result = test_admin_access(&chat_service, superuser.id.into(), None).await;
     assert!(result.is_ok(), "超级用户应该能访问全局统计");
 
     // 测试普通用户访问全局统计（应该失败）
-    let result = verify_admin_access_simulation(
-        &user_service,
-        &chat_service,
-        regular_user.id.into(),
-        None,
-    )
-    .await;
+    let result = test_admin_access(&chat_service, regular_user.id.into(), None).await;
     assert!(result.is_err(), "普通用户不应该能访问全局统计");
 
     // 测试房间所有者访问房间统计
-    let result = verify_admin_access_simulation(
-        &user_service,
+    let result = test_admin_access(
         &chat_service,
         regular_user.id.into(),
         Some(room.id.into()),
@@ -247,8 +220,7 @@ async fn rbac_permission_system_works() {
     assert!(result.is_ok(), "房间所有者应该能访问房间统计");
 
     // 测试超级用户访问房间统计
-    let result = verify_admin_access_simulation(
-        &user_service,
+    let result = test_admin_access(
         &chat_service,
         superuser.id.into(),
         Some(room.id.into()),

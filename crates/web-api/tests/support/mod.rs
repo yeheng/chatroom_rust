@@ -30,11 +30,11 @@ impl Default for TestConfig {
         let database_url = env::var("DATABASE_URL")
             .unwrap_or_else(|_| "postgres://postgres:123456@127.0.0.1:5432/chatroom".to_string());
 
-        let mut app_config = AppConfig::load().unwrap_or_else(|_| AppConfig::default());
-        // 覆盖测试专用配置
-        app_config.database.url = database_url.clone();
-        app_config.jwt.secret = "test-secret-key-that-is-at-least-32-bytes-long".to_string();
-        app_config.jwt.expiration_hours = 24;
+        let mut app_config = AppConfig::test_config();
+        // 允许环境变量覆盖测试配置
+        if let Ok(database_url) = env::var("DATABASE_URL") {
+            app_config.database.url = database_url;
+        }
 
         Self {
             app_config,

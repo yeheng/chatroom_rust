@@ -100,12 +100,9 @@ fn parse_granularity(granularity_str: &str) -> Result<TimeGranularity, ApiError>
     }
 }
 
-/// 验证管理员权限
+/// 验证管理员权限 - 委托给应用层的统一权限检查
 ///
-/// 权限规则：
-/// 1. 系统管理员（is_superuser = true）可以访问所有统计信息
-/// 2. 对于房间级统计，只有房间的 Owner 或 Admin 可以访问
-/// 3. 对于全局统计，只有系统管理员可以访问
+/// Linus式分层：Web层只负责HTTP转换，业务逻辑在应用层
 async fn verify_admin_access(
     state: &AppState,
     user_id: Uuid,
@@ -114,52 +111,17 @@ async fn verify_admin_access(
     use domain::{RoomId, UserId};
 
     let user_id = UserId::from(user_id);
+    let room_id = room_id.map(RoomId::from);
 
-    // 首先检查用户是否为系统管理员
-    let user = state
-        .user_service
-        .find_user_by_id(user_id)
+    // 委托给应用层的统一权限检查
+    state
+        .chat_service
+        .check_admin_access(user_id, room_id)
         .await
-        .map_err(|err| ApiError::internal_server_error(format!("Failed to find user: {}", err)))?
-        .ok_or_else(|| ApiError::forbidden("User not found"))?;
-
-    // 系统管理员可以访问所有统计信息
-    if user.is_system_admin() {
-        return Ok(());
-    }
-
-    // 如果指定了房间ID，检查用户在该房间的权限
-    if let Some(room_id) = room_id {
-        let room_id = RoomId::from(room_id);
-
-        // 获取用户在房间中的角色
-        let role = state
-            .chat_service
-            .get_user_role_in_room(room_id, user_id)
-            .await
-            .map_err(|err| {
-                ApiError::internal_server_error(format!("Failed to get user role: {}", err))
-            })?;
-
-        match role {
-            Some(room_role) => {
-                // 只有房间 Owner 或 Admin 才能访问房间统计
-                if room_role.has_admin_access() {
-                    Ok(())
-                } else {
-                    Err(ApiError::forbidden(
-                        "Only room owners and admins can access room statistics",
-                    ))
-                }
-            }
-            None => Err(ApiError::forbidden("User is not a member of this room")),
-        }
-    } else {
-        // 全局统计只有系统管理员可以访问
-        Err(ApiError::forbidden(
-            "Only system administrators can access global statistics",
-        ))
-    }
+        .map_err(|err| {
+            // 将应用错误转换为API错误
+            ApiError::from(err)
+        })
 }
 
 /// 获取房间统计数据

@@ -27,17 +27,10 @@ async fn main() -> anyhow::Result<()> {
         .with_env_filter(EnvFilter::from_default_env())
         .init();
 
-    // 加载统一配置 - 使用分层配置加载
-    let config = if cfg!(test) || std::env::var("CHATROOM_ENV").as_deref() == Ok("development") {
-        // 测试和开发环境使用统一加载（有fallback）
-        AppConfig::load().unwrap_or_else(|e| {
-            tracing::warn!("配置加载失败，使用fallback: {}", e);
-            AppConfig::default()
-        })
-    } else {
-        // 生产环境要求严格的配置加载（设置APP_ENV=production）
-        AppConfig::load().map_err(|e| anyhow::anyhow!("Configuration load failed: {}", e))?
-    };
+    // Linus式配置加载 - 单一可信来源，FAIL FAST
+    let config = AppConfig::load().map_err(|e| {
+        anyhow::anyhow!("配置加载失败 - 检查配置文件和环境变量: {}", e)
+    })?;
 
     // 验证配置（生产环境强制验证）
     if let Err(e) = config.validate() {

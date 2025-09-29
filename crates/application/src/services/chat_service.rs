@@ -25,13 +25,6 @@ pub struct CreateRoomRequest {
 }
 
 #[derive(Debug, Clone)]
-pub struct JoinRoomRequest {
-    pub room_id: Uuid,
-    pub user_id: Uuid,
-    pub password: Option<String>,
-}
-
-#[derive(Debug, Clone)]
 pub struct LeaveRoomRequest {
     pub room_id: Uuid,
     pub user_id: Uuid,
@@ -157,45 +150,6 @@ impl ChatService {
         self.deps.room_repository.create_with_owner(room, owner_member).await.map_err(ApplicationError::from)
     }
 
-    pub async fn join_room(&self, request: JoinRoomRequest) -> Result<(), ApplicationError> {
-        let room_id = RoomId::from(request.room_id);
-        let user_id = UserId::from(request.user_id);
-
-        let room = self
-            .deps
-            .room_repository
-            .find_by_id(room_id)
-            .await?
-            .ok_or(DomainError::RoomNotFound)?;
-
-        if room.is_closed {
-            return Err(DomainError::RoomClosed.into());
-        }
-
-        if self
-            .deps
-            .member_repository
-            .find(room_id, user_id)
-            .await?
-            .is_some()
-        {
-            return Err(DomainError::UserAlreadyInRoom.into());
-        }
-
-        if matches!(room.visibility, ChatRoomVisibility::Private) {
-            let password = request.password.ok_or(DomainError::RoomIsPrivate)?;
-            let hashed = room.password.as_ref().ok_or(DomainError::RoomIsPrivate)?;
-            let valid = self.deps.password_hasher.verify(&password, hashed).await?;
-            if !valid {
-                return Err(DomainError::RoomIsPrivate.into());
-            }
-        }
-
-        let member = RoomMember::new(room_id, user_id, RoomRole::Member, self.deps.clock.now());
-        self.deps.member_repository.upsert(member).await?;
-        Ok(())
-    }
-
     pub async fn leave_room(&self, request: LeaveRoomRequest) -> Result<(), ApplicationError> {
         let room_id = RoomId::from(request.room_id);
         let user_id = UserId::from(request.user_id);
@@ -288,7 +242,10 @@ impl ChatService {
         Ok(records)
     }
 
-    // 邀请用户加入房间（替代join_room）
+    /// 邀请用户加入房间 - 唯一的加入房间方法
+    ///
+    /// Linus式"单一职责"：一个功能只有一个入口点
+    /// 统一处理所有加入房间的场景：管理员邀请、用户自助加入等
     pub async fn invite_member(
         &self,
         request: InviteMemberRequest,
@@ -296,9 +253,6 @@ impl ChatService {
         let room_id = RoomId::from(request.room_id);
         let inviter_id = UserId::from(request.inviter_id);
         let invitee_id = UserId::from(request.invitee_id);
-
-        // 检查邀请人是否有权限（owner或admin才能邀请）
-        self.check_admin_permission(room_id, inviter_id).await?;
 
         // 检查房间是否存在且开放
         let room = self
@@ -323,13 +277,29 @@ impl ChatService {
             return Err(DomainError::UserAlreadyInRoom.into());
         }
 
-        // 验证私有房间密码
-        if matches!(room.visibility, ChatRoomVisibility::Private) {
-            let password = request.password.ok_or(DomainError::RoomIsPrivate)?;
-            let hashed = room.password.as_ref().ok_or(DomainError::RoomIsPrivate)?;
-            let valid = self.deps.password_hasher.verify(&password, hashed).await?;
-            if !valid {
-                return Err(DomainError::RoomIsPrivate.into());
+        // 权限检查：自助加入 vs 管理员邀请
+        if inviter_id == invitee_id {
+            // 自助加入：验证私有房间密码
+            if matches!(room.visibility, ChatRoomVisibility::Private) {
+                let password = request.password.ok_or(DomainError::RoomIsPrivate)?;
+                let hashed = room.password.as_ref().ok_or(DomainError::RoomIsPrivate)?;
+                let valid = self.deps.password_hasher.verify(&password, hashed).await?;
+                if !valid {
+                    return Err(DomainError::RoomIsPrivate.into());
+                }
+            }
+        } else {
+            // 管理员邀请：检查邀请人权限
+            self.check_admin_permission(room_id, inviter_id).await?;
+
+            // 管理员邀请私有房间用户也需要密码
+            if matches!(room.visibility, ChatRoomVisibility::Private) {
+                let password = request.password.ok_or(DomainError::RoomIsPrivate)?;
+                let hashed = room.password.as_ref().ok_or(DomainError::RoomIsPrivate)?;
+                let valid = self.deps.password_hasher.verify(&password, hashed).await?;
+                if !valid {
+                    return Err(DomainError::RoomIsPrivate.into());
+                }
             }
         }
 
@@ -451,6 +421,51 @@ impl ChatService {
         match self.deps.member_repository.find(room_id, user_id).await? {
             Some(member) => Ok(Some(member.role)),
             None => Ok(None),
+        }
+    }
+
+    /// 统一的管理员权限检查 - Linus式业务逻辑集中化
+    ///
+    /// 权限规则：
+    /// 1. 系统管理员（is_superuser = true）可以访问所有资源
+    /// 2. 对于房间级资源，只有房间的 Owner 或 Admin 可以访问
+    /// 3. 对于全局资源，只有系统管理员可以访问
+    pub async fn check_admin_access(
+        &self,
+        user_id: UserId,
+        room_id: Option<RoomId>,
+    ) -> Result<(), ApplicationError> {
+        // 检查用户是否为系统管理员
+        let user = self
+            .deps
+            .user_repository
+            .find_by_id(user_id)
+            .await?
+            .ok_or(DomainError::UserNotFound)?;
+
+        // 系统管理员可以访问所有资源
+        if user.is_system_admin() {
+            return Ok(());
+        }
+
+        // 如果指定了房间ID，检查用户在该房间的权限
+        if let Some(room_id) = room_id {
+            let role = self.get_user_role_in_room(room_id, user_id).await?;
+
+            match role {
+                Some(room_role) => {
+                    // 只有房间 Owner 或 Admin 才能访问管理功能
+                    if room_role.has_admin_access() {
+                        Ok(())
+                    } else {
+                        Err(DomainError::InsufficientPermissions.into())
+                    }
+                }
+                None => Err(DomainError::UserNotInRoom.into()),
+            }
+        } else {
+            // 全局资源只有系统管理员可以访问
+            Err(DomainError::InsufficientPermissions.into())
         }
     }
 }

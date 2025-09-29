@@ -126,11 +126,12 @@ impl StatsAggregator {
     pub async fn run(self: Arc<Self>) -> Result<()> {
         info!("启动统计聚合服务");
 
-        // 加载配置
-        let config = config::AppConfig::load().unwrap_or_else(|e| {
-            eprintln!("配置加载失败，使用默认配置: {}", e);
-            config::AppConfig::default()
-        });
+        // Linus式配置加载 - FAIL FAST
+        let config = config::AppConfig::load().map_err(|e| {
+            let error_msg = format!("配置加载失败: {}", e);
+            error!("{}", error_msg);
+            anyhow::anyhow!(error_msg)
+        })?;
 
         // 创建定时任务调度器
         let mut scheduler = JobScheduler::new().await?;
@@ -245,10 +246,10 @@ async fn main() -> Result<()> {
 
     info!("启动统计聚合服务");
 
-    // 加载配置
+    // Linus式配置加载 - FAIL FAST
     let config = AppConfig::load().unwrap_or_else(|e| {
-        eprintln!("配置加载失败，使用默认配置: {}", e);
-        AppConfig::default()
+        eprintln!("配置加载失败: {}", e);
+        std::process::exit(1);
     });
 
     // 创建数据库连接池

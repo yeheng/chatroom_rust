@@ -9,7 +9,7 @@ use application::{
 use axum::Router;
 use config::AppConfig;
 use infrastructure::{
-    create_event_storage, create_pg_pool, BcryptPasswordHasher, LocalMessageBroadcaster,
+    create_pg_pool, BcryptPasswordHasher, LocalMessageBroadcaster,
     PgChatRoomRepository, PgMessageRepository, PgRoomMemberRepository, PgUserRepository,
     StatsAggregationService,
 };
@@ -112,6 +112,7 @@ fn create_services(
         password_hasher,
         clock,
         broadcaster: broadcaster.clone(),
+        transaction_manager: None, // 测试环境暂时不使用事务管理器
     });
 
     (Arc::new(user_service), Arc::new(chat_service), broadcaster)
@@ -150,9 +151,6 @@ pub async fn setup_test_app() -> TestAppState {
     // 创建统计服务
     let stats_service = Arc::new(StatsAggregationService::new(pool.clone()));
 
-    // 创建事件存储
-    let event_storage = create_event_storage(pool.clone());
-
     // 创建应用状态
     let app_state = AppState::new(
         user_service,
@@ -161,7 +159,6 @@ pub async fn setup_test_app() -> TestAppState {
         jwt_service,
         presence_manager_trait,
         stats_service,
-        event_storage,
     );
 
     // 构建路由器

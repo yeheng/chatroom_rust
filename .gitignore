@@ -2,3 +2,6 @@
 repomix*
 .claude
 .idea
+
+!mirateions/
+!scripts/

@@ -9,6 +9,7 @@ pub mod fallback_broadcaster;
 pub mod migrations;
 pub mod password;
 pub mod repository;
+pub mod simple_transaction;
 pub mod stats_aggregation;
 
 pub use broadcast::{LocalMessageBroadcaster, RedisMessageBroadcaster, RedisMessageStream};
@@ -21,6 +22,7 @@ pub use repository::{
     create_pg_pool, PgChatRoomRepository, PgMessageRepository, PgRoomMemberRepository, PgStorage,
     PgUserRepository,
 };
+pub use simple_transaction::SimpleTransactionManager;
 pub use stats_aggregation::{
     OnlineStatsSummary, RoomStats, StatsAggregationService, StatsQuery, TimeGranularity,
 };

@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use async_trait::async_trait;
 use domain::{
     self, ChatRoom, ChatRoomVisibility, DomainError, Message, MessageContent, MessageId,
     MessageType, RoomId, RoomMember, RoomRole, UserId,
@@ -13,6 +14,16 @@ use crate::{
     password::PasswordHasher,
     repository::{ChatRoomRepository, MessageRepository, RoomMemberRepository},
 };
+
+/// 事务管理器trait - 简单抽象，只为了解决create_room的事务问题
+#[async_trait]
+pub trait TransactionManager: Send + Sync {
+    async fn create_room_with_owner(
+        &self,
+        room: ChatRoom,
+        owner_member: RoomMember,
+    ) -> Result<ChatRoom, ApplicationError>;
+}
 
 #[derive(Debug, Clone)]
 pub struct CreateRoomRequest {
@@ -81,6 +92,7 @@ pub struct ChatServiceDependencies {
     pub password_hasher: Arc<dyn PasswordHasher>,
     pub clock: Arc<dyn Clock>,
     pub broadcaster: Arc<dyn MessageBroadcaster>,
+    pub transaction_manager: Option<Arc<dyn TransactionManager>>, // 可选的事务管理器
 }
 
 pub struct ChatService {
@@ -148,11 +160,17 @@ impl ChatService {
             }
         };
 
-        let stored = self.deps.room_repository.create(room).await?;
-        let owner_member = RoomMember::new(stored.id, stored.owner_id, RoomRole::Owner, now);
-        self.deps.member_repository.upsert(owner_member).await?;
+        let owner_member = RoomMember::new(room.id, room.owner_id, RoomRole::Owner, now);
 
-        Ok(stored)
+        // 如果有事务管理器，使用它确保原子性
+        if let Some(tx_manager) = &self.deps.transaction_manager {
+            tx_manager.create_room_with_owner(room, owner_member).await
+        } else {
+            // 回退到原来的方式（有事务问题）
+            let stored = self.deps.room_repository.create(room).await?;
+            self.deps.member_repository.upsert(owner_member).await?;
+            Ok(stored)
+        }
     }
 
     pub async fn join_room(&self, request: JoinRoomRequest) -> Result<(), ApplicationError> {

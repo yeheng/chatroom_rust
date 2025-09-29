@@ -3,6 +3,15 @@ use domain::{
     ChatRoom, Message, MessageId, RepositoryError, RoomId, RoomMember, User, UserEmail, UserId,
 };
 
+/// 简单直接的事务管理：使用一个单独的service层来管理事务
+pub struct TransactionScope;
+
+impl TransactionScope {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
 /// 通用分页参数
 #[derive(Debug, Clone, Copy)]
 pub struct PaginationParams {
@@ -36,7 +45,7 @@ pub struct TimeRangeParams {
 
 #[async_trait]
 pub trait UserRepository: Send + Sync {
-    /// 创建新用户
+    /// 创建新用户（使用连接池）
     async fn create(&self, user: User) -> Result<User, RepositoryError>;
 
     /// 更新用户信息
@@ -59,7 +68,7 @@ pub trait UserRepository: Send + Sync {
 
 #[async_trait]
 pub trait ChatRoomRepository: Send + Sync {
-    /// 创建新房间
+    /// 创建新房间（使用连接池）
     async fn create(&self, room: ChatRoom) -> Result<ChatRoom, RepositoryError>;
 
     /// 更新房间信息
@@ -87,7 +96,7 @@ pub trait ChatRoomRepository: Send + Sync {
 
 #[async_trait]
 pub trait RoomMemberRepository: Send + Sync {
-    /// 创建或更新房间成员
+    /// 创建或更新房间成员（使用连接池）
     async fn upsert(&self, member: RoomMember) -> Result<RoomMember, RepositoryError>;
 
     /// 查找特定用户在房间中的成员信息
@@ -134,7 +143,7 @@ pub trait RoomMemberRepository: Send + Sync {
 
 #[async_trait]
 pub trait MessageRepository: Send + Sync {
-    /// 保存消息到数据库，返回消息ID
+    /// 保存消息到数据库，返回消息ID（使用连接池）
     async fn create(&self, message: Message) -> Result<MessageId, RepositoryError>;
 
     /// 根据ID查找消息

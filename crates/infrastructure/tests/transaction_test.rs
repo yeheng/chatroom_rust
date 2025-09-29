@@ -5,7 +5,7 @@ use tokio;
 
 use application::{
     broadcaster::BroadcastError,
-    repository::{ChatRoomRepository, MessageRepository, RoomMemberRepository, UserRepository},
+    repository::{ChatRoomRepository, RoomMemberRepository, UserRepository},
     services::{ChatService, ChatServiceDependencies, CreateRoomRequest},
     Clock, MessageBroadcaster, PasswordHasher,
 };

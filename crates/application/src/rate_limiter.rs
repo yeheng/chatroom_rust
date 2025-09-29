@@ -4,7 +4,6 @@ use std::time::Duration;
 
 /// Redis-based用户消息配额管理
 /// 使用Redis的原子操作实现高效的分布式限流
-
 /// 限流错误类型
 #[derive(Debug, thiserror::Error)]
 pub enum RateLimitError {

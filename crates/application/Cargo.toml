@@ -5,6 +5,7 @@ edition.workspace = true
 
 [dependencies]
 domain = { path = "../domain" }
+config = { path = "../config" }
 async-trait = { workspace = true }
 uuid = { workspace = true }
 time = { workspace = true }

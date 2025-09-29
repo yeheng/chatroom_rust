@@ -27,13 +27,16 @@ async fn main() -> anyhow::Result<()> {
         .with_env_filter(EnvFilter::from_default_env())
         .init();
 
-    // 加载统一配置 - 生产环境要求设置关键环境变量
+    // 加载统一配置 - 使用分层配置加载
     let config = if cfg!(test) || std::env::var("CHATROOM_ENV").as_deref() == Ok("development") {
-        // 测试和开发环境使用带默认值的配置
-        AppConfig::from_env_with_defaults()
+        // 测试和开发环境使用统一加载（有fallback）
+        AppConfig::load().unwrap_or_else(|e| {
+            tracing::warn!("配置加载失败，使用fallback: {}", e);
+            AppConfig::default()
+        })
     } else {
-        // 生产环境要求严格的环境变量配置
-        AppConfig::from_env()
+        // 生产环境要求严格的配置加载（设置APP_ENV=production）
+        AppConfig::load().map_err(|e| anyhow::anyhow!("Configuration load failed: {}", e))?
     };
 
     // 验证配置（生产环境强制验证）
@@ -85,7 +88,7 @@ async fn main() -> anyhow::Result<()> {
     let presence_manager: Arc<dyn application::PresenceManager> =
         if let Some(redis_url) = &config.broadcast.redis_url {
             let redis_client = Arc::new(RedisClient::open(redis_url.clone())?);
-            Arc::new(application::RedisPresenceManager::new(redis_client))
+            Arc::new(application::RedisPresenceManager::from_app_config(redis_client, &config))
         } else {
             Arc::new(application::presence::memory::MemoryPresenceManager::new())
         };

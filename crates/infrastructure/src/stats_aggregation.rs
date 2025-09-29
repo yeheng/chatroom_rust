@@ -4,6 +4,7 @@ use sqlx::{
     types::chrono::{DateTime, NaiveDate, Utc},
     PgPool, Row,
 };
+use chrono::{Duration, Datelike, Timelike};
 use uuid::Uuid;
 
 use crate::repository::map_sqlx_err;
@@ -96,7 +97,206 @@ impl StatsAggregationService {
         Self { pool }
     }
 
-    /// 执行指定时间范围的统计聚合
+    /// 增量聚合统计 - Linus式简单直接的解决方案
+    /// 只处理上次聚合后的新增事件，避免重复计算
+    pub async fn incremental_aggregate_stats(
+        &self,
+        granularity: TimeGranularity,
+    ) -> Result<Vec<RoomStats>, ApplicationError> {
+        // 1. 获取上次处理的时间戳
+        let last_processed = self.get_last_processed_timestamp(granularity).await?;
+
+        tracing::info!(
+            granularity = ?granularity,
+            last_processed = %last_processed,
+            "Starting incremental aggregation"
+        );
+
+        // 2. 计算当前时间的桶边界
+        let now = Utc::now();
+        let bucket_start = match granularity {
+            TimeGranularity::Hour => now.with_minute(0).unwrap().with_second(0).unwrap().with_nanosecond(0).unwrap(),
+            TimeGranularity::Day => now.date_naive().and_hms_opt(0, 0, 0).unwrap().and_utc(),
+            TimeGranularity::Week => {
+                let days_since_monday = now.weekday().num_days_from_monday();
+                (now - Duration::days(days_since_monday as i64)).date_naive().and_hms_opt(0, 0, 0).unwrap().and_utc()
+            },
+            TimeGranularity::Month => now.date_naive().with_day(1).unwrap().and_hms_opt(0, 0, 0).unwrap().and_utc(),
+            TimeGranularity::Year => now.date_naive().with_month(1).unwrap().with_day(1).unwrap().and_hms_opt(0, 0, 0).unwrap().and_utc(),
+        };
+
+        // 3. 只计算增量数据
+        let incremental_stats = self.calculate_incremental_stats(
+            granularity,
+            last_processed,
+            bucket_start
+        ).await?;
+
+        // 4. 与现有聚合数据合并
+        let merged_stats = self.merge_with_existing_stats(incremental_stats, granularity).await?;
+
+        // 5. 更新处理时间戳
+        self.update_last_processed_timestamp(granularity, bucket_start).await?;
+
+        tracing::info!(
+            stats_count = merged_stats.len(),
+            new_last_processed = %bucket_start,
+            "Incremental aggregation completed"
+        );
+
+        Ok(merged_stats)
+    }
+
+    /// 获取上次处理的时间戳
+    async fn get_last_processed_timestamp(&self, granularity: TimeGranularity) -> Result<DateTime<Utc>, ApplicationError> {
+        let key = format!("last_processed_{}", granularity.to_string().to_lowercase());
+
+        let row = sqlx::query(
+            "SELECT value FROM stats_config WHERE key = $1"
+        )
+        .bind(&key)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(map_sqlx_err)?;
+
+        if let Some(row) = row {
+            let timestamp_str: String = row.get("value");
+            timestamp_str.parse::<DateTime<Utc>>()
+                .map_err(|e| ApplicationError::infrastructure(format!("Invalid timestamp: {}", e)))
+        } else {
+            // 如果没有记录，返回30天前（初始运行）
+            Ok(Utc::now() - Duration::days(30))
+        }
+    }
+
+    /// 更新最后处理时间戳
+    async fn update_last_processed_timestamp(&self, granularity: TimeGranularity, timestamp: DateTime<Utc>) -> Result<(), ApplicationError> {
+        let key = format!("last_processed_{}", granularity.to_string().to_lowercase());
+
+        sqlx::query(
+            r#"
+            INSERT INTO stats_config (key, value, description)
+            VALUES ($1, $2, $3)
+            ON CONFLICT (key) DO UPDATE SET
+                value = EXCLUDED.value,
+                updated_at = NOW()
+            "#
+        )
+        .bind(&key)
+        .bind(timestamp.to_rfc3339())
+        .bind(format!("Last processed timestamp for {} granularity", granularity))
+        .execute(&self.pool)
+        .await
+        .map_err(map_sqlx_err)?;
+
+        Ok(())
+    }
+
+    /// 计算增量统计数据（只处理新事件）
+    async fn calculate_incremental_stats(
+        &self,
+        granularity: TimeGranularity,
+        since: DateTime<Utc>,
+        until: DateTime<Utc>
+    ) -> Result<Vec<RoomStats>, ApplicationError> {
+        if since >= until {
+            return Ok(Vec::new()); // 没有新数据
+        }
+
+        let _time_format = match granularity {
+            TimeGranularity::Hour => "YYYY-MM-DD HH24:00:00",
+            TimeGranularity::Day => "YYYY-MM-DD 00:00:00",
+            TimeGranularity::Week => "YYYY-\"W\"WW",
+            TimeGranularity::Month => "YYYY-MM-01 00:00:00",
+            TimeGranularity::Year => "YYYY-01-01 00:00:00",
+        };
+
+        let sql = format!(
+            r#"
+            WITH time_buckets AS (
+                SELECT
+                    room_id,
+                    date_trunc('{}', timestamp) as time_bucket,
+                    user_id,
+                    session_id,
+                    event_type,
+                    timestamp
+                FROM presence_events
+                WHERE timestamp > $1 AND timestamp <= $2
+            ),
+            session_durations AS (
+                SELECT
+                    room_id,
+                    time_bucket,
+                    session_id,
+                    user_id,
+                    MIN(CASE WHEN event_type = 'Connected' THEN timestamp END) as connect_time,
+                    MAX(CASE WHEN event_type = 'Disconnected' THEN timestamp END) as disconnect_time
+                FROM time_buckets
+                GROUP BY room_id, time_bucket, session_id, user_id
+            ),
+            incremental_stats AS (
+                SELECT
+                    room_id,
+                    time_bucket,
+                    COUNT(DISTINCT CASE WHEN event_type = 'Connected' THEN session_id END) as new_connections,
+                    COUNT(DISTINCT user_id) as new_unique_users,
+                    AVG(EXTRACT(EPOCH FROM (disconnect_time - connect_time))::DOUBLE PRECISION) FILTER (
+                        WHERE connect_time IS NOT NULL AND disconnect_time IS NOT NULL
+                    ) as avg_session_duration
+                FROM time_buckets tb
+                LEFT JOIN session_durations sd USING (room_id, time_bucket, session_id, user_id)
+                GROUP BY room_id, time_bucket
+            )
+            SELECT
+                room_id,
+                time_bucket,
+                COALESCE(new_connections, 0) as total_connections,
+                COALESCE(new_unique_users, 0) as unique_users,
+                COALESCE(avg_session_duration, 0.0) as avg_session_duration,
+                -- 简化峰值计算，实际项目中需要更复杂的算法
+                COALESCE(new_unique_users, 0) as peak_online_count,
+                COALESCE(new_unique_users::float / 2.0, 0.0) as avg_online_count
+            FROM incremental_stats
+            ORDER BY room_id, time_bucket
+            "#,
+            match granularity {
+                TimeGranularity::Hour => "hour",
+                TimeGranularity::Day => "day",
+                TimeGranularity::Week => "week",
+                TimeGranularity::Month => "month",
+                TimeGranularity::Year => "year",
+            }
+        );
+
+        let rows = sqlx::query(&sql)
+            .bind(since)
+            .bind(until)
+            .fetch_all(&self.pool)
+            .await
+            .map_err(map_sqlx_err)?;
+
+        let mut results = Vec::new();
+        for row in rows {
+            let room_id: Uuid = row.get("room_id");
+            let time_bucket: DateTime<Utc> = row.get("time_bucket");
+
+            results.push(RoomStats {
+                room_id: RoomId::from(room_id),
+                time_bucket,
+                granularity,
+                peak_online_count: row.get("peak_online_count"),
+                avg_online_count: row.get("avg_online_count"),
+                total_connections: row.get("total_connections"),
+                unique_users: row.get("unique_users"),
+                avg_session_duration: row.get("avg_session_duration"),
+            });
+        }
+
+        Ok(results)
+    }
+
+    /// 执行指定时间范围的统计聚合（向后兼容，全量计算）
     ///
     /// 根据时间粒度计算：
     /// - 峰值在线人数
@@ -104,6 +304,8 @@ impl StatsAggregationService {
     /// - 总连接数
     /// - 去重用户数
     /// - 平均会话时长
+    ///
+    /// 注意：此方法执行全量计算，建议使用 incremental_aggregate_stats
     pub async fn aggregate_stats(
         &self,
         granularity: TimeGranularity,
@@ -203,6 +405,18 @@ impl StatsAggregationService {
         }
 
         Ok(results)
+    }
+
+    /// 将增量统计与现有数据合并
+    async fn merge_with_existing_stats(
+        &self,
+        incremental_stats: Vec<RoomStats>,
+        _granularity: TimeGranularity
+    ) -> Result<Vec<RoomStats>, ApplicationError> {
+        // 对于简单实现，我们直接保存增量数据
+        // 数据库的 ON CONFLICT DO UPDATE 会处理合并逻辑
+        // 在生产环境中，可能需要更复杂的合并算法
+        Ok(incremental_stats)
     }
 
     /// 保存聚合统计到数据库
@@ -594,11 +808,13 @@ impl StatsAggregationService {
         self.cleanup_expired_aggregated_data().await
     }
 
-    /// 执行完整的聚合流水线
+    /// 执行完整的聚合流水线（向后兼容，全量计算）
     ///
     /// 1. 计算聚合统计
     /// 2. 保存到数据库
     /// 3. 清理过期数据
+    ///
+    /// 注意：建议使用 run_incremental_aggregation_pipeline
     pub async fn run_aggregation_pipeline(
         &self,
         granularity: TimeGranularity,
@@ -609,7 +825,7 @@ impl StatsAggregationService {
             granularity = ?granularity,
             start_time = %start_time,
             end_time = %end_time,
-            "Starting aggregation pipeline"
+            "Starting full aggregation pipeline (legacy mode)"
         );
 
         // 1. 计算聚合统计
@@ -627,6 +843,38 @@ impl StatsAggregationService {
         tracing::info!(
             stats_count = stats_count,
             "Aggregation pipeline completed successfully"
+        );
+
+        Ok(stats_count)
+    }
+
+    /// 执行增量聚合流水线（推荐使用）
+    ///
+    /// 1. 计算增量统计（只处理新事件）
+    /// 2. 保存到数据库
+    /// 3. 清理过期数据
+    pub async fn run_incremental_aggregation_pipeline(
+        &self,
+        granularity: TimeGranularity,
+    ) -> Result<usize, ApplicationError> {
+        tracing::info!(
+            granularity = ?granularity,
+            "Starting incremental aggregation pipeline"
+        );
+
+        // 1. 计算增量聚合统计
+        let stats = self.incremental_aggregate_stats(granularity).await?;
+        let stats_count = stats.len();
+
+        // 2. 保存统计数据
+        self.save_aggregated_stats(&stats).await?;
+
+        // 3. 清理过期数据（定期执行，不用每次都执行）
+        let _deleted_count = self.cleanup_expired_data().await?;
+
+        tracing::info!(
+            stats_count = stats_count,
+            "Incremental aggregation pipeline completed successfully"
         );
 
         Ok(stats_count)

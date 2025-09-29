@@ -1,17 +1,51 @@
-server:
-  host: "127.0.0.1"
-  port: 3000
-  cors_origins:
-    - "*"
+# 开发环境默认配置
+# 这些值将被 config/local.yml 和环境变量覆盖
 
 database:
-  url: "postgresql://chatroom:chatroom@localhost:5432/chatroom"
-  max_connections: 20
-  min_connections: 5
-  acquire_timeout_seconds: 30
-  idle_timeout_seconds: 600
-  max_lifetime_seconds: 1800
+  url: "postgres://postgres:123456@127.0.0.1:5432/chatroom"
+  max_connections: 5
 
-logging:
-  level: "info"
-  format: "json"
+jwt:
+  secret: "dev-secret-key-not-for-production-use-minimum-32-chars"
+  expiration_hours: 24
+
+broadcast:
+  capacity: 256
+  redis_url: null
+
+redis:
+  url: "redis://127.0.0.1:6379"
+  max_connections: 10
+
+server:
+  host: "127.0.0.1"
+  port: 8080
+  bcrypt_cost: null
+
+# 统计聚合配置
+stats:
+  schedule:
+    # 小时级统计聚合：每小时第5分钟执行
+    hourly_aggregation: "0 5 * * * *"
+    # 日级统计：每天凌晨1点执行
+    daily_aggregation: "0 0 1 * * *"
+    # 周级统计：每周一凌晨2点执行
+    weekly_aggregation: "0 0 2 * * 1"
+    # 月级统计：每月1号凌晨3点执行
+    monthly_aggregation: "0 0 3 1 * *"
+    # 数据清理：每天凌晨4点执行
+    data_cleanup: "0 0 4 * * *"
+  consumer:
+    # 消费者组名称
+    consumer_group: "stats_consumers"
+    # 消费者实例名称
+    consumer_name: "consumer_1"
+    # 批次大小
+    batch_size: 10
+    # 轮询间隔（秒）
+    poll_interval_secs: 1
+
+# 用户状态事件配置
+presence:
+  # Redis Stream 名称
+  stream_name: "presence_events"

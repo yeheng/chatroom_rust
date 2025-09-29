@@ -134,6 +134,11 @@ impl RedisPresenceManager {
         }
     }
 
+    /// 从应用配置创建 RedisPresenceManager
+    pub fn from_app_config(redis_client: Arc<redis::Client>, app_config: &config::AppConfig) -> Self {
+        Self::with_stream_name(redis_client, app_config.presence.stream_name.clone())
+    }
+
     /// 生成房间在线用户集合的Redis键
     fn room_online_key(&self, room_id: RoomId) -> String {
         format!("room:{}:online", room_id)

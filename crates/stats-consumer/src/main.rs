@@ -28,14 +28,14 @@ struct ConsumerConfig {
     poll_interval: Duration,
 }
 
-impl Default for ConsumerConfig {
-    fn default() -> Self {
+impl ConsumerConfig {
+    fn from_app_config(app_config: &config::AppConfig) -> Self {
         Self {
-            stream_name: "presence_events".to_string(),
-            consumer_group: "stats_consumers".to_string(),
-            consumer_name: "consumer_1".to_string(),
-            batch_size: 10,
-            poll_interval: Duration::from_secs(1),
+            stream_name: app_config.presence.stream_name.clone(),
+            consumer_group: app_config.stats.consumer.consumer_group.clone(),
+            consumer_name: app_config.stats.consumer.consumer_name.clone(),
+            batch_size: app_config.stats.consumer.batch_size,
+            poll_interval: Duration::from_secs(app_config.stats.consumer.poll_interval_secs),
         }
     }
 }
@@ -266,7 +266,10 @@ async fn main() -> anyhow::Result<()> {
     info!("Stats Consumer 启动中...");
 
     // 加载配置
-    let app_config = AppConfig::from_env_with_defaults();
+    let app_config = AppConfig::load().unwrap_or_else(|e| {
+        eprintln!("配置加载失败，使用默认配置: {}", e);
+        AppConfig::default()
+    });
     app_config
         .validate()
         .map_err(|e| anyhow::anyhow!("配置验证失败: {}", e))?;
@@ -293,7 +296,7 @@ async fn main() -> anyhow::Result<()> {
     let redis_client = Arc::new(redis::Client::open(redis_url.clone())?);
 
     // 创建消费者配置
-    let consumer_config = ConsumerConfig::default();
+    let consumer_config = ConsumerConfig::from_app_config(&app_config);
 
     // 创建并启动消费者
     let consumer = StatsConsumer::new(redis_client, event_storage, consumer_config);

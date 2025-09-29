@@ -3,5 +3,8 @@ repomix*
 .claude
 .idea
 
+# 本地配置文件 - 不提交到仓库
+config/local.yml
+
 !mirateions/
 !scripts/

@@ -1,7 +1,6 @@
 use std::sync::Arc;
 
-use application::{UserPresenceEvent, ApplicationError};
-use crate::event_storage::EventStorage;
+use application::{UserPresenceEvent, ApplicationError, EventStorage};
 use async_trait::async_trait;
 use sqlx::{types::chrono, PgPool, Row};
 
@@ -104,7 +103,7 @@ impl EventStorage for PgEventStorage {
 }
 
 /// 为基础设施构建器添加事件存储支持
-pub fn create_event_storage(pool: PgPool) -> Arc<dyn EventStorage> {
+pub fn create_event_storage(pool: PgPool) -> Arc<dyn application::EventStorage> {
     Arc::new(PgEventStorage::new(pool))
 }
 

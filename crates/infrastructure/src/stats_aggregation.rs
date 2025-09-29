@@ -1,7 +1,7 @@
 use application::ApplicationError;
 use domain::RoomId;
 use sqlx::{
-    types::chrono::{DateTime, Utc},
+    types::chrono::{DateTime, Utc, NaiveDate},
     PgPool, Row,
 };
 use uuid::Uuid;
@@ -376,25 +376,213 @@ impl StatsAggregationService {
         })
     }
 
-    /// 清理过期的聚合数据
-    pub async fn cleanup_expired_data(&self) -> Result<i64, ApplicationError> {
-        let row = sqlx::query(
+    /// 创建分区表（按月分区）
+    /// 用于确保新月份的分区存在
+    pub async fn create_partition_if_not_exists(&self, target_date: DateTime<Utc>) -> Result<String, ApplicationError> {
+        // 使用 SQL 来处理日期计算，避免复杂的 Rust 日期操作
+        let partition_row = sqlx::query(
             r#"
-            SELECT cleanup_expired_aggregated_stats() as deleted_count
-        "#,
+            SELECT
+                date_trunc('month', $1::timestamptz) as month_start,
+                date_trunc('month', $1::timestamptz) + interval '1 month' as next_month_start,
+                'presence_events_' || to_char(date_trunc('month', $1::timestamptz), 'YYYY_MM') as partition_name
+            "#
+        )
+        .bind(target_date)
+        .fetch_one(&self.pool)
+        .await
+        .map_err(map_sqlx_err)?;
+
+        let partition_name: String = partition_row.get("partition_name");
+        let month_start: DateTime<Utc> = partition_row.get("month_start");
+        let next_month_start: DateTime<Utc> = partition_row.get("next_month_start");
+
+        // 检查分区是否已存在
+        let exists_row = sqlx::query(
+            r#"
+            SELECT EXISTS (
+                SELECT 1 FROM pg_class
+                WHERE relname = $1 AND relkind = 'r'
+            ) as partition_exists
+            "#
+        )
+        .bind(&partition_name)
+        .fetch_one(&self.pool)
+        .await
+        .map_err(map_sqlx_err)?;
+
+        let partition_exists: bool = exists_row.get("partition_exists");
+
+        if !partition_exists {
+            // 创建分区表
+            let create_sql = format!(
+                r#"
+                CREATE TABLE {} PARTITION OF presence_events
+                FOR VALUES FROM ('{}') TO ('{}')
+                "#,
+                partition_name,
+                month_start.format("%Y-%m-%d %H:%M:%S"),
+                next_month_start.format("%Y-%m-%d %H:%M:%S")
+            );
+
+            sqlx::query(&create_sql)
+                .execute(&self.pool)
+                .await
+                .map_err(map_sqlx_err)?;
+
+            // 为分区创建索引
+            let index_room_time = format!("idx_{}_room_time", partition_name);
+            let index_user_session = format!("idx_{}_user_session", partition_name);
+
+            sqlx::query(&format!(
+                "CREATE INDEX {} ON {} (room_id, timestamp)",
+                index_room_time, partition_name
+            ))
+            .execute(&self.pool)
+            .await
+            .map_err(map_sqlx_err)?;
+
+            sqlx::query(&format!(
+                "CREATE INDEX {} ON {} (user_id, session_id)",
+                index_user_session, partition_name
+            ))
+            .execute(&self.pool)
+            .await
+            .map_err(map_sqlx_err)?;
+
+            tracing::info!(
+                partition_name = %partition_name,
+                month_start = %month_start,
+                "Created new partition for presence_events"
+            );
+
+            Ok(format!("Created partition: {}", partition_name))
+        } else {
+            Ok(format!("Partition already exists: {}", partition_name))
+        }
+    }
+
+    /// 清理过期的原始事件分区
+    /// 删除超过保留期限的整个分区表
+    pub async fn cleanup_expired_partitions(&self) -> Result<Vec<(String, i64)>, ApplicationError> {
+        // 使用 SQL 计算30天前的日期
+        let cutoff_info = sqlx::query(
+            r#"
+            SELECT
+                (CURRENT_DATE - INTERVAL '30 days')::date as cutoff_date,
+                date_trunc('month', (CURRENT_DATE - INTERVAL '30 days')::date)::date as cutoff_month
+            "#
         )
         .fetch_one(&self.pool)
         .await
         .map_err(map_sqlx_err)?;
 
-        let deleted_count: i64 = row.get("deleted_count");
+        let cutoff_month: NaiveDate = cutoff_info.get("cutoff_month");
+
+        // 查找所有过期的分区
+        let partition_rows = sqlx::query(
+            r#"
+            SELECT tablename
+            FROM pg_tables
+            WHERE tablename LIKE 'presence_events_%'
+            AND tablename ~ '^presence_events_\d{4}_\d{2}$'
+            "#
+        )
+        .fetch_all(&self.pool)
+        .await
+        .map_err(map_sqlx_err)?;
+
+        let mut deleted_partitions = Vec::new();
+
+        for row in partition_rows {
+            let table_name: String = row.get("tablename");
+
+            // 解析分区表名中的日期
+            if let Some(date_part) = table_name.strip_prefix("presence_events_") {
+                if let Ok(partition_date) = NaiveDate::parse_from_str(&format!("{}-01", date_part.replace('_', "-")), "%Y-%m-%d") {
+                    if partition_date < cutoff_month {
+                        // 获取分区表的记录数
+                        let count_row = sqlx::query(&format!("SELECT COUNT(*) as row_count FROM {}", table_name))
+                            .fetch_one(&self.pool)
+                            .await
+                            .map_err(map_sqlx_err)?;
+
+                        let row_count: i64 = count_row.get("row_count");
+
+                        // 删除分区表
+                        sqlx::query(&format!("DROP TABLE IF EXISTS {}", table_name))
+                            .execute(&self.pool)
+                            .await
+                            .map_err(map_sqlx_err)?;
+
+                        tracing::info!(
+                            partition_name = %table_name,
+                            deleted_rows = row_count,
+                            "Dropped expired partition"
+                        );
+
+                        deleted_partitions.push((table_name, row_count));
+                    }
+                }
+            }
+        }
+
+        Ok(deleted_partitions)
+    }
+
+    /// 清理过期的聚合数据
+    /// 使用 Rust 代码实现，替代 PL/pgSQL 函数
+    pub async fn cleanup_expired_aggregated_data(&self) -> Result<i64, ApplicationError> {
+        // 获取保留策略
+        let retention_rows = sqlx::query(
+            "SELECT granularity, retention_days FROM stats_data_retention WHERE retention_days > 0"
+        )
+        .fetch_all(&self.pool)
+        .await
+        .map_err(map_sqlx_err)?;
+
+        let mut total_deleted = 0i64;
+
+        for row in retention_rows {
+            let granularity: String = row.get("granularity");
+            let retention_days: i32 = row.get("retention_days");
+
+            // 使用 SQL 来计算截止日期
+            let result = sqlx::query(
+                r#"
+                DELETE FROM stats_aggregated
+                WHERE granularity = $1
+                AND time_bucket < (CURRENT_TIMESTAMP - ($2 || ' days')::INTERVAL)
+                "#
+            )
+            .bind(&granularity)
+            .bind(retention_days)
+            .execute(&self.pool)
+            .await
+            .map_err(map_sqlx_err)?;
+
+            let deleted_rows = result.rows_affected() as i64;
+            total_deleted += deleted_rows;
+
+            tracing::debug!(
+                granularity = %granularity,
+                retention_days = retention_days,
+                deleted_rows = deleted_rows,
+                "Cleaned up expired aggregated data"
+            );
+        }
 
         tracing::info!(
-            deleted_count = deleted_count,
-            "Cleaned up expired aggregated statistics"
+            total_deleted = total_deleted,
+            "Completed cleanup of expired aggregated data"
         );
 
-        Ok(deleted_count)
+        Ok(total_deleted)
+    }
+
+    /// 清理过期的聚合数据（保持向后兼容性）
+    pub async fn cleanup_expired_data(&self) -> Result<i64, ApplicationError> {
+        self.cleanup_expired_aggregated_data().await
     }
 
     /// 执行完整的聚合流水线

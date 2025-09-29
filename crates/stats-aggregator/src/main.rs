@@ -92,13 +92,36 @@ impl StatsAggregator {
         Ok(())
     }
 
-    /// 执行数据清理
+    /// 执行数据清理和分区管理
     pub async fn cleanup_expired_data(&self) -> Result<()> {
-        info!("开始清理过期聚合数据");
+        info!("开始数据清理和分区管理");
 
-        let deleted_count = self.aggregation_service.cleanup_expired_data().await?;
+        // 1. 创建下个月的分区（预创建）
+        let next_month = Utc::now() + Duration::days(30);
+        match self.aggregation_service.create_partition_if_not_exists(next_month).await {
+            Ok(message) => info!("分区管理: {}", message),
+            Err(e) => error!("创建分区失败: {}", e),
+        }
 
-        info!("数据清理完成，删除了 {} 条过期记录", deleted_count);
+        // 2. 清理过期的原始事件分区
+        match self.aggregation_service.cleanup_expired_partitions().await {
+            Ok(deleted_partitions) => {
+                let total_rows: i64 = deleted_partitions.iter().map(|(_, count)| count).sum();
+                info!("清理过期分区完成，删除了 {} 个分区表，共 {} 条记录",
+                      deleted_partitions.len(), total_rows);
+            }
+            Err(e) => error!("清理过期分区失败: {}", e),
+        }
+
+        // 3. 清理过期聚合数据
+        match self.aggregation_service.cleanup_expired_aggregated_data().await {
+            Ok(deleted_count) => {
+                info!("清理过期聚合数据完成，删除了 {} 条记录", deleted_count);
+            }
+            Err(e) => error!("清理过期聚合数据失败: {}", e),
+        }
+
+        info!("数据清理和分区管理完成");
         Ok(())
     }
 

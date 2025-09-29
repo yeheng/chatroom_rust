@@ -1,10 +1,20 @@
 use std::sync::Arc;
+use std::time::Duration;
 
-use infrastructure::{EventStorage, QueueStatus};
-use application::{ChatService, MessageBroadcaster, PresenceManager, UserService};
+use application::{ChatService, MessageBroadcaster, PresenceManager, UserService, EventStorage};
 use infrastructure::StatsAggregationService;
 
 use crate::JwtService;
+
+/// 事件收集器队列状态
+#[derive(Debug, Clone)]
+pub struct QueueStatus {
+    pub queue_size: usize,
+    pub max_queue_size: usize,
+    pub is_running: bool,
+    pub batch_size: usize,
+    pub flush_interval: Duration,
+}
 
 #[derive(Clone)]
 pub struct AppState {

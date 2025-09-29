@@ -16,6 +16,7 @@ use infrastructure::{
 use redis::Client;
 use tokio::time::sleep;
 use uuid::Uuid;
+use futures::stream::{FuturesOrdered, TryStreamExt};
 
 /// 测试配置
 struct TestConfig {
@@ -75,6 +76,7 @@ impl TestAppInstance {
         let _user_service = UserService::new(UserServiceDependencies {
             user_repository,
             password_hasher,
+            clock: Arc::new(application::SystemClock::default()),
             presence_manager: presence_manager.clone(),
         });
 

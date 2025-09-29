@@ -108,112 +108,6 @@ INSERT INTO stats_config (key, value, description) VALUES
     ('enable_user_agent_tracking', 'false', '是否启用User-Agent跟踪')
 ON CONFLICT (key) DO NOTHING;
 
--- 创建用于自动分区管理的函数
-CREATE OR REPLACE FUNCTION create_monthly_partition(target_date DATE DEFAULT CURRENT_DATE)
-RETURNS TEXT
-LANGUAGE plpgsql
-AS $$
-DECLARE
-    partition_name TEXT;
-    month_start DATE;
-    next_month_start DATE;
-BEGIN
-    month_start := date_trunc('month', target_date);
-    next_month_start := month_start + INTERVAL '1 month';
-    partition_name := 'presence_events_' || to_char(month_start, 'YYYY_MM');
-
-    -- 检查分区是否已存在
-    IF NOT EXISTS (
-        SELECT 1 FROM pg_class
-        WHERE relname = partition_name
-        AND relkind = 'r'
-    ) THEN
-        EXECUTE format('CREATE TABLE %I PARTITION OF presence_events
-                        FOR VALUES FROM (%L) TO (%L)',
-                       partition_name, month_start, next_month_start);
-
-        -- 创建分区特定索引
-        EXECUTE format('CREATE INDEX %I ON %I (room_id, timestamp)',
-                       'idx_' || partition_name || '_room_time', partition_name);
-        EXECUTE format('CREATE INDEX %I ON %I (user_id, session_id)',
-                       'idx_' || partition_name || '_user_session', partition_name);
-
-        RETURN 'Created partition: ' || partition_name;
-    ELSE
-        RETURN 'Partition already exists: ' || partition_name;
-    END IF;
-END;
-$$;
-
--- 创建下个月的分区（预创建）
-SELECT create_monthly_partition(CURRENT_DATE + INTERVAL '1 month');
-
--- 创建用于清理过期数据的函数
-CREATE OR REPLACE FUNCTION cleanup_expired_events()
-RETURNS TABLE(deleted_count BIGINT, partition_name TEXT)
-LANGUAGE plpgsql
-AS $$
-DECLARE
-    rec RECORD;
-    cutoff_date DATE;
-    current_partition TEXT;
-    delete_count BIGINT;
-BEGIN
-    -- 计算30天前的日期作为原始事件数据的保留截止日期
-    cutoff_date := CURRENT_DATE - INTERVAL '30 days';
-
-    -- 遍历所有过期的分区
-    FOR rec IN
-        SELECT schemaname, tablename
-        FROM pg_tables
-        WHERE tablename LIKE 'presence_events_%'
-        AND tablename ~ '^presence_events_\d{4}_\d{2}$'
-        AND to_date(substring(tablename from 'presence_events_(\d{4}_\d{2})'), 'YYYY_MM') < date_trunc('month', cutoff_date)
-    LOOP
-        current_partition := rec.tablename;
-
-        -- 获取该分区的行数
-        EXECUTE format('SELECT count(*) FROM %I', current_partition) INTO delete_count;
-
-        -- 删除整个分区表
-        EXECUTE format('DROP TABLE IF EXISTS %I', current_partition);
-
-        -- 返回删除信息
-        partition_name := current_partition;
-        deleted_count := delete_count;
-        RETURN NEXT;
-    END LOOP;
-END;
-$$;
-
--- 创建用于聚合数据清理的函数
-CREATE OR REPLACE FUNCTION cleanup_expired_aggregated_stats()
-RETURNS BIGINT
-LANGUAGE plpgsql
-AS $$
-DECLARE
-    total_deleted BIGINT := 0;
-    rec RECORD;
-    cutoff_date DATE;
-    deleted_rows BIGINT;
-BEGIN
-    -- 根据保留策略清理聚合数据
-    FOR rec IN SELECT granularity, retention_days FROM stats_data_retention WHERE retention_days > 0
-    LOOP
-        cutoff_date := CURRENT_DATE - (rec.retention_days || ' days')::INTERVAL;
-
-        EXECUTE format('DELETE FROM stats_aggregated
-                        WHERE granularity = %L AND time_bucket < %L',
-                       rec.granularity, cutoff_date);
-
-        GET DIAGNOSTICS deleted_rows = ROW_COUNT;
-        total_deleted := total_deleted + deleted_rows;
-    END LOOP;
-
-    RETURN total_deleted;
-END;
-$$;
-
 -- 创建触发器用于自动更新配置表的updated_at字段
 CREATE OR REPLACE FUNCTION update_stats_config_timestamp()
 RETURNS TRIGGER
@@ -261,10 +155,8 @@ FROM latest_room_stats
 WHERE granularity IN ('Hour', 'Day')
 GROUP BY room_id;
 
-COMMENT ON TABLE presence_events IS '用户状态变化事件原始数据表，按月分区存储';
+-- 注释
+COMMENT ON TABLE presence_events IS '用户状态变化事件原始数据表，按月分区存储，分区管理由应用层负责';
 COMMENT ON TABLE stats_aggregated IS '预聚合的统计数据表，支持多种时间粒度';
 COMMENT ON TABLE stats_data_retention IS '数据保留策略配置表';
 COMMENT ON TABLE stats_config IS '统计系统配置表';
-COMMENT ON FUNCTION create_monthly_partition IS '自动创建月度分区的函数';
-COMMENT ON FUNCTION cleanup_expired_events IS '清理过期原始事件数据的函数';
-COMMENT ON FUNCTION cleanup_expired_aggregated_stats IS '清理过期聚合统计数据的函数';

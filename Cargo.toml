@@ -5,7 +5,6 @@ members = [
     "crates/config",
     "crates/web-api",
     "crates/main",
-    "crates/stats-consumer",
     "crates/stats-aggregator"
 ]
 

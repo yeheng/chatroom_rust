@@ -5,7 +5,6 @@
 pub mod broadcast;
 pub mod builder;
 pub mod delivery;
-pub mod event_storage;
 pub mod fallback_broadcaster;
 pub mod migrations;
 pub mod password;
@@ -16,8 +15,7 @@ pub mod stats_aggregation;
 pub use broadcast::{LocalMessageBroadcaster, RedisMessageBroadcaster, RedisMessageStream};
 pub use builder::{Infrastructure, InfrastructureError};
 pub use delivery::PgDeliveryTracker;
-pub use event_storage::{EventStorage, QueueStatus};
-pub use fallback_broadcaster::{FallbackBroadcaster, HealthChecker};
+pub use fallback_broadcaster::FallbackBroadcaster;
 pub use migrations::MIGRATOR;
 pub use password::BcryptPasswordHasher;
 pub use presence_storage::{create_event_storage, PgEventStorage};

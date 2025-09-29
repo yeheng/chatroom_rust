@@ -66,9 +66,21 @@ async fn main() -> anyhow::Result<()> {
             Arc::new(LocalMessageBroadcaster::new(config.broadcast.capacity))
         };
 
+    // 创建统计相关服务
+    let stats_service = Arc::new(StatsAggregationService::new(pg_pool.clone()));
+    let event_storage = create_event_storage(pg_pool.clone());
+
     // 创建应用层服务
     let presence_manager: Arc<dyn application::PresenceManager> =
-        Arc::new(application::presence::memory::MemoryPresenceManager::new());
+        if let Some(redis_url) = &config.broadcast.redis_url {
+            let redis_client = Arc::new(RedisClient::open(redis_url.clone())?);
+            Arc::new(application::RedisPresenceManager::with_event_storage(
+                redis_client,
+                event_storage.clone(),
+            ))
+        } else {
+            Arc::new(application::presence::memory::MemoryPresenceManager::new())
+        };
 
     let user_service = UserService::new(UserServiceDependencies {
         user_repository,
@@ -89,12 +101,8 @@ async fn main() -> anyhow::Result<()> {
     // 创建 JWT 服务
     let jwt_service = Arc::new(JwtService::new(config.jwt));
 
-    // 创建统计相关服务
-    let stats_service = Arc::new(StatsAggregationService::new(pg_pool.clone()));
-    let event_storage = create_event_storage(pg_pool.clone());
-
-    // 注意：事件采集现在由独立的 stats-consumer 服务处理
-    // 这里只保留存储接口用于监控查询
+    // 注意：事件采集现在直接在 RedisPresenceManager 中异步处理
+    // 不再需要独立的 stats-consumer 服务
 
     // 创建应用状态
     let state = AppState::new(

@@ -1,8 +1,6 @@
-use std::time::Duration;
-
 use async_trait::async_trait;
-use sqlx::types::chrono::{DateTime, Utc};
-use application::{UserPresenceEvent, ApplicationError};
+use chrono::{DateTime, Utc};
+use crate::{ApplicationError, UserPresenceEvent};
 
 /// 事件存储trait - 用于将用户状态事件持久化到数据库
 #[async_trait]
@@ -19,14 +17,4 @@ pub trait EventStorage: Send + Sync {
         start: DateTime<Utc>,
         end: DateTime<Utc>,
     ) -> Result<i64, ApplicationError>;
-}
-
-/// 事件收集器队列状态
-#[derive(Debug, Clone)]
-pub struct QueueStatus {
-    pub queue_size: usize,
-    pub max_queue_size: usize,
-    pub is_running: bool,
-    pub batch_size: usize,
-    pub flush_interval: Duration,
 }

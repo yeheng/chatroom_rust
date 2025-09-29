@@ -100,9 +100,6 @@ async fn main() -> anyhow::Result<()> {
         presence_manager: presence_manager.clone(),
     });
 
-    // 创建事务管理器
-    let tx_manager = Arc::new(infrastructure::SimpleTransactionManager::new(pg_pool.clone()));
-
     let chat_service = ChatService::new(ChatServiceDependencies {
         room_repository,
         member_repository,
@@ -110,7 +107,6 @@ async fn main() -> anyhow::Result<()> {
         password_hasher,
         clock,
         broadcaster: broadcaster.clone(),
-        transaction_manager: Some(tx_manager), // 使用事务管理器确保数据一致性
     });
 
     // 创建 JWT 服务

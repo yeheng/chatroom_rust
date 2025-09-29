@@ -1,16 +1,17 @@
-/// 简化的事务测试 - 验证事务性的create_room操作
+/// 简化的事务测试 - Linus式好品味版本
+/// 直接测试Repository的原子操作，无需额外抽象
 use std::sync::Arc;
 use tokio;
 
 use application::{
     services::{ChatService, ChatServiceDependencies, CreateRoomRequest},
-    repository::{ChatRoomRepository, RoomMemberRepository},
-    Clock, MessageBroadcaster, PasswordHasher, ApplicationError,
+    repository::{ChatRoomRepository, RoomMemberRepository, UserRepository},
+    Clock, MessageBroadcaster, PasswordHasher,
     broadcaster::BroadcastError
 };
 use async_trait::async_trait;
 use domain::{ChatRoomVisibility, RoomRole};
-use infrastructure::{SimpleTransactionManager, PgStorage};
+use infrastructure::PgStorage;
 use sqlx::PgPool;
 use time::OffsetDateTime;
 use uuid::Uuid;
@@ -74,11 +75,11 @@ async fn setup_test_db() -> PgPool {
 }
 
 #[tokio::test]
-async fn test_transactional_create_room() {
+async fn test_atomic_create_room() {
     let pool = setup_test_db().await;
     let storage = PgStorage::new(pool.clone());
-    let tx_manager = SimpleTransactionManager::new(pool);
 
+    // Linus式简化版本：直接使用Repository，无需额外的事务管理器垃圾
     let chat_service = ChatService::new(ChatServiceDependencies {
         room_repository: storage.room_repository.clone(),
         member_repository: storage.member_repository.clone(),
@@ -86,17 +87,32 @@ async fn test_transactional_create_room() {
         password_hasher: Arc::new(TestPasswordHasher),
         clock: Arc::new(TestClock::new()),
         broadcaster: Arc::new(TestBroadcaster),
-        transaction_manager: Some(Arc::new(tx_manager)),
     });
+
+    let owner_id = Uuid::new_v4();
+
+    // 首先创建用户（满足外键约束）
+    let user = domain::User {
+        id: domain::UserId::from(owner_id),
+        username: domain::Username::parse("testuser").unwrap(),
+        email: domain::UserEmail::parse("test@example.com").unwrap(),
+        password: domain::PasswordHash::new("hashed_password").unwrap(),
+        status: domain::UserStatus::Active,
+        is_superuser: false,
+        created_at: OffsetDateTime::now_utc(),
+        updated_at: OffsetDateTime::now_utc(),
+    };
+
+    storage.user_repository.create(user).await.unwrap();
 
     let request = CreateRoomRequest {
         name: "测试房间".to_string(),
-        owner_id: Uuid::new_v4(),
+        owner_id,
         visibility: ChatRoomVisibility::Public,
         password: None,
     };
 
-    // 测试正常情况
+    // 测试正常情况 - 原子操作应该保证一致性
     let result = chat_service.create_room(request.clone()).await;
 
     if let Err(ref e) = result {

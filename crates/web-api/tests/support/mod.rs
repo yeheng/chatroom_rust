@@ -112,7 +112,6 @@ fn create_services(
         password_hasher,
         clock,
         broadcaster: broadcaster.clone(),
-        transaction_manager: None, // 测试环境暂时不使用事务管理器
     });
 
     (Arc::new(user_service), Arc::new(chat_service), broadcaster)

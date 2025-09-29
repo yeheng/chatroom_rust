@@ -221,6 +221,54 @@ impl PgChatRoomRepository {
     pub fn new(pool: PgPool) -> Self {
         Self { pool }
     }
+
+    /// 内部函数：在事务中插入房间 - 单一职责
+    async fn insert_room_tx(
+        &self,
+        tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+        room: &ChatRoom,
+    ) -> Result<ChatRoom, RepositoryError> {
+        let record = sqlx::query_as::<_, RoomRecord>(
+            "INSERT INTO chat_rooms (id, name, owner_id, is_private, password_hash, created_at, updated_at, is_closed)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+             RETURNING *"
+        )
+        .bind(Uuid::from(room.id))
+        .bind(&room.name)
+        .bind(Uuid::from(room.owner_id))
+        .bind(matches!(room.visibility, ChatRoomVisibility::Private))
+        .bind(room.password.as_ref().map(|h| h.as_str()))
+        .bind(room.created_at)
+        .bind(room.updated_at)
+        .bind(room.is_closed)
+        .fetch_one(&mut **tx)
+        .await
+        .map_err(map_sqlx_err)?;
+
+        ChatRoom::try_from(record)
+    }
+
+    /// 内部函数：在事务中插入成员 - 单一职责
+    async fn insert_member_tx(
+        &self,
+        tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+        member: &RoomMember,
+    ) -> Result<(), RepositoryError> {
+        sqlx::query(
+            "INSERT INTO room_members (room_id, user_id, role, joined_at, last_read_message_id)
+             VALUES ($1, $2, $3, $4, $5)"
+        )
+        .bind(Uuid::from(member.room_id))
+        .bind(Uuid::from(member.user_id))
+        .bind(&member.role)
+        .bind(member.joined_at)
+        .bind(member.last_read_message.map(Uuid::from))
+        .execute(&mut **tx)
+        .await
+        .map_err(map_sqlx_err)?;
+
+        Ok(())
+    }
 }
 
 #[async_trait]
@@ -303,6 +351,27 @@ impl ChatRoomRepository for PgChatRoomRepository {
         .map_err(map_sqlx_err)?;
 
         records.into_iter().map(ChatRoom::try_from).collect()
+    }
+
+    /// Linus式原子操作：消除特殊情况，直接解决问题
+    /// 不需要什么该死的TransactionManager抽象
+    async fn create_with_owner(
+        &self,
+        room: ChatRoom,
+        owner: RoomMember,
+    ) -> Result<ChatRoom, RepositoryError> {
+        let mut tx = self.pool.begin().await.map_err(map_sqlx_err)?;
+
+        // 1. 创建房间 - 单一职责，短小精悍
+        let created_room = self.insert_room_tx(&mut tx, &room).await?;
+
+        // 2. 创建owner成员 - 同样简单直接
+        self.insert_member_tx(&mut tx, &owner).await?;
+
+        // 3. 提交事务 - 原子性保证
+        tx.commit().await.map_err(map_sqlx_err)?;
+
+        Ok(created_room)
     }
 
     // === 向后兼容方法 ===

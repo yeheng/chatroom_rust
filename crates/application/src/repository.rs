@@ -92,6 +92,14 @@ pub trait ChatRoomRepository: Send + Sync {
         let _ = pagination;
         Ok(Vec::new())
     }
+
+    /// 原子性创建房间和owner成员 - Linus式简化版本
+    /// 这个方法解决了create_room的核心事务问题，无需额外抽象
+    async fn create_with_owner(
+        &self,
+        room: ChatRoom,
+        owner: RoomMember,
+    ) -> Result<ChatRoom, RepositoryError>;
 }
 
 #[async_trait]

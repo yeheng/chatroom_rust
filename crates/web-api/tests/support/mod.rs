@@ -4,13 +4,12 @@ use application::{
     presence::memory::MemoryPresenceManager,
     repository::{ChatRoomRepository, MessageRepository, RoomMemberRepository, UserRepository},
     services::{ChatService, ChatServiceDependencies, UserService, UserServiceDependencies},
-    stats_collector::{EventCollectorConfig, EventStorage, PresenceEventCollector},
     Clock, MessageBroadcaster, PasswordHasher, SystemClock,
 };
 use axum::Router;
 use config::AppConfig;
 use infrastructure::{
-    create_pg_pool, presence_storage::PgEventStorage, BcryptPasswordHasher,
+    create_event_storage, create_pg_pool, BcryptPasswordHasher,
     LocalMessageBroadcaster, PgChatRoomRepository, PgMessageRepository, PgRoomMemberRepository,
     PgUserRepository, StatsAggregationService,
 };
@@ -152,19 +151,7 @@ pub async fn setup_test_app() -> TestAppState {
     let stats_service = Arc::new(StatsAggregationService::new(pool.clone()));
 
     // 创建事件存储
-    let event_storage: Arc<dyn EventStorage> = Arc::new(PgEventStorage::new(pool.clone()));
-
-    // 创建事件收集器
-    let event_collector_config = EventCollectorConfig::default();
-    let event_collector = Arc::new(PresenceEventCollector::new(
-        event_storage.clone(),
-        event_collector_config,
-    ));
-
-    // 启动事件收集器
-    if let Err(err) = event_collector.start().await {
-        panic!("Failed to start event collector: {}", err);
-    }
+    let event_storage = create_event_storage(pool.clone());
 
     // 创建应用状态
     let app_state = AppState::new(
@@ -175,7 +162,6 @@ pub async fn setup_test_app() -> TestAppState {
         presence_manager_trait,
         stats_service,
         event_storage,
-        event_collector,
     );
 
     // 构建路由器

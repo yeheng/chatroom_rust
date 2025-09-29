@@ -1,0 +1,37 @@
+[package]
+name = "stats-consumer"
+version.workspace = true
+edition.workspace = true
+
+[[bin]]
+name = "stats-consumer"
+path = "src/main.rs"
+
+[dependencies]
+domain = { path = "../domain" }
+application = { path = "../application", features = ["sqlx"] }
+infrastructure = { path = "../infrastructure" }
+config = { path = "../config" }
+
+tokio = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+sqlx = { workspace = true, features = ["runtime-tokio-rustls", "postgres", "uuid", "chrono", "time"] }
+redis = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+uuid = { workspace = true }
+chrono = { workspace = true }
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+async-trait = { workspace = true }
+
+# 用于信号处理
+tokio-util = "0.7"
+futures = { workspace = true }
+
+# 用于重试逻辑
+backoff = { version = "0.4", features = ["tokio"] }
+
+[dev-dependencies]
+tokio-test = "0.4"

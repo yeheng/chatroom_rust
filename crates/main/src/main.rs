@@ -7,7 +7,6 @@ use application::repository::{
 };
 use application::{
     services::{ChatService, ChatServiceDependencies, UserService, UserServiceDependencies},
-    stats_collector::{EventCollectorConfig, PresenceEventCollector},
     Clock, MessageBroadcaster, PasswordHasher, SystemClock,
 };
 use config::AppConfig;
@@ -93,13 +92,9 @@ async fn main() -> anyhow::Result<()> {
     // 创建统计相关服务
     let stats_service = Arc::new(StatsAggregationService::new(pg_pool.clone()));
     let event_storage = create_event_storage(pg_pool.clone());
-    let event_collector = Arc::new(PresenceEventCollector::new(
-        event_storage.clone(),
-        EventCollectorConfig::default(),
-    ));
 
-    // 启动事件采集器
-    event_collector.start().await?;
+    // 注意：事件采集现在由独立的 stats-consumer 服务处理
+    // 这里只保留存储接口用于监控查询
 
     // 创建应用状态
     let state = AppState::new(
@@ -110,7 +105,6 @@ async fn main() -> anyhow::Result<()> {
         presence_manager,
         stats_service,
         event_storage,
-        event_collector,
     );
 
     // 启动 Web 服务器

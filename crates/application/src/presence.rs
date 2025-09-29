@@ -1,9 +1,6 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use std::sync::Arc;
-use std::time::{Duration, Instant};
-use tokio::sync::RwLock;
 use uuid::Uuid;
 
 use crate::error::ApplicationError;
@@ -18,11 +15,11 @@ pub struct OnlineStats {
 }
 
 /// 用户状态变化事件类型
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "sqlx", derive(sqlx::Type))]
 #[cfg_attr(
     feature = "sqlx",
-    sqlx(type_name = "presence_event_type", rename_all = "PascalCase")
+    sqlx(type_name = "presence_event_type", rename_all = "snake_case")
 )]
 pub enum PresenceEventType {
     Connected,
@@ -41,7 +38,7 @@ impl std::fmt::Display for PresenceEventType {
 }
 
 /// 用户状态变化事件（用于历史数据采集）
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UserPresenceEvent {
     pub event_id: Uuid,
     pub user_id: UserId,
@@ -97,39 +94,29 @@ pub trait PresenceManager: Send + Sync {
 
     /// 记录用户状态变化事件（用于历史数据采集）
     async fn record_presence_event(&self, event: UserPresenceEvent)
-        -> Result<(), ApplicationError>;
-}
-
-/// 统计缓存项
-#[derive(Debug, Clone)]
-struct CachedStats {
-    stats: OnlineStats,
-    cached_at: Instant,
+        -> Result<(), ApplicationError> {
+        // 默认实现：只记录日志
+        tracing::info!(
+            event_id = %event.event_id,
+            user_id = %event.user_id,
+            room_id = %event.room_id,
+            event_type = %event.event_type,
+            session_id = %event.session_id,
+            "记录用户状态变化事件"
+        );
+        Ok(())
+    }
 }
 
 /// Redis实现的在线状态管理器
+/// 直接查询Redis，确保数据强一致性
 pub struct RedisPresenceManager {
     redis_client: Arc<redis::Client>,
-    /// 内存缓存，避免频繁Redis查询（5秒缓存）
-    stats_cache: Arc<RwLock<HashMap<RoomId, CachedStats>>>,
-    cache_ttl: Duration,
 }
 
 impl RedisPresenceManager {
     pub fn new(redis_client: Arc<redis::Client>) -> Self {
-        Self {
-            redis_client,
-            stats_cache: Arc::new(RwLock::new(HashMap::new())),
-            cache_ttl: Duration::from_secs(5),
-        }
-    }
-
-    pub fn with_cache_ttl(redis_client: Arc<redis::Client>, cache_ttl: Duration) -> Self {
-        Self {
-            redis_client,
-            stats_cache: Arc::new(RwLock::new(HashMap::new())),
-            cache_ttl,
-        }
+        Self { redis_client }
     }
 
     /// 生成房间在线用户集合的Redis键
@@ -153,35 +140,7 @@ impl RedisPresenceManager {
             })
     }
 
-    /// 清除房间统计缓存
-    async fn invalidate_cache(&self, room_id: RoomId) {
-        let mut cache = self.stats_cache.write().await;
-        cache.remove(&room_id);
     }
-
-    /// 从缓存获取统计信息，如果缓存过期则返回None
-    async fn get_cached_stats(&self, room_id: RoomId) -> Option<OnlineStats> {
-        let cache = self.stats_cache.read().await;
-        if let Some(cached) = cache.get(&room_id) {
-            if cached.cached_at.elapsed() < self.cache_ttl {
-                return Some(cached.stats.clone());
-            }
-        }
-        None
-    }
-
-    /// 更新统计缓存
-    async fn update_cache(&self, room_id: RoomId, stats: OnlineStats) {
-        let mut cache = self.stats_cache.write().await;
-        cache.insert(
-            room_id,
-            CachedStats {
-                stats,
-                cached_at: Instant::now(),
-            },
-        );
-    }
-}
 
 #[async_trait::async_trait]
 impl PresenceManager for RedisPresenceManager {
@@ -213,9 +172,6 @@ impl PresenceManager for RedisPresenceManager {
             "用户连接到房间"
         );
 
-        // 清除统计缓存，因为在线人数发生了变化
-        self.invalidate_cache(room_id).await;
-
         Ok(())
     }
 
@@ -244,9 +200,6 @@ impl PresenceManager for RedisPresenceManager {
             user_id = %user_id,
             "用户从房间断开"
         );
-
-        // 清除统计缓存，因为在线人数发生了变化
-        self.invalidate_cache(room_id).await;
 
         Ok(())
     }
@@ -381,12 +334,7 @@ impl PresenceManager for RedisPresenceManager {
     }
 
     async fn get_online_stats(&self, room_id: RoomId) -> Result<OnlineStats, ApplicationError> {
-        // 先检查缓存
-        if let Some(cached_stats) = self.get_cached_stats(room_id).await {
-            return Ok(cached_stats);
-        }
-
-        // 缓存未命中，从Redis查询
+        // 直接查询Redis，确保数据强一致性
         let count = self.get_online_count(room_id).await?;
         let stats = OnlineStats {
             room_id,
@@ -394,28 +342,52 @@ impl PresenceManager for RedisPresenceManager {
             timestamp: Utc::now(),
         };
 
-        // 更新缓存
-        self.update_cache(room_id, stats.clone()).await;
-
         Ok(stats)
     }
 
-    async fn record_presence_event(
-        &self,
-        event: UserPresenceEvent,
-    ) -> Result<(), ApplicationError> {
-        // 暂时只记录日志，后续会添加数据库写入
+    async fn record_presence_event(&self, event: UserPresenceEvent) -> Result<(), ApplicationError> {
+        let mut conn = self.get_connection().await?;
+        let stream_key = "presence_events_stream";
+
+        // 将事件写入Redis Stream
+        let _: String = redis::cmd("XADD")
+            .arg(stream_key)
+            .arg("*")  // 自动生成的ID
+            .arg("event_id")
+            .arg(event.event_id.to_string())
+            .arg("user_id")
+            .arg(event.user_id.to_string())
+            .arg("room_id")
+            .arg(event.room_id.to_string())
+            .arg("event_type")
+            .arg(event.event_type.to_string())
+            .arg("timestamp")
+            .arg(event.timestamp.to_rfc3339())
+            .arg("session_id")
+            .arg(event.session_id.to_string())
+            .arg("user_ip")
+            .arg(event.user_ip.clone().unwrap_or_default())
+            .arg("user_agent")
+            .arg(event.user_agent.clone().unwrap_or_default())
+            .query_async(&mut conn)
+            .await
+            .map_err(|e| {
+                let message = format!("Redis Stream operation failed: {e}");
+                ApplicationError::infrastructure_with_source(message, e)
+            })?;
+
         tracing::info!(
             event_id = %event.event_id,
             user_id = %event.user_id,
             room_id = %event.room_id,
             event_type = %event.event_type,
-            session_id = %event.session_id,
-            "记录用户状态变化事件"
+            "事件已写入Redis Stream"
         );
+
         Ok(())
     }
-}
+
+    }
 
 /// 内存实现的在线状态管理器（用于测试）
 pub mod memory {

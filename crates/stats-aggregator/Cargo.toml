@@ -1,0 +1,31 @@
+[package]
+name = "stats-aggregator"
+version.workspace = true
+edition.workspace = true
+
+[[bin]]
+name = "stats-aggregator"
+path = "src/main.rs"
+
+[dependencies]
+domain = { path = "../domain" }
+application = { path = "../application", features = ["sqlx"] }
+infrastructure = { path = "../infrastructure" }
+config = { path = "../config" }
+
+tokio = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+sqlx = { workspace = true, features = ["runtime-tokio-rustls", "postgres", "uuid", "chrono", "time"] }
+serde = { workspace = true }
+serde_json = { workspace = true }
+uuid = { workspace = true }
+chrono = { workspace = true }
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+
+# 用于定时任务
+tokio-cron-scheduler = "0.11"
+
+# 用于信号处理
+tokio-util = "0.7"

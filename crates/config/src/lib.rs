@@ -20,6 +20,8 @@ pub struct AppConfig {
     pub broadcast: BroadcastConfig,
     /// 服务配置
     pub server: ServerConfig,
+    /// Redis配置
+    pub redis: RedisConfig,
 }
 
 /// 数据库配置
@@ -41,6 +43,13 @@ pub struct JwtConfig {
 pub struct BroadcastConfig {
     pub capacity: usize,
     pub redis_url: Option<String>,
+}
+
+/// Redis配置
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RedisConfig {
+    pub url: String,
+    pub max_connections: u32,
 }
 
 /// 服务器配置
@@ -79,6 +88,13 @@ impl AppConfig {
                     .and_then(|s| s.parse().ok())
                     .unwrap_or(256),
                 redis_url: env::var("REDIS_URL").ok(),
+            },
+            redis: RedisConfig {
+                url: env::var("REDIS_URL").unwrap_or_else(|_| "redis://127.0.0.1:6379".to_string()),
+                max_connections: env::var("REDIS_MAX_CONNECTIONS")
+                    .ok()
+                    .and_then(|s| s.parse().ok())
+                    .unwrap_or(10),
             },
             server: ServerConfig {
                 host: env::var("SERVER_HOST").unwrap_or_else(|_| "127.0.0.1".to_string()),

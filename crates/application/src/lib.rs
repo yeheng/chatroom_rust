@@ -13,7 +13,6 @@ pub mod rate_limiter;
 pub mod repository;
 pub mod sequencer;
 pub mod services;
-pub mod stats_collector;
 
 pub use broadcaster::{MessageBroadcast, MessageBroadcaster, MessageStream, WebSocketMessage};
 pub use clock::{Clock, SystemClock};
@@ -23,11 +22,7 @@ pub use password::{PasswordHasher, PasswordHasherError};
 pub use presence::{
     OnlineStats, PresenceEventType, PresenceManager, RedisPresenceManager, UserPresenceEvent,
 };
-pub use rate_limiter::{MessageRateLimiter, RateLimitError, UserQuota};
+pub use rate_limiter::{MessageRateLimiter, RateLimitError};
 pub use repository::{ChatRoomRepository, MessageRepository, RoomMemberRepository, UserRepository};
 pub use sequencer::{MessageSequencer, SequencedMessage};
 pub use services::{ChatService, ChatServiceDependencies, UserService, UserServiceDependencies};
-pub use stats_collector::{
-    create_connection_event, create_disconnection_event, create_heartbeat_event,
-    EventCollectorConfig, EventStorage, PresenceEventCollector, QueueStatus,
-};

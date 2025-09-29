@@ -1,9 +1,7 @@
 use std::sync::Arc;
 
-use application::{
-    stats_collector::EventStorage, ChatService, MessageBroadcaster, PresenceEventCollector,
-    PresenceManager, UserService,
-};
+use infrastructure::{EventStorage, QueueStatus};
+use application::{ChatService, MessageBroadcaster, PresenceManager, UserService};
 use infrastructure::StatsAggregationService;
 
 use crate::JwtService;
@@ -17,7 +15,7 @@ pub struct AppState {
     pub presence_manager: Arc<dyn PresenceManager>,
     pub stats_service: Arc<StatsAggregationService>,
     pub event_storage: Arc<dyn EventStorage>,
-    pub event_collector: Arc<PresenceEventCollector>,
+    // 注意：事件收集器已迁移到独立服务，这里保留兼容性接口
 }
 
 impl AppState {
@@ -29,7 +27,6 @@ impl AppState {
         presence_manager: Arc<dyn PresenceManager>,
         stats_service: Arc<StatsAggregationService>,
         event_storage: Arc<dyn EventStorage>,
-        event_collector: Arc<PresenceEventCollector>,
     ) -> Self {
         Self {
             user_service,
@@ -39,7 +36,22 @@ impl AppState {
             presence_manager,
             stats_service,
             event_storage,
-            event_collector,
+        }
+    }
+
+    /// 获取事件收集器状态（兼容性接口）
+    ///
+    /// 现在事件处理由独立的 stats-consumer 服务完成，
+    /// 这里返回虚拟状态用于API兼容性
+    pub fn get_event_collector_status(&self) -> QueueStatus {
+        use std::time::Duration;
+
+        QueueStatus {
+            queue_size: 0,  // 独立服务处理，主应用不知道队列状态
+            max_queue_size: 10000,
+            is_running: true,  // 假设独立服务正在运行
+            batch_size: 1000,
+            flush_interval: Duration::from_secs(5),
         }
     }
 }

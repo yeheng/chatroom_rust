@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
-use application::{presence::UserPresenceEvent, stats_collector::EventStorage, ApplicationError};
+use application::{UserPresenceEvent, ApplicationError};
+use crate::event_storage::EventStorage;
 use async_trait::async_trait;
 use sqlx::{types::chrono, PgPool, Row};
 

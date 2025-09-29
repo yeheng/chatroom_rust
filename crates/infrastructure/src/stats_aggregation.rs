@@ -149,7 +149,7 @@ impl StatsAggregationService {
                     time_bucket,
                     COUNT(DISTINCT CASE WHEN event_type = 'Connected' THEN session_id END) as total_connections,
                     COUNT(DISTINCT user_id) as unique_users,
-                    AVG(EXTRACT(EPOCH FROM (disconnect_time - connect_time))) FILTER (
+  AVG(EXTRACT(EPOCH FROM (disconnect_time - connect_time))::DOUBLE PRECISION) FILTER (
                         WHERE connect_time IS NOT NULL AND disconnect_time IS NOT NULL
                     ) as avg_session_duration
                 FROM time_buckets tb

@@ -1,7 +1,6 @@
 use domain::{MessageId, RoomId};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
 use time::OffsetDateTime;
 
 /// 带序列号的消息
@@ -14,65 +13,82 @@ pub struct SequencedMessage {
     pub timestamp: OffsetDateTime,
 }
 
-/// 消息序列化器和去重器
-/// 确保消息按顺序传递且无重复
+/// Redis-based消息序列化器和去重器
+/// 使用Redis原子操作实现分布式序列号分配和消息去重
 pub struct MessageSequencer {
-    /// 每个房间的当前序列号
-    room_sequences: Arc<RwLock<HashMap<RoomId, u64>>>,
-    /// 已处理的消息ID（用于去重）
-    processed_messages: Arc<RwLock<HashMap<MessageId, u64>>>,
+    /// Redis客户端
+    redis_client: Arc<redis::Client>,
 }
 
 impl MessageSequencer {
-    pub fn new() -> Self {
-        Self {
-            room_sequences: Arc::new(RwLock::new(HashMap::new())),
-            processed_messages: Arc::new(RwLock::new(HashMap::new())),
-        }
+    /// 创建新的Redis-based序列化器
+    pub fn new(redis_client: Arc<redis::Client>) -> Self {
+        Self { redis_client }
+    }
+
+    /// 获取Redis连接
+    async fn get_connection(&self) -> Result<redis::aio::MultiplexedConnection, String> {
+        self.redis_client
+            .get_multiplexed_async_connection()
+            .await
+            .map_err(|e| format!("Redis connection failed: {}", e))
+    }
+
+    /// 生成房间序列号键
+    fn room_sequence_key(&self, room_id: RoomId) -> String {
+        format!("room_sequence:{}", room_id)
+    }
+
+    /// 生成已处理消息键
+    fn processed_messages_key(&self) -> String {
+        "processed_messages".to_string()
     }
 
     /// 为消息分配序列号
-    /// 如果消息已存在，返回原序列号；否则分配新序列号
-    pub fn assign_sequence(
+    /// 使用Redis原子操作实现分布式序列号分配和消息去重
+    pub async fn assign_sequence(
         &self,
         room_id: RoomId,
         message_id: MessageId,
     ) -> Result<SequencedMessage, String> {
-        // 检查是否已处理过此消息（去重）
-        {
-            let processed = self
-                .processed_messages
-                .read()
-                .map_err(|e| format!("RwLock poisoned: {}", e))?;
-            if let Some(&existing_seq) = processed.get(&message_id) {
-                return Ok(SequencedMessage {
-                    sequence_id: existing_seq,
-                    room_id,
-                    message_id,
-                    timestamp: OffsetDateTime::now_utc(),
-                });
-            }
-        }
+        let mut conn = self.get_connection().await?;
+        let room_key = self.room_sequence_key(room_id);
+        let processed_key = self.processed_messages_key();
 
-        // 为消息分配新的序列号
-        let sequence_id = {
-            let mut sequences = self
-                .room_sequences
-                .write()
-                .map_err(|e| format!("RwLock poisoned: {}", e))?;
-            let seq = sequences.entry(room_id).or_insert(0);
-            *seq += 1;
-            *seq
-        };
+        // 使用Lua脚本确保原子性：去重 + 序列号分配
+        let script = redis::Script::new(
+            r#"
+            local room_key = KEYS[1]
+            local processed_key = KEYS[2]
+            local message_id = ARGV[1]
 
-        // 记录已处理的消息
-        {
-            let mut processed = self
-                .processed_messages
-                .write()
-                .map_err(|e| format!("RwLock poisoned: {}", e))?;
-            processed.insert(message_id, sequence_id);
-        }
+            -- 检查消息是否已处理（去重）
+            local existing_seq = redis.call('HGET', processed_key, message_id)
+            if existing_seq then
+                return {0, tonumber(existing_seq)}
+            end
+
+            -- 分配新序列号
+            local sequence_id = redis.call('INCR', room_key)
+
+            -- 记录已处理的消息，设置24小时过期
+            redis.call('HSET', processed_key, message_id, sequence_id)
+            redis.call('EXPIRE', processed_key, 86400)
+
+            return {1, sequence_id}
+            "#,
+        );
+
+        let result: Vec<i64> = script
+            .key(&room_key)
+            .key(&processed_key)
+            .arg(message_id.to_string())
+            .invoke_async(&mut conn)
+            .await
+            .map_err(|e| format!("Redis script execution failed: {}", e))?;
+
+        let _is_duplicate = result[0] == 0;
+        let sequence_id = result[1] as u64;
 
         Ok(SequencedMessage {
             sequence_id,
@@ -83,50 +99,34 @@ impl MessageSequencer {
     }
 
     /// 检查消息是否已处理（去重检查）
-    pub fn is_duplicate(&self, message_id: MessageId) -> Result<bool, String> {
-        let processed = self
-            .processed_messages
-            .read()
-            .map_err(|e| format!("RwLock poisoned: {}", e))?;
-        Ok(processed.contains_key(&message_id))
+    pub async fn is_duplicate(&self, message_id: MessageId) -> Result<bool, String> {
+        let mut conn = self.get_connection().await?;
+        let processed_key = self.processed_messages_key();
+
+        let exists: bool = redis::cmd("HEXISTS")
+            .arg(&processed_key)
+            .arg(message_id.to_string())
+            .query_async(&mut conn)
+            .await
+            .map_err(|e| format!("Redis HEXISTS failed: {}", e))?;
+
+        Ok(exists)
     }
 
     /// 获取房间的当前序列号
-    pub fn get_room_sequence(&self, room_id: RoomId) -> Result<u64, String> {
-        let sequences = self
-            .room_sequences
-            .read()
-            .map_err(|e| format!("RwLock poisoned: {}", e))?;
-        Ok(sequences.get(&room_id).copied().unwrap_or(0))
-    }
+    pub async fn get_room_sequence(&self, room_id: RoomId) -> Result<u64, String> {
+        let mut conn = self.get_connection().await?;
+        let room_key = self.room_sequence_key(room_id);
 
-    /// 清理旧的已处理消息记录（防止内存泄漏）
-    pub fn cleanup_old_messages(&self, max_entries: usize) -> Result<usize, String> {
-        let mut processed = self
-            .processed_messages
-            .write()
-            .map_err(|e| format!("RwLock poisoned: {}", e))?;
+        let sequence: i64 = redis::cmd("GET")
+            .arg(&room_key)
+            .query_async(&mut conn)
+            .await
+            .unwrap_or(0);
 
-        if processed.len() <= max_entries {
-            return Ok(0);
-        }
-
-        let excess = processed.len() - max_entries;
-
-        // 简单的清理策略：随机删除一些旧记录
-        // 实际生产中可能需要基于时间戳的更智能策略
-        let keys_to_remove: Vec<MessageId> = processed.keys().take(excess).cloned().collect();
-
-        for key in &keys_to_remove {
-            processed.remove(key);
-        }
-
-        Ok(keys_to_remove.len())
+        Ok(sequence as u64)
     }
 }
 
-impl Default for MessageSequencer {
-    fn default() -> Self {
-        Self::new()
-    }
-}
+// 移除Default实现，因为需要Redis客户端
+// 使用者必须显式提供Redis客户端

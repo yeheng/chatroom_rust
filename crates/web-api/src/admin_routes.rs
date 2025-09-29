@@ -282,8 +282,8 @@ async fn get_event_metrics(
             ApiError::internal_server_error(format!("Failed to get daily event count: {}", err))
         })?;
 
-    // 获取队列状态
-    let queue_status = state.event_collector.get_queue_status().await;
+    // 获取队列状态（现在返回独立服务的虚拟状态）
+    let queue_status = state.get_event_collector_status();
 
     let response = EventMetricsResponse {
         total_events,

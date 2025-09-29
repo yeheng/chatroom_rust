@@ -4,7 +4,9 @@ members = [
     "crates/application",
     "crates/config",
     "crates/web-api",
-    "crates/main"
+    "crates/main",
+    "crates/stats-consumer",
+    "crates/stats-aggregator"
 ]
 
 resolver = "2"
@@ -42,7 +44,7 @@ bcrypt = { version = "0.17" }
 
 
 # Redis 缓存和 Pub/Sub
-redis = { version = "0.32", features = ["tokio-comp", "connection-manager"] }
+redis = { version = "0.32", features = ["tokio-comp", "connection-manager", "streams"] }
 
 # JWT 认证
 jsonwebtoken = "9.3"

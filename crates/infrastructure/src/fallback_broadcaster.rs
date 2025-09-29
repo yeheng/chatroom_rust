@@ -17,7 +17,7 @@ pub struct FallbackBroadcaster {
     redis: Arc<dyn MessageBroadcaster>,
     local: Arc<dyn MessageBroadcaster>,
     last_failure: Arc<Mutex<Option<Instant>>>, // 最后一次Redis失败的时间
-    cooldown: Duration, // Redis失败后的冷却时间
+    cooldown: Duration,                        // Redis失败后的冷却时间
 }
 
 impl FallbackBroadcaster {
@@ -45,7 +45,10 @@ impl FallbackBroadcaster {
         if let Ok(mut guard) = self.last_failure.lock() {
             *guard = Some(Instant::now());
         }
-        error!("Redis失败，启动{}秒冷却期，使用本地广播", self.cooldown.as_secs());
+        error!(
+            "Redis失败，启动{}秒冷却期，使用本地广播",
+            self.cooldown.as_secs()
+        );
     }
 
     /// 清除失败记录 - Redis恢复正常

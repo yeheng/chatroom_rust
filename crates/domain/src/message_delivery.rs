@@ -6,7 +6,7 @@ use crate::value_objects::{MessageId, Timestamp, UserId};
 pub struct MessageDelivery {
     pub message_id: MessageId,
     pub user_id: UserId,
-    pub sent_at: Timestamp,        // 消息发送时间
+    pub sent_at: Timestamp,              // 消息发送时间
     pub delivered_at: Option<Timestamp>, // 消息送达确认时间
 }
 

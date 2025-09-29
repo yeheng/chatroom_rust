@@ -64,9 +64,11 @@ impl From<ApplicationError> for ApiError {
             AppErr::Domain(DomainError::UserNotFound) => {
                 ApiError::new(StatusCode::NOT_FOUND, "USER_NOT_FOUND", "user not found")
             }
-            AppErr::Domain(DomainError::InsufficientPermissions) => {
-                ApiError::new(StatusCode::FORBIDDEN, "INSUFFICIENT_PERMISSIONS", "insufficient permissions")
-            }
+            AppErr::Domain(DomainError::InsufficientPermissions) => ApiError::new(
+                StatusCode::FORBIDDEN,
+                "INSUFFICIENT_PERMISSIONS",
+                "insufficient permissions",
+            ),
             AppErr::Domain(DomainError::RoomNotFound) => {
                 ApiError::new(StatusCode::NOT_FOUND, "ROOM_NOT_FOUND", "room not found")
             }

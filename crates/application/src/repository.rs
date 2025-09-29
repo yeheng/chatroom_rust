@@ -1,10 +1,17 @@
 use async_trait::async_trait;
 use domain::{
-    ChatRoom, Message, MessageId, MessageDelivery, RepositoryError, RoomId, RoomMember, User, UserEmail, UserId,
+    ChatRoom, Message, MessageDelivery, MessageId, RepositoryError, RoomId, RoomMember, User,
+    UserEmail, UserId,
 };
 
 /// 简单直接的事务管理：使用一个单独的service层来管理事务
 pub struct TransactionScope;
+
+impl Default for TransactionScope {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 impl TransactionScope {
     pub fn new() -> Self {
@@ -265,10 +272,16 @@ pub trait MessageDeliveryRepository: Send + Sync {
     ) -> Result<(), RepositoryError>;
 
     /// 查找用户的未送达消息
-    async fn find_undelivered_for_user(&self, user_id: UserId) -> Result<Vec<MessageDelivery>, RepositoryError>;
+    async fn find_undelivered_for_user(
+        &self,
+        user_id: UserId,
+    ) -> Result<Vec<MessageDelivery>, RepositoryError>;
 
     /// 查找特定消息的传递状态
-    async fn find_by_message(&self, message_id: MessageId) -> Result<Vec<MessageDelivery>, RepositoryError>;
+    async fn find_by_message(
+        &self,
+        message_id: MessageId,
+    ) -> Result<Vec<MessageDelivery>, RepositoryError>;
 
     /// 清理已送达的旧记录（用于数据维护）
     async fn cleanup_delivered_before(

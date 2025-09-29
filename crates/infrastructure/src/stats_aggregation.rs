@@ -1,10 +1,10 @@
 use application::ApplicationError;
+use chrono::{Datelike, Duration, Timelike};
 use domain::RoomId;
 use sqlx::{
     types::chrono::{DateTime, NaiveDate, Utc},
     PgPool, Row,
 };
-use chrono::{Duration, Datelike, Timelike};
 use uuid::Uuid;
 
 use crate::repository::map_sqlx_err;
@@ -115,28 +115,53 @@ impl StatsAggregationService {
         // 2. 计算当前时间的桶边界
         let now = Utc::now();
         let bucket_start = match granularity {
-            TimeGranularity::Hour => now.with_minute(0).unwrap().with_second(0).unwrap().with_nanosecond(0).unwrap(),
+            TimeGranularity::Hour => now
+                .with_minute(0)
+                .unwrap()
+                .with_second(0)
+                .unwrap()
+                .with_nanosecond(0)
+                .unwrap(),
             TimeGranularity::Day => now.date_naive().and_hms_opt(0, 0, 0).unwrap().and_utc(),
             TimeGranularity::Week => {
                 let days_since_monday = now.weekday().num_days_from_monday();
-                (now - Duration::days(days_since_monday as i64)).date_naive().and_hms_opt(0, 0, 0).unwrap().and_utc()
-            },
-            TimeGranularity::Month => now.date_naive().with_day(1).unwrap().and_hms_opt(0, 0, 0).unwrap().and_utc(),
-            TimeGranularity::Year => now.date_naive().with_month(1).unwrap().with_day(1).unwrap().and_hms_opt(0, 0, 0).unwrap().and_utc(),
+                (now - Duration::days(days_since_monday as i64))
+                    .date_naive()
+                    .and_hms_opt(0, 0, 0)
+                    .unwrap()
+                    .and_utc()
+            }
+            TimeGranularity::Month => now
+                .date_naive()
+                .with_day(1)
+                .unwrap()
+                .and_hms_opt(0, 0, 0)
+                .unwrap()
+                .and_utc(),
+            TimeGranularity::Year => now
+                .date_naive()
+                .with_month(1)
+                .unwrap()
+                .with_day(1)
+                .unwrap()
+                .and_hms_opt(0, 0, 0)
+                .unwrap()
+                .and_utc(),
         };
 
         // 3. 只计算增量数据
-        let incremental_stats = self.calculate_incremental_stats(
-            granularity,
-            last_processed,
-            bucket_start
-        ).await?;
+        let incremental_stats = self
+            .calculate_incremental_stats(granularity, last_processed, bucket_start)
+            .await?;
 
         // 4. 与现有聚合数据合并
-        let merged_stats = self.merge_with_existing_stats(incremental_stats, granularity).await?;
+        let merged_stats = self
+            .merge_with_existing_stats(incremental_stats, granularity)
+            .await?;
 
         // 5. 更新处理时间戳
-        self.update_last_processed_timestamp(granularity, bucket_start).await?;
+        self.update_last_processed_timestamp(granularity, bucket_start)
+            .await?;
 
         tracing::info!(
             stats_count = merged_stats.len(),
@@ -148,20 +173,22 @@ impl StatsAggregationService {
     }
 
     /// 获取上次处理的时间戳
-    async fn get_last_processed_timestamp(&self, granularity: TimeGranularity) -> Result<DateTime<Utc>, ApplicationError> {
+    async fn get_last_processed_timestamp(
+        &self,
+        granularity: TimeGranularity,
+    ) -> Result<DateTime<Utc>, ApplicationError> {
         let key = format!("last_processed_{}", granularity.to_string().to_lowercase());
 
-        let row = sqlx::query(
-            "SELECT value FROM stats_config WHERE key = $1"
-        )
-        .bind(&key)
-        .fetch_optional(&self.pool)
-        .await
-        .map_err(map_sqlx_err)?;
+        let row = sqlx::query("SELECT value FROM stats_config WHERE key = $1")
+            .bind(&key)
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(map_sqlx_err)?;
 
         if let Some(row) = row {
             let timestamp_str: String = row.get("value");
-            timestamp_str.parse::<DateTime<Utc>>()
+            timestamp_str
+                .parse::<DateTime<Utc>>()
                 .map_err(|e| ApplicationError::infrastructure(format!("Invalid timestamp: {}", e)))
         } else {
             // 如果没有记录，返回30天前（初始运行）
@@ -170,7 +197,11 @@ impl StatsAggregationService {
     }
 
     /// 更新最后处理时间戳
-    async fn update_last_processed_timestamp(&self, granularity: TimeGranularity, timestamp: DateTime<Utc>) -> Result<(), ApplicationError> {
+    async fn update_last_processed_timestamp(
+        &self,
+        granularity: TimeGranularity,
+        timestamp: DateTime<Utc>,
+    ) -> Result<(), ApplicationError> {
         let key = format!("last_processed_{}", granularity.to_string().to_lowercase());
 
         sqlx::query(
@@ -180,11 +211,14 @@ impl StatsAggregationService {
             ON CONFLICT (key) DO UPDATE SET
                 value = EXCLUDED.value,
                 updated_at = NOW()
-            "#
+            "#,
         )
         .bind(&key)
         .bind(timestamp.to_rfc3339())
-        .bind(format!("Last processed timestamp for {} granularity", granularity))
+        .bind(format!(
+            "Last processed timestamp for {} granularity",
+            granularity
+        ))
         .execute(&self.pool)
         .await
         .map_err(map_sqlx_err)?;
@@ -197,7 +231,7 @@ impl StatsAggregationService {
         &self,
         granularity: TimeGranularity,
         since: DateTime<Utc>,
-        until: DateTime<Utc>
+        until: DateTime<Utc>,
     ) -> Result<Vec<RoomStats>, ApplicationError> {
         if since >= until {
             return Ok(Vec::new()); // 没有新数据
@@ -411,7 +445,7 @@ impl StatsAggregationService {
     async fn merge_with_existing_stats(
         &self,
         incremental_stats: Vec<RoomStats>,
-        _granularity: TimeGranularity
+        _granularity: TimeGranularity,
     ) -> Result<Vec<RoomStats>, ApplicationError> {
         // 对于简单实现，我们直接保存增量数据
         // 数据库的 ON CONFLICT DO UPDATE 会处理合并逻辑

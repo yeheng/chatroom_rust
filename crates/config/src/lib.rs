@@ -11,7 +11,10 @@
 //! 2. config/local.yml (本地开发覆盖，不提交到git)
 //! 3. 环境变量 (最高优先级，用于生产和CI)
 
-use figment::{providers::{Env, Format, Yaml}, Figment};
+use figment::{
+    providers::{Env, Format, Yaml},
+    Figment,
+};
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 
@@ -122,8 +125,7 @@ impl AppConfig {
     /// 失败策略：FAIL FAST - 配置错误时立即崩溃
     /// 这是正确的行为 - 服务不应该在配置错误时启动
     pub fn load() -> Result<Self, ConfigError> {
-        let mut figment = Figment::new()
-            .merge(Yaml::file("config/default.yml"));
+        let mut figment = Figment::new().merge(Yaml::file("config/default.yml"));
 
         // 如果存在 local.yml，则加载它（用于本地开发覆盖）
         if Path::new("config/local.yml").exists() {
@@ -162,7 +164,8 @@ impl AppConfig {
             ));
         }
 
-        if self.jwt.secret.contains("dev-secret") || self.jwt.secret.contains("not-for-production") {
+        if self.jwt.secret.contains("dev-secret") || self.jwt.secret.contains("not-for-production")
+        {
             return Err(ConfigError::ProductionSafetyError(
                 "Cannot use development JWT secret in production".to_string(),
             ));
@@ -414,8 +417,14 @@ mod tests {
         // 由于没有YAML文件，load()可能失败，但向后兼容方法应该能处理
         if let Ok(config) = AppConfig::load() {
             // 如果成功加载，检查环境变量是否生效
-            assert_eq!(config.database.url, "postgres://test:test@test-db:5432/test");
-            assert_eq!(config.jwt.secret, "test-secret-key-with-at-least-32-characters");
+            assert_eq!(
+                config.database.url,
+                "postgres://test:test@test-db:5432/test"
+            );
+            assert_eq!(
+                config.jwt.secret,
+                "test-secret-key-with-at-least-32-characters"
+            );
             assert_eq!(config.server.port, 9000);
         }
 

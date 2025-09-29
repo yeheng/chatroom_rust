@@ -11,7 +11,7 @@ use crate::{
     clock::Clock,
     error::ApplicationError,
     password::PasswordHasher,
-    repository::{ChatRoomRepository, MessageRepository, RoomMemberRepository},
+    repository::{ChatRoomRepository, MessageRepository, RoomMemberRepository, UserRepository},
 };
 
 // 删除了垃圾的TransactionManager trait - 过度抽象的典型例子
@@ -73,6 +73,7 @@ pub struct ChatServiceDependencies {
     pub room_repository: Arc<dyn ChatRoomRepository>,
     pub member_repository: Arc<dyn RoomMemberRepository>,
     pub message_repository: Arc<dyn MessageRepository>,
+    pub user_repository: Arc<dyn UserRepository>,
     pub password_hasher: Arc<dyn PasswordHasher>,
     pub clock: Arc<dyn Clock>,
     pub broadcaster: Arc<dyn MessageBroadcaster>,
@@ -147,7 +148,11 @@ impl ChatService {
         let owner_member = RoomMember::new(room.id, room.owner_id, RoomRole::Owner, now);
 
         // Linus式直接解决方案：用Repository的原子方法，简单直接
-        self.deps.room_repository.create_with_owner(room, owner_member).await.map_err(ApplicationError::from)
+        self.deps
+            .room_repository
+            .create_with_owner(room, owner_member)
+            .await
+            .map_err(ApplicationError::from)
     }
 
     pub async fn leave_room(&self, request: LeaveRoomRequest) -> Result<(), ApplicationError> {

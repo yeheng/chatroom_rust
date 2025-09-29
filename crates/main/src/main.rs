@@ -28,9 +28,8 @@ async fn main() -> anyhow::Result<()> {
         .init();
 
     // Linus式配置加载 - 单一可信来源，FAIL FAST
-    let config = AppConfig::load().map_err(|e| {
-        anyhow::anyhow!("配置加载失败 - 检查配置文件和环境变量: {}", e)
-    })?;
+    let config = AppConfig::load()
+        .map_err(|e| anyhow::anyhow!("配置加载失败 - 检查配置文件和环境变量: {}", e))?;
 
     // 验证配置（生产环境强制验证）
     if let Err(e) = config.validate() {
@@ -81,13 +80,16 @@ async fn main() -> anyhow::Result<()> {
     let presence_manager: Arc<dyn application::PresenceManager> =
         if let Some(redis_url) = &config.broadcast.redis_url {
             let redis_client = Arc::new(RedisClient::open(redis_url.clone())?);
-            Arc::new(application::RedisPresenceManager::from_app_config(redis_client, &config))
+            Arc::new(application::RedisPresenceManager::from_app_config(
+                redis_client,
+                &config,
+            ))
         } else {
             Arc::new(application::presence::memory::MemoryPresenceManager::new())
         };
 
     let user_service = UserService::new(UserServiceDependencies {
-        user_repository,
+        user_repository: user_repository.clone(),
         password_hasher: password_hasher.clone(),
         clock: clock.clone(),
         presence_manager: presence_manager.clone(),
@@ -97,6 +99,7 @@ async fn main() -> anyhow::Result<()> {
         room_repository,
         member_repository,
         message_repository,
+        user_repository: user_repository.clone(),
         password_hasher,
         clock,
         broadcaster: broadcaster.clone(),

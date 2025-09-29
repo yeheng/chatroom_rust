@@ -141,70 +141,85 @@ impl StatsAggregator {
         let hourly_aggregator = aggregator.clone();
         let hourly_schedule = config.stats.schedule.hourly_aggregation.clone();
         scheduler
-            .add(Job::new_async(hourly_schedule.as_str(), move |_uuid, _l| {
-                let agg = hourly_aggregator.clone();
-                Box::pin(async move {
-                    if let Err(e) = agg.aggregate_hourly_stats().await {
-                        error!("小时级统计聚合失败: {}", e);
-                    }
-                })
-            })?)
+            .add(Job::new_async(
+                hourly_schedule.as_str(),
+                move |_uuid, _l| {
+                    let agg = hourly_aggregator.clone();
+                    Box::pin(async move {
+                        if let Err(e) = agg.aggregate_hourly_stats().await {
+                            error!("小时级统计聚合失败: {}", e);
+                        }
+                    })
+                },
+            )?)
             .await?;
 
         // 日级统计 - 使用配置中的时间表达式
         let daily_aggregator = aggregator.clone();
         let daily_schedule = config.stats.schedule.daily_aggregation.clone();
         scheduler
-            .add(Job::new_async(daily_schedule.as_str(), move |_uuid, _l| {
-                let agg = daily_aggregator.clone();
-                Box::pin(async move {
-                    if let Err(e) = agg.aggregate_daily_stats().await {
-                        error!("日级统计聚合失败: {}", e);
-                    }
-                })
-            })?)
+            .add(Job::new_async(
+                daily_schedule.as_str(),
+                move |_uuid, _l| {
+                    let agg = daily_aggregator.clone();
+                    Box::pin(async move {
+                        if let Err(e) = agg.aggregate_daily_stats().await {
+                            error!("日级统计聚合失败: {}", e);
+                        }
+                    })
+                },
+            )?)
             .await?;
 
         // 周级统计 - 使用配置中的时间表达式
         let weekly_aggregator = aggregator.clone();
         let weekly_schedule = config.stats.schedule.weekly_aggregation.clone();
         scheduler
-            .add(Job::new_async(weekly_schedule.as_str(), move |_uuid, _l| {
-                let agg = weekly_aggregator.clone();
-                Box::pin(async move {
-                    if let Err(e) = agg.aggregate_weekly_stats().await {
-                        error!("周级统计聚合失败: {}", e);
-                    }
-                })
-            })?)
+            .add(Job::new_async(
+                weekly_schedule.as_str(),
+                move |_uuid, _l| {
+                    let agg = weekly_aggregator.clone();
+                    Box::pin(async move {
+                        if let Err(e) = agg.aggregate_weekly_stats().await {
+                            error!("周级统计聚合失败: {}", e);
+                        }
+                    })
+                },
+            )?)
             .await?;
 
         // 月级统计 - 使用配置中的时间表达式
         let monthly_aggregator = aggregator.clone();
         let monthly_schedule = config.stats.schedule.monthly_aggregation.clone();
         scheduler
-            .add(Job::new_async(monthly_schedule.as_str(), move |_uuid, _l| {
-                let agg = monthly_aggregator.clone();
-                Box::pin(async move {
-                    if let Err(e) = agg.aggregate_monthly_stats().await {
-                        error!("月级统计聚合失败: {}", e);
-                    }
-                })
-            })?)
+            .add(Job::new_async(
+                monthly_schedule.as_str(),
+                move |_uuid, _l| {
+                    let agg = monthly_aggregator.clone();
+                    Box::pin(async move {
+                        if let Err(e) = agg.aggregate_monthly_stats().await {
+                            error!("月级统计聚合失败: {}", e);
+                        }
+                    })
+                },
+            )?)
             .await?;
 
         // 数据清理 - 使用配置中的时间表达式
         let cleanup_aggregator = aggregator.clone();
         let cleanup_schedule = config.stats.schedule.data_cleanup.clone();
         scheduler
-            .add(Job::new_async(cleanup_schedule.as_str(), move |_uuid, _l| {
-                let agg = cleanup_aggregator.clone();
-                Box::pin(async move {
-                    if let Err(e) = agg.cleanup_expired_data().await {
-                        error!("数据清理失败: {}", e);
-                    }
-                })
-            })?)
+            .add(Job::new_async(
+                cleanup_schedule.as_str(),
+                move |_uuid, _l| {
+                    let agg = cleanup_aggregator.clone();
+                    Box::pin(async move {
+                        if let Err(e) = agg.cleanup_expired_data().await {
+                            error!("数据清理失败: {}", e);
+                        }
+                    })
+                },
+            )?)
             .await?;
 
         info!("定时任务已设置完成");

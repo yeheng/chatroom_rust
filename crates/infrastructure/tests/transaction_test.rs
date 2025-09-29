@@ -4,10 +4,10 @@ use std::sync::Arc;
 use tokio;
 
 use application::{
+    broadcaster::BroadcastError,
+    repository::{ChatRoomRepository, MessageRepository, RoomMemberRepository, UserRepository},
     services::{ChatService, ChatServiceDependencies, CreateRoomRequest},
-    repository::{ChatRoomRepository, RoomMemberRepository, UserRepository},
     Clock, MessageBroadcaster, PasswordHasher,
-    broadcaster::BroadcastError
 };
 use async_trait::async_trait;
 use domain::{ChatRoomVisibility, RoomRole};
@@ -42,11 +42,18 @@ struct TestPasswordHasher;
 
 #[async_trait]
 impl PasswordHasher for TestPasswordHasher {
-    async fn hash(&self, password: &str) -> Result<domain::PasswordHash, application::PasswordHasherError> {
+    async fn hash(
+        &self,
+        password: &str,
+    ) -> Result<domain::PasswordHash, application::PasswordHasherError> {
         Ok(domain::PasswordHash::new(format!("hashed_{}", password)).unwrap())
     }
 
-    async fn verify(&self, password: &str, hash: &domain::PasswordHash) -> Result<bool, application::PasswordHasherError> {
+    async fn verify(
+        &self,
+        password: &str,
+        hash: &domain::PasswordHash,
+    ) -> Result<bool, application::PasswordHasherError> {
         Ok(hash.as_str() == &format!("hashed_{}", password))
     }
 }
@@ -57,11 +64,17 @@ struct TestBroadcaster;
 
 #[async_trait]
 impl MessageBroadcaster for TestBroadcaster {
-    async fn broadcast(&self, _broadcast: application::MessageBroadcast) -> Result<(), BroadcastError> {
+    async fn broadcast(
+        &self,
+        _broadcast: application::MessageBroadcast,
+    ) -> Result<(), BroadcastError> {
         Ok(())
     }
 
-    async fn subscribe(&self, _room_id: domain::RoomId) -> Result<application::MessageStream, BroadcastError> {
+    async fn subscribe(
+        &self,
+        _room_id: domain::RoomId,
+    ) -> Result<application::MessageStream, BroadcastError> {
         // 测试中不需要实际的订阅功能
         Err(BroadcastError::failed("Not implemented for test"))
     }
@@ -71,7 +84,9 @@ async fn setup_test_db() -> PgPool {
     let database_url = std::env::var("DATABASE_URL")
         .unwrap_or_else(|_| "postgres://postgres:123456@127.0.0.1:5432/chatroom".to_string());
 
-    infrastructure::create_pg_pool(&database_url, 5).await.unwrap()
+    infrastructure::create_pg_pool(&database_url, 5)
+        .await
+        .unwrap()
 }
 
 #[tokio::test]
@@ -84,6 +99,7 @@ async fn test_atomic_create_room() {
         room_repository: storage.room_repository.clone(),
         member_repository: storage.member_repository.clone(),
         message_repository: storage.message_repository.clone(),
+        user_repository: storage.user_repository.clone(),
         password_hasher: Arc::new(TestPasswordHasher),
         clock: Arc::new(TestClock::new()),
         broadcaster: Arc::new(TestBroadcaster),
@@ -128,7 +144,15 @@ async fn test_atomic_create_room() {
     assert!(found_room.is_some(), "房间应该存在于数据库中");
 
     // 验证成员存在
-    let found_member = storage.member_repository.find_member(room.id, room.owner_id).await.unwrap();
+    let found_member = storage
+        .member_repository
+        .find_member(room.id, room.owner_id)
+        .await
+        .unwrap();
     assert!(found_member.is_some(), "成员应该存在于数据库中");
-    assert_eq!(found_member.unwrap().role, RoomRole::Owner, "成员角色应该是Owner");
+    assert_eq!(
+        found_member.unwrap().role,
+        RoomRole::Owner,
+        "成员角色应该是Owner"
+    );
 }

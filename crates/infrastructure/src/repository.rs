@@ -1,13 +1,13 @@
 use std::sync::Arc;
 
 use application::repository::{
-    ChatRoomRepository, MessageRepository, MessageDeliveryRepository, PaginationParams, RoomMemberRepository, TimeRangeParams,
-    UserRepository,
+    ChatRoomRepository, MessageDeliveryRepository, MessageRepository, PaginationParams,
+    RoomMemberRepository, TimeRangeParams, UserRepository,
 };
 use async_trait::async_trait;
 use domain::{
-    ChatRoom, ChatRoomVisibility, Message, MessageContent, MessageId, MessageType, MessageDelivery, RepositoryError,
-    RoomId, RoomMember, RoomRole, User, UserEmail, UserId, UserStatus,
+    ChatRoom, ChatRoomVisibility, Message, MessageContent, MessageDelivery, MessageId, MessageType,
+    RepositoryError, RoomId, RoomMember, RoomRole, User, UserEmail, UserId, UserStatus,
 };
 use sqlx::{postgres::PgPoolOptions, types::chrono, FromRow, PgPool};
 use time::OffsetDateTime;
@@ -256,7 +256,7 @@ impl PgChatRoomRepository {
     ) -> Result<(), RepositoryError> {
         sqlx::query(
             "INSERT INTO room_members (room_id, user_id, role, joined_at, last_read_message_id)
-             VALUES ($1, $2, $3, $4, $5)"
+             VALUES ($1, $2, $3, $4, $5)",
         )
         .bind(Uuid::from(member.room_id))
         .bind(Uuid::from(member.user_id))
@@ -851,7 +851,10 @@ impl MessageDeliveryRepository for PgMessageDeliveryRepository {
         Ok(())
     }
 
-    async fn find_undelivered_for_user(&self, user_id: UserId) -> Result<Vec<MessageDelivery>, RepositoryError> {
+    async fn find_undelivered_for_user(
+        &self,
+        user_id: UserId,
+    ) -> Result<Vec<MessageDelivery>, RepositoryError> {
         let records = sqlx::query_as::<_, MessageDeliveryRecord>(
             r#"
             SELECT message_id, user_id, sent_at, delivered_at
@@ -868,7 +871,10 @@ impl MessageDeliveryRepository for PgMessageDeliveryRepository {
         Ok(records.into_iter().map(MessageDelivery::from).collect())
     }
 
-    async fn find_by_message(&self, message_id: MessageId) -> Result<Vec<MessageDelivery>, RepositoryError> {
+    async fn find_by_message(
+        &self,
+        message_id: MessageId,
+    ) -> Result<Vec<MessageDelivery>, RepositoryError> {
         let records = sqlx::query_as::<_, MessageDeliveryRecord>(
             r#"
             SELECT message_id, user_id, sent_at, delivered_at

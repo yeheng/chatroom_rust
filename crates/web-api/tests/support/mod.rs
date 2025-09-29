@@ -9,9 +9,8 @@ use application::{
 use axum::Router;
 use config::AppConfig;
 use infrastructure::{
-    create_pg_pool, BcryptPasswordHasher, LocalMessageBroadcaster,
-    PgChatRoomRepository, PgMessageRepository, PgRoomMemberRepository, PgUserRepository,
-    StatsAggregationService,
+    create_pg_pool, BcryptPasswordHasher, LocalMessageBroadcaster, PgChatRoomRepository,
+    PgMessageRepository, PgRoomMemberRepository, PgUserRepository, StatsAggregationService,
 };
 use sqlx::PgPool;
 use web_api::{router as build_router_fn, AppState, JwtService};
@@ -99,7 +98,7 @@ fn create_services(
 
     // 创建应用层服务
     let user_service = UserService::new(UserServiceDependencies {
-        user_repository,
+        user_repository: user_repository.clone(),
         password_hasher: password_hasher.clone(),
         clock: clock.clone(),
         presence_manager: presence_manager.clone(),
@@ -109,6 +108,7 @@ fn create_services(
         room_repository,
         member_repository,
         message_repository,
+        user_repository: user_repository.clone(),
         password_hasher,
         clock,
         broadcaster: broadcaster.clone(),
@@ -172,6 +172,7 @@ pub async fn setup_test_app() -> TestAppState {
 }
 
 /// 便捷函数：直接获取路由器（为了向后兼容）
+#[warn(dead_code)]
 pub async fn build_router() -> Router {
     setup_test_app().await.router
 }

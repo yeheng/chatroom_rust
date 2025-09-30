@@ -5,7 +5,7 @@ use config::AppConfig;
 use thiserror::Error;
 
 use crate::{
-    broadcast::{LocalMessageBroadcaster, RedisMessageBroadcaster},
+    broadcast::RedisMessageBroadcaster,
     migrations::MIGRATOR,
     password::BcryptPasswordHasher,
     repository::{create_pg_pool, PgStorage},
@@ -38,15 +38,12 @@ impl Infrastructure {
         let storage = Arc::new(PgStorage::new(pool));
         let password_hasher = Arc::new(BcryptPasswordHasher::new(config.server.bcrypt_cost));
 
-        // 根据配置选择广播器类型
-        let broadcaster: Arc<dyn MessageBroadcaster> = match &config.broadcast.redis_url {
-            Some(redis_url) => {
-                let client =
-                    redis::Client::open(redis_url.clone()).map_err(InfrastructureError::Redis)?;
-                Arc::new(RedisMessageBroadcaster::new(client))
-            }
-            None => Arc::new(LocalMessageBroadcaster::new(config.broadcast.capacity)),
-        };
+        // 创建 Redis 广播器
+        let redis_url = config.broadcast.redis_url.as_ref()
+            .ok_or_else(|| InfrastructureError::Config("Redis URL is required".to_string()))?;
+        let client = redis::Client::open(redis_url.clone())
+            .map_err(InfrastructureError::Redis)?;
+        let broadcaster: Arc<dyn MessageBroadcaster> = Arc::new(RedisMessageBroadcaster::new(client));
 
         Ok(Self {
             storage,

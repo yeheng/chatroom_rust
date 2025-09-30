@@ -221,10 +221,24 @@ impl ChatService {
             .await?
             .ok_or(domain::DomainError::MessageNotFound)?;
 
-        self.deps
+        // 广播消息给房间内所有用户
+        if let Err(broadcast_error) = self.deps
             .broadcaster
             .broadcast(MessageBroadcast::chat(room_id, stored.clone()))
-            .await?;
+            .await
+        {
+            // 记录关键错误并传播给调用者
+            tracing::error!(
+                room_id = %room_id,
+                message_id = %stored.id,
+                error = %broadcast_error,
+                "消息已保存到数据库，但广播失败"
+            );
+            return Err(ApplicationError::infrastructure_with_source(
+                "消息广播失败",
+                broadcast_error
+            ));
+        }
 
         Ok(stored)
     }

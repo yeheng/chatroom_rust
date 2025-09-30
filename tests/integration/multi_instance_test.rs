@@ -11,7 +11,7 @@ use application::{
 };
 use domain::{RoomId, UserId};
 use infrastructure::{
-    create_pg_pool, BcryptPasswordHasher, LocalMessageBroadcaster, PgUserRepository,
+    create_pg_pool, BcryptPasswordHasher, PgUserRepository,
 };
 use redis::Client;
 use tokio::time::sleep;

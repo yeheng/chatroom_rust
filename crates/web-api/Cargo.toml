@@ -31,6 +31,7 @@ tokio-stream = "0.1"  # 添加 tokio-stream 支持
 thiserror = { workspace = true }  # 添加 thiserror 支持
 jsonwebtoken = { workspace = true }  # 添加 JWT 支持
 sqlx = { workspace = true }
+redis = { workspace = true }  # 添加 Redis 支持
 
 [dev-dependencies]
 reqwest = { workspace = true }

@@ -5,16 +5,14 @@
 pub mod broadcast;
 pub mod builder;
 pub mod delivery;
-pub mod fallback_broadcaster;
 pub mod migrations;
 pub mod password;
 pub mod repository;
 pub mod stats_aggregation;
 
-pub use broadcast::{LocalMessageBroadcaster, RedisMessageBroadcaster, RedisMessageStream};
+pub use broadcast::{RedisMessageBroadcaster, RedisMessageStream};
 pub use builder::{Infrastructure, InfrastructureError};
 pub use delivery::PgDeliveryTracker;
-pub use fallback_broadcaster::FallbackBroadcaster;
 pub use migrations::MIGRATOR;
 pub use password::BcryptPasswordHasher;
 pub use repository::{

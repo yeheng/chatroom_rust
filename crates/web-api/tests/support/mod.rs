@@ -6,11 +6,12 @@ use application::{
     services::{ChatService, ChatServiceDependencies, UserService, UserServiceDependencies},
     Clock, MessageBroadcaster, PasswordHasher, SystemClock,
 };
+use redis::Client as RedisClient;
 use axum::Router;
 use config::AppConfig;
 use infrastructure::{
-    create_pg_pool, BcryptPasswordHasher, LocalMessageBroadcaster, PgChatRoomRepository,
-    PgMessageRepository, PgRoomMemberRepository, PgUserRepository, StatsAggregationService,
+    create_pg_pool, BcryptPasswordHasher, PgChatRoomRepository,
+    PgMessageRepository, PgRoomMemberRepository, PgUserRepository, RedisMessageBroadcaster, StatsAggregationService,
 };
 use sqlx::PgPool;
 use web_api::{router as build_router_fn, AppState, JwtService};
@@ -93,8 +94,16 @@ fn create_services(
     let password_hasher: Arc<dyn PasswordHasher> =
         Arc::new(BcryptPasswordHasher::new(config.server.bcrypt_cost));
     let clock: Arc<dyn Clock> = Arc::new(SystemClock::default());
-    let broadcaster: Arc<dyn MessageBroadcaster> =
-        Arc::new(LocalMessageBroadcaster::new(config.broadcast.capacity));
+
+    // 创建 Redis 广播器（测试环境使用配置中的 Redis URL）
+    let redis_url = config.broadcast.redis_url
+        .as_ref()
+        .or_else(|| Some(&config.redis.url))
+        .ok_or_else(|| anyhow::anyhow!("Redis URL is required for testing"))
+        .expect("Redis URL must be configured for tests");
+    let redis_client = RedisClient::open(redis_url.clone())
+        .expect("Failed to create Redis client for testing");
+    let broadcaster: Arc<dyn MessageBroadcaster> = Arc::new(RedisMessageBroadcaster::new(redis_client));
 
     // 创建应用层服务
     let user_service = UserService::new(UserServiceDependencies {
@@ -172,7 +181,6 @@ pub async fn setup_test_app() -> TestAppState {
 }
 
 /// 便捷函数：直接获取路由器（为了向后兼容）
-#[warn(dead_code)]
 pub async fn build_router() -> Router {
     setup_test_app().await.router
 }

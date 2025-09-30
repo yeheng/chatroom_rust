@@ -11,7 +11,7 @@ use application::{
 };
 use config::AppConfig;
 use infrastructure::{
-    create_pg_pool, BcryptPasswordHasher, LocalMessageBroadcaster, PgChatRoomRepository,
+    create_pg_pool, BcryptPasswordHasher, PgChatRoomRepository,
     PgMessageRepository, PgRoomMemberRepository, PgUserRepository, RedisMessageBroadcaster,
     StatsAggregationService,
 };
@@ -65,13 +65,10 @@ async fn main() -> anyhow::Result<()> {
     // 创建其他服务
     let password_hasher: Arc<dyn PasswordHasher> = Arc::new(BcryptPasswordHasher::default());
     let clock: Arc<dyn Clock> = Arc::new(SystemClock::default());
-    let broadcaster: Arc<dyn MessageBroadcaster> =
-        if let Some(redis_url) = &config.broadcast.redis_url {
-            let client = RedisClient::open(redis_url.clone())?;
-            Arc::new(RedisMessageBroadcaster::new(client))
-        } else {
-            Arc::new(LocalMessageBroadcaster::new(config.broadcast.capacity))
-        };
+    let redis_url = config.broadcast.redis_url.as_ref()
+        .ok_or_else(|| anyhow::anyhow!("Redis URL is required for broadcaster"))?;
+    let client = RedisClient::open(redis_url.clone())?;
+    let broadcaster: Arc<dyn MessageBroadcaster> = Arc::new(RedisMessageBroadcaster::new(client));
 
     // 创建统计相关服务
     let stats_service = Arc::new(StatsAggregationService::new(pg_pool.clone()));

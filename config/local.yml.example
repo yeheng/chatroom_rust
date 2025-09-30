@@ -7,9 +7,19 @@ database:
   url: "postgres://postgres:mypassword@localhost:5432/chatroom_dev"
   max_connections: 10
 
-# Redis 配置覆盖（如果使用本地Redis）
+# Redis 广播器配置 - 系统的核心消息总线
+broadcast:
+  # ⚠️ 重要：本系统依赖 Redis 进行消息广播，必须正确配置
+  # 开发环境可以使用本地 Redis，生产环境建议使用高可用方案
+  redis_url: "redis://localhost:6379"
+  # 生产环境高可用示例：
+  # redis_url: "redis+sentinel://mymaster/redis-sentinel1:26379,redis-sentinel2:26379"
+  # redis_url: "redis-cluster://redis-node1:6379,redis-node2:6379,redis-node3:6379"
+
+# Redis 基础配置（用于在线状态、限流等）
 redis:
   url: "redis://localhost:6379"
+  max_connections: 10
 
 # 服务器配置覆盖
 server:

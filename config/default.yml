@@ -11,7 +11,12 @@ jwt:
 
 broadcast:
   capacity: 256
-  redis_url: null
+  # Redis 广播器 URL - 生产环境必须配置
+  # 示例:
+  # - 单机: "redis://localhost:6379"
+  # - Sentinel: "redis+sentinel://mymaster/redis-sentinel1:26379,redis-sentinel2:26379"
+  # - Cluster: "redis-cluster://redis-node1:6379,redis-node2:6379,redis-node3:6379"
+  redis_url: "redis://127.0.0.1:6379"
 
 redis:
   url: "redis://127.0.0.1:6379"

@@ -4,38 +4,8 @@ use application::{
 use async_trait::async_trait;
 use domain::RoomId;
 use redis::{aio::PubSub, AsyncCommands, Client as RedisClient, Msg};
-use tokio::sync::broadcast;
 use tokio_stream::{Stream, StreamExt};
 use uuid::Uuid;
-
-#[derive(Clone)]
-pub struct LocalMessageBroadcaster {
-    sender: broadcast::Sender<MessageBroadcast>,
-}
-
-impl LocalMessageBroadcaster {
-    pub fn new(capacity: usize) -> Self {
-        let (sender, _) = broadcast::channel(capacity);
-        Self { sender }
-    }
-}
-
-#[async_trait]
-impl MessageBroadcaster for LocalMessageBroadcaster {
-    async fn broadcast(&self, payload: MessageBroadcast) -> Result<(), BroadcastError> {
-        if self.sender.receiver_count() == 0 {
-            return Ok(());
-        }
-        self.sender
-            .send(payload)
-            .map_err(|err| BroadcastError::failed(err.to_string()))?;
-        Ok(())
-    }
-
-    async fn subscribe(&self, room_id: RoomId) -> Result<MessageStream, BroadcastError> {
-        Ok(MessageStream::local(self.sender.subscribe(), room_id))
-    }
-}
 
 // Redis 消息流，用于 WebSocket 处理
 pub struct RedisMessageStream {

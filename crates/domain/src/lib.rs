@@ -7,6 +7,7 @@ mod chat_room;
 mod errors;
 mod message;
 mod message_delivery;
+mod organization;
 mod room_member;
 mod user;
 mod value_objects;
@@ -15,10 +16,12 @@ pub use chat_room::{ChatRoom, ChatRoomVisibility};
 pub use errors::{DomainError, RepositoryError};
 pub use message::{Message, MessageRevision, MessageType};
 pub use message_delivery::MessageDelivery;
+pub use organization::Organization;
 pub use room_member::{RoomMember, RoomRole};
 pub use user::{User, UserStatus};
 pub use value_objects::{
-    MessageContent, MessageId, PasswordHash, RoomId, Timestamp, UserEmail, UserId, Username,
+    MessageContent, MessageId, OrgId, OrgPath, PasswordHash, RoomId, Timestamp, UserEmail, UserId,
+    Username,
 };
 
 #[cfg(test)]
@@ -40,6 +43,7 @@ mod rbac_tests {
             is_superuser: false,
             created_at: now,
             updated_at: now,
+            org_id: None,
         };
 
         // 初始状态下不是管理员

@@ -6,13 +6,13 @@ use application::{
     services::{ChatService, ChatServiceDependencies, UserService, UserServiceDependencies},
     Clock, MessageBroadcaster, PasswordHasher, SystemClock,
 };
-use redis::Client as RedisClient;
 use axum::Router;
 use config::AppConfig;
 use infrastructure::{
-    create_pg_pool, BcryptPasswordHasher, PgChatRoomRepository,
-    PgMessageRepository, PgRoomMemberRepository, PgUserRepository, RedisMessageBroadcaster, StatsAggregationService,
+    create_pg_pool, BcryptPasswordHasher, PgChatRoomRepository, PgMessageRepository,
+    PgRoomMemberRepository, PgUserRepository, RedisMessageBroadcaster, StatsAggregationService,
 };
+use redis::Client as RedisClient;
 use sqlx::PgPool;
 use web_api::{router as build_router_fn, AppState, JwtService};
 
@@ -96,14 +96,17 @@ fn create_services(
     let clock: Arc<dyn Clock> = Arc::new(SystemClock::default());
 
     // 创建 Redis 广播器（测试环境使用配置中的 Redis URL）
-    let redis_url = config.broadcast.redis_url
+    let redis_url = config
+        .broadcast
+        .redis_url
         .as_ref()
         .or_else(|| Some(&config.redis.url))
         .ok_or_else(|| anyhow::anyhow!("Redis URL is required for testing"))
         .expect("Redis URL must be configured for tests");
-    let redis_client = RedisClient::open(redis_url.clone())
-        .expect("Failed to create Redis client for testing");
-    let broadcaster: Arc<dyn MessageBroadcaster> = Arc::new(RedisMessageBroadcaster::new(redis_client));
+    let redis_client =
+        RedisClient::open(redis_url.clone()).expect("Failed to create Redis client for testing");
+    let broadcaster: Arc<dyn MessageBroadcaster> =
+        Arc::new(RedisMessageBroadcaster::new(redis_client));
 
     // 创建应用层服务
     let user_service = UserService::new(UserServiceDependencies {
@@ -157,7 +160,31 @@ pub async fn setup_test_app() -> TestAppState {
     let jwt_service = Arc::new(JwtService::new(config.app_config.jwt.clone()));
 
     // 创建统计服务
-    let stats_service = Arc::new(StatsAggregationService::new(pool.clone()));
+    let stats_agg_service = Arc::new(StatsAggregationService::new(pool.clone()));
+
+    let state_service = Arc::new(StateService::new(StateServiceDependencies {
+        state_repository: state_repository.clone(),
+        user_repository: user_repository.clone(),
+        clock: clock.clone(),
+    }));
+
+    let org_service = Arc::new(OrganizationService::new(OrganizationServiceDependencies {
+        org_repository: org_repository.clone(),
+        user_repository: user_repository.clone(),
+        clock: clock.clone(),
+    }));
+
+    let bulk_user_service = Arc::new(BulkUserService::new(BulkUserServiceDependencies {
+        org_repository: org_repository.clone(),
+        user_repository: user_repository.clone(),
+        task_repository: task_repository.clone(),
+        clock: clock.clone(),
+    }));
+
+    let storage = Arc::new(StorageService::new(StorageServiceDependencies {
+        storage_repository: storage_repository.clone(),
+        clock: clock.clone(),
+    }));
 
     // 创建应用状态
     let app_state = AppState::new(
@@ -166,7 +193,11 @@ pub async fn setup_test_app() -> TestAppState {
         broadcaster.clone(),
         jwt_service,
         presence_manager_trait,
-        stats_service,
+        stats_agg_service,
+        org_service,
+        org_service,
+        bulk_user_service,
+        storage,
     );
 
     // 构建路由器

@@ -16,8 +16,8 @@ pub use delivery::PgDeliveryTracker;
 pub use migrations::MIGRATOR;
 pub use password::BcryptPasswordHasher;
 pub use repository::{
-    create_pg_pool, PgChatRoomRepository, PgMessageRepository, PgRoomMemberRepository, PgStorage,
-    PgUserRepository,
+    create_pg_pool, PgChatRoomRepository, PgMessageRepository, PgOrganizationRepository,
+    PgRoomMemberRepository, PgStorage, PgUserRepository,
 };
 pub use stats_aggregation::{
     OnlineStatsSummary, RoomStats, StatsAggregationService, StatsQuery, TimeGranularity,

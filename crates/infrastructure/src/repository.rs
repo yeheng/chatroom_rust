@@ -7,7 +7,8 @@ use application::repository::{
 use async_trait::async_trait;
 use domain::{
     ChatRoom, ChatRoomVisibility, Message, MessageContent, MessageDelivery, MessageId, MessageType,
-    RepositoryError, RoomId, RoomMember, RoomRole, User, UserEmail, UserId, UserStatus,
+    OrgId, Organization, RepositoryError, RoomId, RoomMember, RoomRole, User, UserEmail, UserId,
+    UserStatus,
 };
 use sqlx::{postgres::PgPoolOptions, types::chrono, FromRow, PgPool};
 use time::OffsetDateTime;
@@ -39,6 +40,7 @@ pub struct PgStorage {
     pub room_repository: Arc<PgChatRoomRepository>,
     pub member_repository: Arc<PgRoomMemberRepository>,
     pub message_repository: Arc<PgMessageRepository>,
+    pub organization_repository: Arc<PgOrganizationRepository>,
 }
 
 impl PgStorage {
@@ -47,12 +49,14 @@ impl PgStorage {
         let room_repository = Arc::new(PgChatRoomRepository::new(pool.clone()));
         let member_repository = Arc::new(PgRoomMemberRepository::new(pool.clone()));
         let message_repository = Arc::new(PgMessageRepository::new(pool.clone()));
+        let organization_repository = Arc::new(PgOrganizationRepository::new(pool.clone()));
 
         Self {
             user_repository,
             room_repository,
             member_repository,
             message_repository,
+            organization_repository,
         }
     }
 }
@@ -65,6 +69,7 @@ struct UserRecord {
     password_hash: String,
     status: UserStatus,
     is_superuser: bool,
+    org_id: Option<Uuid>,
     created_at: OffsetDateTime,
     updated_at: OffsetDateTime,
 }
@@ -84,6 +89,7 @@ impl TryFrom<UserRecord> for User {
             password,
             status: value.status,
             is_superuser: value.is_superuser,
+            org_id: value.org_id.map(OrgId::from),
             created_at: value.created_at,
             updated_at: value.updated_at,
         })
@@ -917,5 +923,302 @@ impl MessageDeliveryRepository for PgMessageDeliveryRepository {
         .map_err(map_sqlx_err)?;
 
         Ok(result.rows_affected())
+    }
+}
+
+// Organization related types and implementations
+
+#[derive(Debug, FromRow)]
+struct OrganizationRecord {
+    id: Uuid,
+    name: String,
+    path: String,
+    metadata: Option<serde_json::Value>,
+    created_at: OffsetDateTime,
+    updated_at: OffsetDateTime,
+}
+
+impl TryFrom<OrganizationRecord> for Organization {
+    type Error = RepositoryError;
+
+    fn try_from(value: OrganizationRecord) -> Result<Self, Self::Error> {
+        let org_path = domain::OrgPath::parse(value.path).map_err(invalid_data)?;
+
+        Ok(Organization {
+            id: OrgId::from(value.id),
+            name: value.name,
+            path: org_path,
+            metadata: value.metadata,
+            created_at: value.created_at,
+            updated_at: value.updated_at,
+        })
+    }
+}
+
+#[derive(Clone)]
+pub struct PgOrganizationRepository {
+    pool: PgPool,
+}
+
+impl PgOrganizationRepository {
+    pub fn new(pool: PgPool) -> Self {
+        Self { pool }
+    }
+}
+
+#[async_trait]
+impl application::repository::OrganizationRepository for PgOrganizationRepository {
+    async fn create(&self, organization: &Organization) -> Result<(), RepositoryError> {
+        sqlx::query(
+            r#"
+            INSERT INTO organizations (id, name, path, metadata, created_at, updated_at)
+            VALUES ($1, $2, $3, $4, $5, $6)
+            "#,
+        )
+        .bind(Uuid::from(organization.id))
+        .bind(&organization.name)
+        .bind(organization.path.to_string())
+        .bind(&organization.metadata)
+        .bind(organization.created_at)
+        .bind(organization.updated_at)
+        .execute(&self.pool)
+        .await
+        .map_err(map_sqlx_err)?;
+
+        Ok(())
+    }
+
+    async fn find_by_id(&self, id: OrgId) -> Result<Option<Organization>, RepositoryError> {
+        let record = sqlx::query_as::<_, OrganizationRecord>(
+            r#"
+            SELECT id, name, path, metadata, created_at, updated_at
+            FROM organizations
+            WHERE id = $1
+            "#,
+        )
+        .bind(Uuid::from(id))
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(map_sqlx_err)?;
+
+        match record {
+            Some(record) => Ok(Some(Organization::try_from(record)?)),
+            None => Ok(None),
+        }
+    }
+
+    async fn find_by_path(&self, path: &str) -> Result<Option<Organization>, RepositoryError> {
+        let record = sqlx::query_as::<_, OrganizationRecord>(
+            r#"
+            SELECT id, name, path, metadata, created_at, updated_at
+            FROM organizations
+            WHERE path = $1
+            "#,
+        )
+        .bind(path)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(map_sqlx_err)?;
+
+        match record {
+            Some(record) => Ok(Some(Organization::try_from(record)?)),
+            None => Ok(None),
+        }
+    }
+
+    async fn find_children(&self, parent_path: &str) -> Result<Vec<Organization>, RepositoryError> {
+        let records = sqlx::query_as::<_, OrganizationRecord>(
+            r#"
+            SELECT id, name, path, metadata, created_at, updated_at
+            FROM organizations
+            WHERE path <@ $1 AND nlevel(path) = nlevel($1) + 1
+            ORDER BY path
+            "#,
+        )
+        .bind(format!("{}.*", parent_path))
+        .fetch_all(&self.pool)
+        .await
+        .map_err(map_sqlx_err)?;
+
+        let mut organizations = Vec::new();
+        for record in records {
+            organizations.push(Organization::try_from(record)?);
+        }
+
+        Ok(organizations)
+    }
+
+    async fn find_descendants(
+        &self,
+        ancestor_path: &str,
+    ) -> Result<Vec<Organization>, RepositoryError> {
+        let records = sqlx::query_as::<_, OrganizationRecord>(
+            r#"
+            SELECT id, name, path, metadata, created_at, updated_at
+            FROM organizations
+            WHERE path <@ $1
+            ORDER BY path
+            "#,
+        )
+        .bind(format!("{}.*", ancestor_path))
+        .fetch_all(&self.pool)
+        .await
+        .map_err(map_sqlx_err)?;
+
+        let mut organizations = Vec::new();
+        for record in records {
+            organizations.push(Organization::try_from(record)?);
+        }
+
+        Ok(organizations)
+    }
+
+    async fn update(&self, organization: &Organization) -> Result<(), RepositoryError> {
+        sqlx::query(
+            r#"
+            UPDATE organizations
+            SET name = $1, path = $2, metadata = $3, updated_at = $4
+            WHERE id = $5
+            "#,
+        )
+        .bind(&organization.name)
+        .bind(organization.path.to_string())
+        .bind(&organization.metadata)
+        .bind(organization.updated_at)
+        .bind(Uuid::from(organization.id))
+        .execute(&self.pool)
+        .await
+        .map_err(map_sqlx_err)?;
+
+        Ok(())
+    }
+
+    async fn delete(&self, id: OrgId) -> Result<(), RepositoryError> {
+        sqlx::query("DELETE FROM organizations WHERE id = $1")
+            .bind(Uuid::from(id))
+            .execute(&self.pool)
+            .await
+            .map_err(map_sqlx_err)?;
+
+        Ok(())
+    }
+
+    async fn move_organization(
+        &self,
+        id: OrgId,
+        new_parent_path: &str,
+    ) -> Result<(), RepositoryError> {
+        // 这个操作比较复杂，需要更新整个子树的path
+        // 首先获取当前组织信息
+        let org = self.find_by_id(id).await?;
+        let org = org.ok_or(RepositoryError::NotFound)?;
+
+        let _old_path_base = format!("{}.", org.path);
+        let new_path_base = format!("{}.{}", new_parent_path, org.name.to_lowercase());
+
+        // 开始事务
+        let mut tx = self.pool.begin().await.map_err(map_sqlx_err)?;
+
+        // 更新当前组织的path
+        sqlx::query("UPDATE organizations SET path = $1, updated_at = NOW() WHERE id = $2")
+            .bind(&new_path_base)
+            .bind(Uuid::from(id))
+            .execute(&mut *tx)
+            .await
+            .map_err(map_sqlx_err)?;
+
+        // 更新所有子组织的path
+        sqlx::query(
+            r#"
+            UPDATE organizations
+            SET path = $1 || subpath(path, nlevel($2)) || '.' || subpath(path, nlevel($2) + 1),
+                updated_at = NOW()
+            WHERE path <@ $3
+            "#,
+        )
+        .bind(format!("{}.", new_parent_path))
+        .bind(org.path.to_string())
+        .bind(format!("{}.*", org.path))
+        .execute(&mut *tx)
+        .await
+        .map_err(map_sqlx_err)?;
+
+        // 提交事务
+        tx.commit().await.map_err(map_sqlx_err)?;
+
+        Ok(())
+    }
+
+    async fn path_exists(&self, path: &str) -> Result<bool, RepositoryError> {
+        let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM organizations WHERE path = $1")
+            .bind(path)
+            .fetch_one(&self.pool)
+            .await
+            .map_err(map_sqlx_err)?;
+
+        Ok(count > 0)
+    }
+
+    async fn find_users_in_organization(
+        &self,
+        org_id: OrgId,
+    ) -> Result<Vec<User>, RepositoryError> {
+        let records = sqlx::query_as::<_, UserRecord>(
+            r#"
+            SELECT u.id, u.username, u.email, u.password_hash, u.status, u.is_superuser,
+                   u.org_id, u.created_at, u.updated_at
+            FROM users u
+            WHERE u.org_id = $1
+            ORDER BY u.username
+            "#,
+        )
+        .bind(Uuid::from(org_id))
+        .fetch_all(&self.pool)
+        .await
+        .map_err(map_sqlx_err)?;
+
+        let mut users = Vec::new();
+        for record in records {
+            users.push(User::try_from(record)?);
+        }
+
+        Ok(users)
+    }
+
+    async fn list_with_pagination(
+        &self,
+        params: PaginationParams,
+    ) -> Result<Vec<Organization>, RepositoryError> {
+        let query = if let Some(offset) = params.offset {
+            sqlx::query_as::<_, OrganizationRecord>(
+                r#"
+                SELECT id, name, path, metadata, created_at, updated_at
+                FROM organizations
+                ORDER BY path
+                LIMIT $1 OFFSET $2
+                "#,
+            )
+            .bind(params.limit)
+            .bind(offset)
+        } else {
+            sqlx::query_as::<_, OrganizationRecord>(
+                r#"
+                SELECT id, name, path, metadata, created_at, updated_at
+                FROM organizations
+                ORDER BY path
+                LIMIT $1
+                "#,
+            )
+            .bind(params.limit)
+        };
+
+        let records = query.fetch_all(&self.pool).await.map_err(map_sqlx_err)?;
+
+        let mut organizations = Vec::new();
+        for record in records {
+            organizations.push(Organization::try_from(record)?);
+        }
+
+        Ok(organizations)
     }
 }

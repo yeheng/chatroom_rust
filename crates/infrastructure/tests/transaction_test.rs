@@ -117,6 +117,7 @@ async fn test_atomic_create_room() {
         is_superuser: false,
         created_at: OffsetDateTime::now_utc(),
         updated_at: OffsetDateTime::now_utc(),
+        org_id: None,
     };
 
     storage.user_repository.create(user).await.unwrap();

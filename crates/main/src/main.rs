@@ -6,14 +6,17 @@ use application::repository::{
     ChatRoomRepository, MessageRepository, RoomMemberRepository, UserRepository,
 };
 use application::{
-    services::{ChatService, ChatServiceDependencies, UserService, UserServiceDependencies},
+    services::{
+        BulkUserService, ChatService, ChatServiceDependencies, StatsService, UserService,
+        UserServiceDependencies,
+    },
     Clock, MessageBroadcaster, PasswordHasher, SystemClock,
 };
 use config::AppConfig;
 use infrastructure::{
-    create_pg_pool, BcryptPasswordHasher, PgChatRoomRepository,
-    PgMessageRepository, PgRoomMemberRepository, PgUserRepository, RedisMessageBroadcaster,
-    StatsAggregationService,
+    create_pg_pool, BcryptPasswordHasher, PgChatRoomRepository, PgMessageRepository,
+    PgOrganizationRepository, PgRoomMemberRepository, PgStorage, PgUserRepository,
+    RedisMessageBroadcaster, StatsAggregationService,
 };
 use redis::Client as RedisClient;
 use std::sync::Arc;
@@ -65,13 +68,24 @@ async fn main() -> anyhow::Result<()> {
     // 创建其他服务
     let password_hasher: Arc<dyn PasswordHasher> = Arc::new(BcryptPasswordHasher::default());
     let clock: Arc<dyn Clock> = Arc::new(SystemClock::default());
-    let redis_url = config.broadcast.redis_url.as_ref()
+    let redis_url = config
+        .broadcast
+        .redis_url
+        .as_ref()
         .ok_or_else(|| anyhow::anyhow!("Redis URL is required for broadcaster"))?;
     let client = RedisClient::open(redis_url.clone())?;
     let broadcaster: Arc<dyn MessageBroadcaster> = Arc::new(RedisMessageBroadcaster::new(client));
 
     // 创建统计相关服务
-    let stats_service = Arc::new(StatsAggregationService::new(pg_pool.clone()));
+    let stats_aggregation_service = Arc::new(StatsAggregationService::new(pg_pool.clone()));
+    let stats_service = Arc::new(StatsService::new(Arc::new(pg_pool.clone())));
+
+    // 创建组织和批量用户服务
+    let org_repository = Arc::new(PgOrganizationRepository::new(pg_pool.clone()));
+    let bulk_user_service = Arc::new(BulkUserService::new(Arc::new(pg_pool.clone())));
+
+    // 创建PgStorage（包含所有repository）
+    let storage = Arc::new(PgStorage::new(pg_pool.clone()));
 
     // 创建应用层服务
     let presence_manager: Arc<dyn application::PresenceManager> =
@@ -112,7 +126,11 @@ async fn main() -> anyhow::Result<()> {
         broadcaster,
         jwt_service,
         presence_manager,
+        stats_aggregation_service,
         stats_service,
+        org_repository,
+        bulk_user_service,
+        storage,
     );
 
     // 启动 Web 服务器

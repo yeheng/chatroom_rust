@@ -39,11 +39,14 @@ impl Infrastructure {
         let password_hasher = Arc::new(BcryptPasswordHasher::new(config.server.bcrypt_cost));
 
         // 创建 Redis 广播器
-        let redis_url = config.broadcast.redis_url.as_ref()
+        let redis_url = config
+            .broadcast
+            .redis_url
+            .as_ref()
             .ok_or_else(|| InfrastructureError::Config("Redis URL is required".to_string()))?;
-        let client = redis::Client::open(redis_url.clone())
-            .map_err(InfrastructureError::Redis)?;
-        let broadcaster: Arc<dyn MessageBroadcaster> = Arc::new(RedisMessageBroadcaster::new(client));
+        let client = redis::Client::open(redis_url.clone()).map_err(InfrastructureError::Redis)?;
+        let broadcaster: Arc<dyn MessageBroadcaster> =
+            Arc::new(RedisMessageBroadcaster::new(client));
 
         Ok(Self {
             storage,

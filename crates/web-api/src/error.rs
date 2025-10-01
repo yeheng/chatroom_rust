@@ -45,6 +45,14 @@ impl ApiError {
     pub fn forbidden(message: impl Into<String>) -> Self {
         Self::new(StatusCode::FORBIDDEN, "FORBIDDEN", message)
     }
+
+    pub fn not_implemented(message: impl Into<String>) -> Self {
+        Self::new(StatusCode::NOT_IMPLEMENTED, "NOT_IMPLEMENTED", message)
+    }
+
+    pub fn not_found(message: impl Into<String>) -> Self {
+        Self::new(StatusCode::NOT_FOUND, "NOT_FOUND", message)
+    }
 }
 
 impl From<ApplicationError> for ApiError {
@@ -145,5 +153,25 @@ impl From<ApplicationError> for ApiError {
 impl IntoResponse for ApiError {
     fn into_response(self) -> Response {
         (self.status, Json(self.body)).into_response()
+    }
+}
+
+impl From<domain::RepositoryError> for ApiError {
+    fn from(error: domain::RepositoryError) -> Self {
+        match error {
+            domain::RepositoryError::NotFound => ApiError::new(
+                StatusCode::NOT_FOUND,
+                "NOT_FOUND",
+                "requested resource not found",
+            ),
+            domain::RepositoryError::Conflict => {
+                ApiError::new(StatusCode::CONFLICT, "CONFLICT", "resource already exists")
+            }
+            domain::RepositoryError::Storage { message, .. } => ApiError::new(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "DATABASE_ERROR",
+                format!("database error: {}", message),
+            ),
+        }
     }
 }

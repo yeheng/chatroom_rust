@@ -11,12 +11,16 @@ uuid = { workspace = true }
 time = { workspace = true }
 chrono = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+anyhow = { workspace = true }
+rand = { workspace = true }
 thiserror = { workspace = true }
 redis = { workspace = true, features = ["aio", "tokio-comp"] }
 tokio = { workspace = true }
 tracing = { workspace = true }
 tokio-stream = "0.1"
 sqlx = { workspace = true, features = ["runtime-tokio-rustls", "postgres", "uuid", "chrono", "time"], optional = true }
+argon2 = "0.5"
 
 [features]
 default = []

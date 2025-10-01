@@ -120,6 +120,95 @@ impl fmt::Display for Username {
     }
 }
 
+/// 组织ID
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct OrgId(uuid::Uuid);
+
+impl Default for OrgId {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl OrgId {
+    pub fn new() -> Self {
+        Self(uuid::Uuid::new_v4())
+    }
+
+    pub fn from(id: uuid::Uuid) -> Self {
+        Self(id)
+    }
+}
+
+impl From<OrgId> for uuid::Uuid {
+    fn from(id: OrgId) -> Self {
+        id.0
+    }
+}
+
+impl fmt::Display for OrgId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+/// 组织路径(ltree格式)
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct OrgPath(String);
+
+impl OrgPath {
+    /// 创建根路径
+    pub fn root(name: impl Into<String>) -> Self {
+        Self(name.into())
+    }
+
+    /// 从字符串解析路径
+    pub fn parse(path: impl Into<String>) -> Result<Self, DomainError> {
+        let path = path.into();
+        // 验证ltree格式: 只能包含字母数字下划线和点
+        if !path
+            .chars()
+            .all(|c| c.is_alphanumeric() || c == '_' || c == '.')
+        {
+            return Err(DomainError::invalid_argument("org_path", "格式不正确"));
+        }
+        Ok(Self(path))
+    }
+
+    /// 追加子节点
+    pub fn append(&self, child: impl Into<String>) -> Result<Self, DomainError> {
+        let child = child.into();
+        Ok(Self(format!("{}.{}", self.0, child)))
+    }
+
+    /// 检查是否是指定路径的后代
+    pub fn is_descendant_of(&self, ancestor: &OrgPath) -> bool {
+        self.0.starts_with(&format!("{}.", ancestor.0))
+    }
+
+    /// 获取父路径
+    pub fn parent(&self) -> Option<Self> {
+        self.0.rfind('.').map(|pos| Self(self.0[..pos].to_owned()))
+    }
+
+    /// 获取层级
+    pub fn level(&self) -> i32 {
+        self.0.matches('.').count() as i32
+    }
+}
+
+impl fmt::Display for OrgPath {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl From<OrgPath> for String {
+    fn from(path: OrgPath) -> Self {
+        path.0
+    }
+}
+
 /// 经过验证的邮箱。
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct UserEmail(String);

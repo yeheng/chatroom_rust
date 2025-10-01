@@ -1,4 +1,4 @@
-use crate::value_objects::{PasswordHash, Timestamp, UserEmail, UserId, Username};
+use crate::value_objects::{OrgId, PasswordHash, Timestamp, UserEmail, UserId, Username};
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize, sqlx::Type)]
 #[sqlx(type_name = "user_status")]
@@ -21,6 +21,8 @@ pub struct User {
     pub password: PasswordHash,
     pub status: UserStatus,
     pub is_superuser: bool, // 系统级管理员标识
+    // 新增组织字段（仅引用，不冗余path）
+    pub org_id: Option<OrgId>,
     pub created_at: Timestamp,
     pub updated_at: Timestamp,
 }
@@ -40,6 +42,7 @@ impl User {
             password,
             status: UserStatus::Inactive,
             is_superuser: false, // 新注册用户默认不是超级用户
+            org_id: None,        // 新注册用户默认不属于任何组织
             created_at: now,
             updated_at: now,
         }
@@ -90,5 +93,30 @@ impl User {
     /// 检查用户是否为系统管理员
     pub fn is_system_admin(&self) -> bool {
         self.is_superuser && self.status == UserStatus::Active
+    }
+
+    /// 分配到组织
+    pub fn assign_to_org(&mut self, org_id: OrgId, now: Timestamp) {
+        self.org_id = Some(org_id);
+        self.updated_at = now;
+    }
+
+    /// 移除组织关联
+    pub fn remove_from_org(&mut self, now: Timestamp) {
+        self.org_id = None;
+        self.updated_at = now;
+    }
+
+    /// 检查用户是否属于某个组织
+    pub fn belongs_to_org(&self, org_id: OrgId) -> bool {
+        match self.org_id {
+            Some(user_org_id) => user_org_id == org_id,
+            None => false,
+        }
+    }
+
+    /// 检查用户是否有组织
+    pub fn has_org(&self) -> bool {
+        self.org_id.is_some()
     }
 }

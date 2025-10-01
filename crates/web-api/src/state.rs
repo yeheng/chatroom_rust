@@ -1,8 +1,11 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use application::{ChatService, MessageBroadcaster, PresenceManager, UserService};
-use infrastructure::StatsAggregationService;
+use application::{
+    services::{BulkUserService, StatsService},
+    ChatService, MessageBroadcaster, PresenceManager, UserService,
+};
+use infrastructure::{PgOrganizationRepository, PgStorage, StatsAggregationService};
 
 use crate::JwtService;
 
@@ -23,7 +26,11 @@ pub struct AppState {
     pub broadcaster: Arc<dyn MessageBroadcaster>,
     pub jwt_service: Arc<JwtService>,
     pub presence_manager: Arc<dyn PresenceManager>,
-    pub stats_service: Arc<StatsAggregationService>,
+    pub stats_aggregation_service: Arc<StatsAggregationService>,
+    pub stats_service: Arc<StatsService>,
+    pub org_repository: Arc<PgOrganizationRepository>,
+    pub bulk_user_service: Arc<BulkUserService>,
+    pub storage: Arc<PgStorage>,
     // 注意：事件处理现在由独立的 stats-consumer 服务完成
 }
 
@@ -34,7 +41,11 @@ impl AppState {
         broadcaster: Arc<dyn MessageBroadcaster>,
         jwt_service: Arc<JwtService>,
         presence_manager: Arc<dyn PresenceManager>,
-        stats_service: Arc<StatsAggregationService>,
+        stats_aggregation_service: Arc<StatsAggregationService>,
+        stats_service: Arc<StatsService>,
+        org_repository: Arc<PgOrganizationRepository>,
+        bulk_user_service: Arc<BulkUserService>,
+        storage: Arc<PgStorage>,
     ) -> Self {
         Self {
             user_service,
@@ -42,7 +53,11 @@ impl AppState {
             broadcaster,
             jwt_service,
             presence_manager,
+            stats_aggregation_service,
             stats_service,
+            org_repository,
+            bulk_user_service,
+            storage,
         }
     }
 

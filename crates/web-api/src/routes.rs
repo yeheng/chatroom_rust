@@ -100,6 +100,12 @@ fn api_routes() -> Router<AppState> {
         )
         .route("/rooms/{room_id}/online", get(get_online_users)) // 新增：获取房间在线用户
         .route("/ws", get(websocket_upgrade))
+        // 新增：组织管理路由
+        .nest("/organizations", crate::org_routes())
+        // 新增：批量用户管理路由
+        .nest("/users", crate::bulk_user_routes())
+        // 新增：统计查询路由
+        .nest("/stats", crate::stats_routes())
 }
 
 async fn health() -> StatusCode {

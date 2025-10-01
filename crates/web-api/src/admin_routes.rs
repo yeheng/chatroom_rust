@@ -154,7 +154,7 @@ async fn get_room_stats(
     };
 
     let stats = state
-        .stats_service
+        .stats_aggregation_service
         .query_stats(query)
         .await
         .map_err(|err| {
@@ -195,7 +195,7 @@ async fn get_room_stats_by_id(
     };
 
     let stats = state
-        .stats_service
+        .stats_aggregation_service
         .query_stats(query)
         .await
         .map_err(|err| {
@@ -221,7 +221,7 @@ async fn get_stats_summary(
     });
 
     let summary = state
-        .stats_service
+        .stats_aggregation_service
         .get_online_summary(start_time, end_time)
         .await
         .map_err(|err| {

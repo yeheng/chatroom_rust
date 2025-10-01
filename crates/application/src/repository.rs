@@ -1,7 +1,7 @@
 use async_trait::async_trait;
 use domain::{
-    ChatRoom, Message, MessageDelivery, MessageId, RepositoryError, RoomId, RoomMember, User,
-    UserEmail, UserId,
+    ChatRoom, Message, MessageDelivery, MessageId, OrgId, Organization, RepositoryError, RoomId,
+    RoomMember, User, UserEmail, UserId,
 };
 
 /// 简单直接的事务管理：使用一个单独的service层来管理事务
@@ -288,4 +288,53 @@ pub trait MessageDeliveryRepository: Send + Sync {
         &self,
         before: chrono::DateTime<chrono::Utc>,
     ) -> Result<u64, RepositoryError>;
+}
+
+/// 组织架构Repository
+/// 对应数据库表：organizations
+#[async_trait]
+pub trait OrganizationRepository: Send + Sync {
+    /// 创建组织
+    async fn create(&self, organization: &Organization) -> Result<(), RepositoryError>;
+
+    /// 根据ID查找组织
+    async fn find_by_id(&self, id: OrgId) -> Result<Option<Organization>, RepositoryError>;
+
+    /// 根据路径查找组织
+    async fn find_by_path(&self, path: &str) -> Result<Option<Organization>, RepositoryError>;
+
+    /// 查找组织的直接子组织
+    async fn find_children(&self, parent_path: &str) -> Result<Vec<Organization>, RepositoryError>;
+
+    /// 查找组织的所有后代组织（树形查询）
+    async fn find_descendants(
+        &self,
+        ancestor_path: &str,
+    ) -> Result<Vec<Organization>, RepositoryError>;
+
+    /// 更新组织信息
+    async fn update(&self, organization: &Organization) -> Result<(), RepositoryError>;
+
+    /// 删除组织（级联删除子组织）
+    async fn delete(&self, id: OrgId) -> Result<(), RepositoryError>;
+
+    /// 移动组织到新的父组织下
+    async fn move_organization(
+        &self,
+        id: OrgId,
+        new_parent_path: &str,
+    ) -> Result<(), RepositoryError>;
+
+    /// 检查组织路径是否存在
+    async fn path_exists(&self, path: &str) -> Result<bool, RepositoryError>;
+
+    /// 查找组织下的所有用户（通过JOIN查询）
+    async fn find_users_in_organization(&self, org_id: OrgId)
+        -> Result<Vec<User>, RepositoryError>;
+
+    /// 分页查询组织列表
+    async fn list_with_pagination(
+        &self,
+        params: PaginationParams,
+    ) -> Result<Vec<Organization>, RepositoryError>;
 }

@@ -76,11 +76,11 @@ pub fn org_routes() -> Router<AppState> {
     Router::new()
         .route("/", post(create_organization))
         .route("/", get(list_organizations))
-        .route("/:org_id", get(get_organization))
-        .route("/:org_id", patch(update_organization))
-        .route("/:org_id", delete(delete_organization))
-        .route("/:org_id/tree", get(get_organization_tree))
-        .route("/:org_id/move", post(move_organization))
+        .route("/{org_id}", get(get_organization))
+        .route("/{org_id}", patch(update_organization))
+        .route("/{org_id}", delete(delete_organization))
+        .route("/{org_id}/tree", get(get_organization_tree))
+        .route("/{org_id}/move", post(move_organization))
 }
 
 /// 创建组织

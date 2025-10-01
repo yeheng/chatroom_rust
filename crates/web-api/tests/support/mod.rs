@@ -3,14 +3,18 @@ use std::{env, sync::Arc};
 use application::{
     presence::memory::MemoryPresenceManager,
     repository::{ChatRoomRepository, MessageRepository, RoomMemberRepository, UserRepository},
-    services::{ChatService, ChatServiceDependencies, UserService, UserServiceDependencies},
+    services::{
+        BulkUserService, ChatService, ChatServiceDependencies, StatsService, UserService,
+        UserServiceDependencies,
+    },
     Clock, MessageBroadcaster, PasswordHasher, SystemClock,
 };
 use axum::Router;
 use config::AppConfig;
 use infrastructure::{
     create_pg_pool, BcryptPasswordHasher, PgChatRoomRepository, PgMessageRepository,
-    PgRoomMemberRepository, PgUserRepository, RedisMessageBroadcaster, StatsAggregationService,
+    PgOrganizationRepository, PgRoomMemberRepository, PgStorage, PgUserRepository,
+    RedisMessageBroadcaster, StatsAggregationService,
 };
 use redis::Client as RedisClient;
 use sqlx::PgPool;
@@ -80,6 +84,7 @@ fn create_services(
     Arc<UserService>,
     Arc<ChatService>,
     Arc<dyn MessageBroadcaster>,
+    Arc<dyn Clock>,
 ) {
     // 创建 repositories
     let user_repository: Arc<dyn UserRepository> = Arc::new(PgUserRepository::new(pool.clone()));
@@ -122,11 +127,16 @@ fn create_services(
         message_repository,
         user_repository: user_repository.clone(),
         password_hasher,
-        clock,
+        clock: clock.clone(),
         broadcaster: broadcaster.clone(),
     });
 
-    (Arc::new(user_service), Arc::new(chat_service), broadcaster)
+    (
+        Arc::new(user_service),
+        Arc::new(chat_service),
+        broadcaster,
+        clock,
+    )
 }
 
 /// 构建测试用的应用状态
@@ -153,7 +163,7 @@ pub async fn setup_test_app() -> TestAppState {
     let presence_manager_trait: Arc<dyn application::PresenceManager> = presence_manager.clone();
 
     // 创建所有服务
-    let (user_service, chat_service, broadcaster) =
+    let (user_service, chat_service, broadcaster, _clock) =
         create_services(&pool, &config.app_config, presence_manager_trait.clone());
 
     // 创建 JWT 服务
@@ -162,29 +172,17 @@ pub async fn setup_test_app() -> TestAppState {
     // 创建统计服务
     let stats_agg_service = Arc::new(StatsAggregationService::new(pool.clone()));
 
-    let state_service = Arc::new(StateService::new(StateServiceDependencies {
-        state_repository: state_repository.clone(),
-        user_repository: user_repository.clone(),
-        clock: clock.clone(),
-    }));
+    // 创建组织仓库
+    let org_repository = Arc::new(PgOrganizationRepository::new(pool.clone()));
 
-    let org_service = Arc::new(OrganizationService::new(OrganizationServiceDependencies {
-        org_repository: org_repository.clone(),
-        user_repository: user_repository.clone(),
-        clock: clock.clone(),
-    }));
+    // 创建统计服务
+    let stats_service = Arc::new(StatsService::new(Arc::new(pool.clone())));
 
-    let bulk_user_service = Arc::new(BulkUserService::new(BulkUserServiceDependencies {
-        org_repository: org_repository.clone(),
-        user_repository: user_repository.clone(),
-        task_repository: task_repository.clone(),
-        clock: clock.clone(),
-    }));
+    // 创建批量用户服务
+    let bulk_user_service = Arc::new(BulkUserService::new(Arc::new(pool.clone())));
 
-    let storage = Arc::new(StorageService::new(StorageServiceDependencies {
-        storage_repository: storage_repository.clone(),
-        clock: clock.clone(),
-    }));
+    // 创建存储服务
+    let storage = Arc::new(PgStorage::new(pool.clone()));
 
     // 创建应用状态
     let app_state = AppState::new(
@@ -194,8 +192,8 @@ pub async fn setup_test_app() -> TestAppState {
         jwt_service,
         presence_manager_trait,
         stats_agg_service,
-        org_service,
-        org_service,
+        stats_service,
+        org_repository,
         bulk_user_service,
         storage,
     );
@@ -212,6 +210,7 @@ pub async fn setup_test_app() -> TestAppState {
 }
 
 /// 便捷函数：直接获取路由器（为了向后兼容）
+#[allow(dead_code)]
 pub async fn build_router() -> Router {
     setup_test_app().await.router
 }

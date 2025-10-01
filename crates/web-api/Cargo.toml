@@ -5,7 +5,7 @@ edition.workspace = true
 
 [dependencies]
 domain = { path = "../domain" }
-application = { path = "../application" }
+application = { path = "../application", features = ["sqlx"] }
 infrastructure = { path = "../infrastructure" }
 config = { path = "../config" }
 tokio = { workspace = true }

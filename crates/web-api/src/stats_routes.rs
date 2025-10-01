@@ -75,7 +75,7 @@ pub fn stats_routes() -> Router<AppState> {
         .route("/query", get(query_stats))
         .route("/realtime", get(get_realtime_stats))
         .route(
-            "/realtime/:dimension_type/:dimension_id",
+            "/realtime/{dimension_type}/{dimension_id}",
             get(get_realtime_stats_by_dimension),
         )
 }

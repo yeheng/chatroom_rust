@@ -60,8 +60,8 @@ impl From<BulkTask> for BulkTaskResponse {
 pub fn bulk_user_routes() -> Router<AppState> {
     Router::new()
         .route("/bulk", post(bulk_create_users))
-        .route("/tasks/:task_id", get(get_task_status))
-        .route("/tasks/:task_id/download", get(download_credentials))
+        .route("/tasks/{task_id}", get(get_task_status))
+        .route("/tasks/{task_id}/download", get(download_credentials))
 }
 
 /// 批量创建用户
